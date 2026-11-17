@@ -41,7 +41,7 @@ files: ENV.md
 - [ ] full setup installed: engine, CLI, plugin/skills, MCP, tests, linter, export — check: python3 {skill}/scripts/envcheck.py --engine {engine} SKIP: envcheck требует brew и git-lfs (шаблон macOS); на CachyOS всё нужное стоит, git-lfs поставим с первыми спрайтами через pacman
 - [x] editor MCP connected: `mcp list` ✔ and a real tool call succeeded — check: manual
 - [x] hello project: TEST and CAPTURE pass (studio.py verify) — check: grep -q "^VERIFIED: yes" .studioigor/ENV.md
-- [ ] user saw the project running on their machine — check: user
+- [x] user saw the project running on their machine — check: user
 
 ## Phase 5 — Assets and look-dev
 files: ASSETS.md
