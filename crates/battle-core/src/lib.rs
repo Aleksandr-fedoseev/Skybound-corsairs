@@ -29,9 +29,6 @@ pub const ENERGY_SKILL: u32 = 30;
 /// Энергия за полученный удар (если союзник выжил).
 pub const ENERGY_ON_HIT: u32 = 5;
 
-pub const SKILL_POINTS_MAX: u32 = 5;
-pub const SKILL_POINTS_START: u32 = 3;
-
 pub const BROADSIDE_MAX: u32 = 100;
 /// Заряд залпа за каждое действие союзника.
 pub const BROADSIDE_PER_ACTION: u32 = 15;

@@ -85,7 +85,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Event::Defeated { unit } => println!("    {} повержен", name(unit)),
                 Event::BroadsideFired => println!("  ЗАЛП КОРАБЛЯ"),
                 Event::BattleEnded { outcome } => println!("\nИтог: {outcome:?}"),
-                Event::SkillPointsChanged { .. } => {}
             }
         }
     }

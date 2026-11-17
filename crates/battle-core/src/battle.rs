@@ -13,7 +13,7 @@ use crate::rng::Rng;
 use crate::unit::{Ability, Effect, Side, Target, Unit, UnitDef, UnitId};
 use crate::{
     BROADSIDE_MAX, BROADSIDE_PER_ACTION, CRIT_CHANCE, CRIT_MULTIPLIER, ENERGY_BASIC, ENERGY_MAX,
-    ENERGY_ON_HIT, ENERGY_SKILL, SKILL_POINTS_MAX, SKILL_POINTS_START, WEAKNESS_MULTIPLIER,
+    ENERGY_ON_HIT, ENERGY_SKILL, WEAKNESS_MULTIPLIER,
 };
 
 /// Корабль игрока в бою. Сила залпа зависит от уровня пушечной палубы.
@@ -101,9 +101,6 @@ pub enum Event {
     Defeated {
         unit: UnitId,
     },
-    SkillPointsChanged {
-        value: u32,
-    },
     BroadsideFired,
     BattleEnded {
         outcome: Outcome,
@@ -113,7 +110,7 @@ pub enum Event {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BattleError {
     BattleOver,
-    NotEnoughSkillPoints,
+    SkillOnCooldown,
     NoSkill,
     NoUltimate,
     UltimateNotReady,
@@ -125,7 +122,7 @@ impl fmt::Display for BattleError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let text = match self {
             BattleError::BattleOver => "бой уже закончен",
-            BattleError::NotEnoughSkillPoints => "не хватает очков умений",
+            BattleError::SkillOnCooldown => "умение ещё перезаряжается",
             BattleError::NoSkill => "у бойца нет умения",
             BattleError::NoUltimate => "у бойца нет ульты",
             BattleError::UltimateNotReady => "ульта ещё не заряжена",
@@ -142,7 +139,6 @@ impl std::error::Error for BattleError {}
 pub struct Battle {
     units: Vec<Unit>,
     ship: Ship,
-    skill_points: u32,
     broadside: u32,
     rng: Rng,
     current: Option<UnitId>,
@@ -163,9 +159,11 @@ impl Battle {
                     energy: 0,
                     action_value: 0.0,
                     turns_taken: 0,
+                    skill_cooldown: 0,
                     def,
                 };
                 unit.action_value = unit.base_action_value();
+                unit.skill_cooldown = unit.skill_cooldown_start();
                 units.push(unit);
             }
         }
@@ -173,7 +171,6 @@ impl Battle {
         let mut battle = Battle {
             units,
             ship,
-            skill_points: SKILL_POINTS_START,
             broadside: 0,
             rng: Rng::new(seed),
             current: None,
@@ -211,10 +208,6 @@ impl Battle {
 
     pub fn outcome(&self) -> Option<Outcome> {
         self.outcome
-    }
-
-    pub fn skill_points(&self) -> u32 {
-        self.skill_points
     }
 
     /// Заряд залпа корабля, от 0 до [`BROADSIDE_MAX`].
@@ -283,34 +276,29 @@ impl Battle {
                     .skill
                     .clone()
                     .ok_or(BattleError::NoSkill)?;
-                if side == Side::Ally && self.skill_points == 0 {
-                    return Err(BattleError::NotEnoughSkillPoints);
+                if !self.units[actor.0].skill_ready() {
+                    return Err(BattleError::SkillOnCooldown);
                 }
                 (skill, AbilityKind::Skill)
             }
         };
 
         let mut events = Vec::new();
+        {
+            // Умение уходит на перезарядку, обычная атака приближает его.
+            let unit = &mut self.units[actor.0];
+            unit.skill_cooldown = match kind {
+                AbilityKind::Skill => unit.skill_cooldown_start(),
+                _ => unit.skill_cooldown.saturating_sub(1),
+            };
+        }
         if side == Side::Ally {
-            match kind {
-                AbilityKind::Basic => {
-                    if self.skill_points < SKILL_POINTS_MAX {
-                        self.skill_points += 1;
-                        events.push(Event::SkillPointsChanged {
-                            value: self.skill_points,
-                        });
-                    }
-                    self.gain_energy(actor, ENERGY_BASIC);
-                }
-                AbilityKind::Skill => {
-                    self.skill_points -= 1;
-                    events.push(Event::SkillPointsChanged {
-                        value: self.skill_points,
-                    });
-                    self.gain_energy(actor, ENERGY_SKILL);
-                }
-                AbilityKind::Ultimate => unreachable!("ульта не тратит ход"),
-            }
+            let energy = if kind == AbilityKind::Skill {
+                ENERGY_SKILL
+            } else {
+                ENERGY_BASIC
+            };
+            self.gain_energy(actor, energy);
         }
 
         // Сбрасываем шкалу до эффектов, чтобы «ускорить себя» работало.

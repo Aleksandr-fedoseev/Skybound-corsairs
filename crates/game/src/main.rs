@@ -59,6 +59,7 @@ fn main() {
                 (
                     view::refresh_status,
                     view::refresh_ult_buttons,
+                    view::refresh_skill_badges,
                     view::refresh_controls,
                     view::refresh_result,
                     battlefield::refresh_overhead,

@@ -92,6 +92,10 @@ pub struct TargetedEffect {
 pub struct Ability {
     pub name: String,
     pub effects: Vec<TargetedEffect>,
+    /// Только для умения: раз во сколько своих ходов оно срабатывает (3 — на каждом третьем).
+    /// Для обычной атаки и ульты не используется.
+    #[serde(default)]
+    pub cooldown: u32,
 }
 
 impl Ability {
@@ -149,6 +153,8 @@ pub struct Unit {
     /// Сколько «расстояния» осталось до хода. Ходит боец с наименьшим значением.
     pub action_value: f32,
     pub turns_taken: u32,
+    /// Сколько своих ходов осталось до умения; 0 — умение готово.
+    pub skill_cooldown: u32,
 }
 
 impl Unit {
@@ -163,6 +169,18 @@ impl Unit {
     /// Полная длина хода: чем выше скорость, тем короче.
     pub fn base_action_value(&self) -> f32 {
         crate::ACTION_GAUGE / self.def.stats.spd.max(1) as f32
+    }
+
+    pub fn skill_ready(&self) -> bool {
+        self.is_alive() && self.def.skill.is_some() && self.skill_cooldown == 0
+    }
+
+    /// Перезарядка умения в начале боя и после его применения.
+    pub fn skill_cooldown_start(&self) -> u32 {
+        self.def
+            .skill
+            .as_ref()
+            .map_or(0, |s| s.cooldown.saturating_sub(1))
     }
 
     pub fn ultimate_ready(&self) -> bool {

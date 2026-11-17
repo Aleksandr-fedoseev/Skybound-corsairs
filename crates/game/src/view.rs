@@ -2,7 +2,7 @@
 //! и очередь ходов портретами; снизу — круглые портреты ульт с заливкой энергии, очки умений,
 //! залп корабля и кнопки АВТО и скорости сбоку. Само поле с моделями — в `battlefield.rs`.
 
-use battle_core::{BROADSIDE_MAX, ENERGY_MAX, Element, Outcome, SKILL_POINTS_MAX, Side, UnitId};
+use battle_core::{BROADSIDE_MAX, ENERGY_MAX, Element, Outcome, Side, UnitId};
 use bevy::prelude::*;
 
 use crate::battle_screen::BattleScreen;
@@ -17,6 +17,7 @@ const BAR_TRACK: Color = Color::srgba(0.0, 0.0, 0.0, 0.5);
 const ENERGY: Color = Color::srgb(0.35, 0.65, 1.0);
 const ACCENT: Color = Color::srgb(1.0, 0.85, 0.35);
 const BROADSIDE: Color = Color::srgb(1.0, 0.55, 0.20);
+const SKILL: Color = Color::srgb(0.55, 0.85, 1.0);
 const BUTTON: Color = Color::srgba(0.10, 0.18, 0.30, 0.85);
 const BUTTON_ON: Color = Color::srgb(0.85, 0.62, 0.20);
 const DARK_TEXT: Color = Color::srgb(0.08, 0.10, 0.16);
@@ -24,7 +25,7 @@ const TURN_CHIPS: usize = 8;
 const CHIP: f32 = 30.0;
 const ULT_SIZE: f32 = 70.0;
 const SMALL_BUTTON: f32 = 54.0;
-const PIP: f32 = 12.0;
+const SKILL_BADGE: f32 = 24.0;
 /// Готовая ульта: портрет пульсирует.
 const READY_PULSE: f32 = 0.06;
 
@@ -94,8 +95,9 @@ pub struct UltFill(pub UnitId);
 #[derive(Component, Clone, Copy)]
 pub struct UltLabel(pub UnitId);
 
+/// Значок на портрете: через сколько ходов спецатака.
 #[derive(Component, Clone, Copy)]
-pub struct SkillPip(pub u32);
+pub struct SkillBadge(pub UnitId);
 
 #[derive(Component)]
 pub struct BroadsideFill;
@@ -375,7 +377,7 @@ fn spawn_bottom(
         ..default()
     })
     .with_children(|bottom| {
-        // Очки умений (общие на команду) и залп корабля.
+        // Залп корабля.
         bottom
             .spawn(Node {
                 flex_direction: FlexDirection::Row,
@@ -384,26 +386,6 @@ fn spawn_bottom(
                 ..default()
             })
             .with_children(|row| {
-                for i in 0..SKILL_POINTS_MAX {
-                    row.spawn((
-                        SkillPip(i),
-                        Node {
-                            width: px(PIP),
-                            height: px(PIP),
-                            border: UiRect::all(px(2)),
-                            border_radius: BorderRadius::all(px(PIP / 2.0)),
-                            ..default()
-                        },
-                        BackgroundColor(Color::NONE),
-                        BorderColor::all(ACCENT),
-                    ));
-                }
-                row.spawn((
-                    Text::new("очки умений"),
-                    fonts.text(false, 12.0),
-                    TextColor(Color::WHITE),
-                    shadow(),
-                ));
                 row.spawn(Node {
                     flex_grow: 1.0,
                     ..default()
@@ -529,11 +511,36 @@ fn spawn_ult_button(
             BackgroundColor(element_color(unit.def.element)),
             BorderColor::all(PANEL),
         ))
-        .with_child((
-            Text::new(initial),
-            fonts.text(true, 30.0),
-            TextColor(DARK_TEXT),
-        ));
+        .with_children(|p| {
+            p.spawn((
+                Text::new(initial),
+                fonts.text(true, 30.0),
+                TextColor(DARK_TEXT),
+            ));
+            // Через сколько ходов спецатака; «!» — готова.
+            p.spawn((
+                SkillBadge(id),
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: px(-8),
+                    right: px(-8),
+                    width: px(SKILL_BADGE),
+                    height: px(SKILL_BADGE),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(px(2)),
+                    border_radius: BorderRadius::all(px(SKILL_BADGE / 2.0)),
+                    ..default()
+                },
+                BackgroundColor(PANEL),
+                BorderColor::all(SKILL),
+            ))
+            .with_child((
+                Text::new(""),
+                fonts.text(true, 13.0),
+                TextColor(Color::WHITE),
+            ));
+        });
         b.spawn((
             Node {
                 width: px(ULT_SIZE * 0.85),
@@ -595,7 +602,6 @@ pub fn refresh_status(
         Query<&mut Text, With<TurnBadge>>,
         Query<&mut Text, With<BroadsideLabel>>,
     )>,
-    mut pips: Query<(&SkillPip, &mut BackgroundColor)>,
 ) {
     let battle = &screen.battle;
     let total = |side: Side| {
@@ -623,13 +629,6 @@ pub fn refresh_status(
     }
     for mut node in &mut broadside {
         node.width = percent(100.0 * battle.broadside() as f32 / BROADSIDE_MAX as f32);
-    }
-    for (SkillPip(i), mut bg) in &mut pips {
-        bg.0 = if *i < battle.skill_points() {
-            ACCENT
-        } else {
-            Color::NONE
-        };
     }
 }
 
@@ -744,6 +743,36 @@ pub fn refresh_result(
                 color.0 = Color::srgb(1.0, 0.45, 0.40);
             }
             None => {}
+        }
+    }
+}
+
+/// Значки спецатак на портретах: сколько ходов осталось, «!» — готова.
+pub fn refresh_skill_badges(
+    screen: Res<BattleScreen>,
+    mut badges: Query<(
+        &SkillBadge,
+        &Children,
+        &mut BackgroundColor,
+        &mut Visibility,
+    )>,
+    mut texts: Query<&mut Text>,
+) {
+    for (SkillBadge(id), children, mut bg, mut vis) in &mut badges {
+        let unit = screen.battle.unit(*id);
+        let alive = screen.shown_hp[id.0] > 0;
+        *vis = if alive && unit.def.skill.is_some() {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        bg.0 = if unit.skill_ready() { SKILL } else { PANEL };
+        if let Some(mut text) = children.first().and_then(|&c| texts.get_mut(c).ok()) {
+            text.0 = if unit.skill_ready() {
+                "!".into()
+            } else {
+                unit.skill_cooldown.to_string()
+            };
         }
     }
 }

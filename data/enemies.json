@@ -54,6 +54,7 @@
     },
     "skill": {
       "name": "Граната",
+      "cooldown": 3,
       "effects": [
         {
           "target": "all_enemies",
@@ -118,6 +119,7 @@
     },
     "skill": {
       "name": "Грозовой рёв",
+      "cooldown": 3,
       "effects": [
         {
           "target": "all_enemies",

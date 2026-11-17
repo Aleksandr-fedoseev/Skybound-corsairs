@@ -7,6 +7,7 @@ fn ability(name: &str, effects: Vec<(Target, Effect)>) -> Ability {
             .into_iter()
             .map(|(target, effect)| TargetedEffect { target, effect })
             .collect(),
+        cooldown: 0,
     }
 }
 
@@ -108,29 +109,41 @@ fn weakness_increases_damage_by_half() {
 }
 
 #[test]
-fn skill_points_are_spent_and_restored() {
+fn skill_fires_on_every_nth_turn() {
     let mut hero = unit("hero", Element::Wind, 1000, 10, 1000);
-    hero.skill = Some(hit(2.0));
+    hero.skill = Some(Ability {
+        cooldown: 3,
+        ..hit(2.0)
+    });
     let mut battle = Battle::new(vec![hero], vec![sandbag()], SHIP, 1);
+    let id = UnitId(0);
 
-    assert_eq!(battle.skill_points(), SKILL_POINTS_START);
-    for _ in 0..SKILL_POINTS_START {
-        battle.act(Action::skill(None)).unwrap();
-    }
-    assert_eq!(battle.skill_points(), 0);
+    // Перезарядка 3: две обычные атаки, на третьем ходу — умение.
     assert_eq!(
         battle.act(Action::skill(None)),
-        Err(BattleError::NotEnoughSkillPoints)
+        Err(BattleError::SkillOnCooldown)
+    );
+    battle.act(Action::basic(None)).unwrap();
+    assert!(!battle.unit(id).skill_ready());
+    battle.act(Action::basic(None)).unwrap();
+    assert!(battle.unit(id).skill_ready());
+    battle.act(Action::skill(None)).unwrap();
+    assert_eq!(
+        battle.unit(id).skill_cooldown,
+        2,
+        "после умения перезарядка заново"
     );
 
-    for _ in 0..10 {
-        battle.act(Action::basic(None)).unwrap();
-    }
-    assert_eq!(
-        battle.skill_points(),
-        SKILL_POINTS_MAX,
-        "очки не превышают максимум"
-    );
+    // Автобой сам применяет умение каждый третий ход.
+    let kinds: Vec<AbilityKind> = (0..9)
+        .flat_map(|_| battle.auto_turn())
+        .filter_map(|e| match e {
+            Event::AbilityUsed { unit, kind, .. } if unit == id => Some(kind),
+            _ => None,
+        })
+        .collect();
+    let skills = kinds.iter().filter(|k| **k == AbilityKind::Skill).count();
+    assert_eq!(skills, 3, "за 9 ходов — 3 умения: {kinds:?}");
 }
 
 #[test]

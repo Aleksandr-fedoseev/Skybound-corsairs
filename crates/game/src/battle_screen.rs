@@ -196,9 +196,7 @@ impl BattleScreen {
             }
             Event::Healed { .. } | Event::Advanced { .. } | Event::Delayed { .. } => look.hit_gap,
             Event::Defeated { .. } => look.defeat_pause,
-            Event::TurnStarted { .. }
-            | Event::SkillPointsChanged { .. }
-            | Event::BattleEnded { .. } => 0.0,
+            Event::TurnStarted { .. } | Event::BattleEnded { .. } => 0.0,
         }
     }
 

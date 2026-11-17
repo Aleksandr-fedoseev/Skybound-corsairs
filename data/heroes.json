@@ -14,6 +14,7 @@
     },
     "skill": {
       "name": "Двойной удар",
+      "cooldown": 3,
       "effects": [{ "target": "single_enemy", "type": "damage", "multiplier": 2.0 }]
     },
     "ultimate": {
@@ -36,6 +37,7 @@
     },
     "skill": {
       "name": "Вихрь",
+      "cooldown": 3,
       "effects": [
         { "target": "all_enemies", "type": "damage", "multiplier": 0.5 },
         { "target": "all_enemies", "type": "delay", "fraction": 0.15 }
@@ -61,6 +63,7 @@
     },
     "skill": {
       "name": "Картечь",
+      "cooldown": 4,
       "effects": [{ "target": "all_enemies", "type": "damage", "multiplier": 0.7 }]
     },
     "ultimate": {
@@ -83,6 +86,7 @@
     },
     "skill": {
       "name": "Попутный ветер",
+      "cooldown": 3,
       "effects": [{ "target": "all_allies", "type": "advance", "fraction": 0.25 }]
     },
     "ultimate": {
@@ -108,6 +112,7 @@
     },
     "skill": {
       "name": "Перевязка",
+      "cooldown": 2,
       "effects": [{ "target": "single_ally", "type": "heal", "percent": 0.2 }]
     },
     "ultimate": {
@@ -130,6 +135,7 @@
     },
     "skill": {
       "name": "Таран",
+      "cooldown": 3,
       "effects": [
         { "target": "single_enemy", "type": "damage", "multiplier": 1.2 },
         { "target": "single_enemy", "type": "delay", "fraction": 0.25 }
