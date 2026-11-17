@@ -36,8 +36,7 @@ pub struct Presentation {
     /// Стоп-кадр после крита или удара по слабости.
     pub crit_hitstop: f32,
     pub defeat_pause: f32,
-    /// Сколько висит баннер с названием действия.
-    pub banner_basic: f32,
+    /// Сколько висит название умения над головой и полоса ульты.
     pub banner_skill: f32,
     pub banner_ult: f32,
     /// Атака: рывок к цели на долю расстояния и назад.
@@ -292,13 +291,15 @@ pub fn keyboard(keys: Res<ButtonInput<KeyCode>>, mut screen: ResMut<BattleScreen
         (KeyCode::KeyA, ButtonKind::Auto),
         (KeyCode::KeyX, ButtonKind::Speed),
         (KeyCode::Space, ButtonKind::Pause),
-        (KeyCode::KeyN, ButtonKind::Restart),
     ] {
         if keys.just_pressed(key) {
             press(&mut screen, kind);
         }
     }
-    // R — переиграть тот же бой (тот же seed).
+    // N — новый бой, R — переиграть тот же (тот же seed).
+    if keys.just_pressed(KeyCode::KeyN) {
+        screen.restart_with_new_seed();
+    }
     if keys.just_pressed(KeyCode::KeyR) {
         screen.restart();
     }

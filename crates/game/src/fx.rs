@@ -1,5 +1,5 @@
-//! Эффекты боя: клипы моделей по событиям, всплывающие цифры над головами, баннер действия,
-//! тряска камеры и затемнение неба на ульте и залпе. Размах и длительность — в
+//! Эффекты боя: клипы моделей по событиям, всплывающие цифры и названия умений над головами,
+//! полоса через экран, тряска камеры и затемнение неба на ульте и залпе. Размах и длительность — в
 //! `data/presentation.json`.
 
 use std::f32::consts::PI;
@@ -10,7 +10,7 @@ use bevy::sprite::Text2dShadow;
 
 use crate::battle_screen::{BattleScreen, Shown};
 use crate::battlefield::{Clip, ModelAnim, SkyDim, UnitModel, Z_FLOATING};
-use crate::view::{Banner, Fonts};
+use crate::view::{Fonts, UltBand, UltBandText};
 
 const DAMAGE: Color = Color::WHITE;
 const WEAKNESS: Color = Color::srgb(1.0, 0.85, 0.30);
@@ -18,8 +18,12 @@ const BROADSIDE: Color = Color::srgb(1.0, 0.55, 0.20);
 const HEAL: Color = Color::srgb(0.45, 1.0, 0.55);
 const SHIFT: Color = Color::srgb(0.70, 0.85, 1.0);
 const BANNER_ULT: Color = Color::srgb(1.0, 0.85, 0.35);
-const BANNER_SKILL: Color = Color::srgb(0.85, 0.95, 1.0);
-const BANNER_BASIC: Color = Color::srgba(1.0, 1.0, 1.0, 0.85);
+const SKILL_LABEL: Color = Color::srgb(0.80, 0.93, 1.0);
+const BAND: Color = Color::srgba(0.03, 0.05, 0.12, 0.7);
+/// Цифры подряд по одной цели разъезжаются в стороны, чтобы не слипаться.
+const DAMAGE_JITTER: [f32; 4] = [0.0, 22.0, -22.0, 11.0];
+/// Полоса ульты выезжает слева на столько пикселей.
+const BAND_SLIDE: f32 = 80.0;
 const DAMAGE_SIZE: f32 = 28.0;
 /// Победная анимация идёт, пока игрок не начнёт новый бой.
 const VICTORY_SECONDS: f32 = 3600.0;
@@ -36,7 +40,7 @@ pub struct Floating {
 }
 
 #[derive(Resource, Default)]
-pub struct BannerFx {
+pub struct BandFx {
     timer: Option<Timer>,
     color: Color,
 }
@@ -60,9 +64,10 @@ pub fn spawn_effects(
     screen: Res<BattleScreen>,
     fonts: Res<Fonts>,
     mut models: Query<(&UnitModel, &mut ModelAnim)>,
-    mut banner: Query<(&mut Text, &mut TextFont), With<Banner>>,
-    mut banner_fx: ResMut<BannerFx>,
+    mut band: Query<&mut Text, With<UltBandText>>,
+    mut band_fx: ResMut<BandFx>,
     mut screen_fx: ResMut<ScreenFx>,
+    mut hits: Local<usize>,
 ) {
     let look = &screen.look;
     // Где стоит модель и какого она роста.
@@ -72,35 +77,42 @@ pub fn spawn_effects(
             .find(|(m, _)| m.id == id)
             .map(|(m, _)| (m.home, m.height))
     };
-    let float =
-        |commands: &mut Commands, at: Vec2, height: f32, label: String, color: Color, size: f32| {
-            let from = Vec3::new(at.x, at.y + height * 0.95, Z_FLOATING);
-            commands.spawn((
-                Floating {
-                    timer: once(look.float_time),
-                    from,
-                    rise: look.float_px,
-                    pop: look.pop_scale,
-                    color,
-                },
-                Text2d::new(label),
-                fonts.text(true, size),
-                TextColor(color),
-                Text2dShadow {
-                    offset: Vec2::new(2.0, -2.0),
-                    color: Color::srgba(0.0, 0.0, 0.0, 0.85),
-                },
-                TextLayout::justify(Justify::Center),
-                Transform::from_translation(from).with_scale(Vec3::splat(look.pop_scale)),
-            ));
-        };
-    let mut set_banner = |label: String, color: Color, size: f32, seconds: f32| {
-        for (mut text, mut font) in &mut banner {
+    // Надпись над головой: цифра урона, лечение или название умения.
+    let float = |commands: &mut Commands,
+                 from: Vec3,
+                 label: String,
+                 color: Color,
+                 size: f32,
+                 seconds: f32,
+                 rise: f32,
+                 pop: f32| {
+        commands.spawn((
+            Floating {
+                timer: once(seconds),
+                from,
+                rise,
+                pop,
+                color,
+            },
+            Text2d::new(label),
+            fonts.text(true, size),
+            TextColor(color),
+            Text2dShadow {
+                offset: Vec2::new(2.0, -2.0),
+                color: Color::srgba(0.0, 0.0, 0.0, 0.85),
+            },
+            TextLayout::justify(Justify::Center),
+            Transform::from_translation(from).with_scale(Vec3::splat(pop)),
+        ));
+    };
+    let head =
+        |at: Vec2, height: f32, dx: f32| Vec3::new(at.x + dx, at.y + height * 0.95, Z_FLOATING);
+    let mut set_band = |label: String, color: Color, seconds: f32| {
+        for mut text in &mut band {
             text.0 = label.clone();
-            *font = fonts.text(true, size);
         }
-        banner_fx.timer = Some(once(seconds));
-        banner_fx.color = color;
+        band_fx.timer = Some(once(seconds));
+        band_fx.color = color;
     };
 
     for Shown { event, focus } in shown.read() {
@@ -110,29 +122,30 @@ pub fn spawn_effects(
                 let who = &actor.def.name;
                 let big = *kind == AbilityKind::Ultimate;
                 match kind {
+                    // Ульта — событие: полоса через экран, тряска, затемнение неба.
                     AbilityKind::Ultimate => {
-                        set_banner(
-                            format!("{who}\n«{name}»"),
-                            BANNER_ULT,
-                            34.0,
-                            look.banner_ult,
-                        );
+                        set_band(format!("{who} — «{name}»"), BANNER_ULT, look.banner_ult);
                         screen_fx.dim = Some((once(look.dim_time), look.dim_alpha));
                         screen_fx.shake =
                             Some((once(look.screen_shake_time), look.screen_shake_px));
                     }
-                    AbilityKind::Skill => set_banner(
-                        format!("{who}: «{name}»"),
-                        BANNER_SKILL,
-                        22.0,
-                        look.banner_skill,
-                    ),
-                    AbilityKind::Basic => set_banner(
-                        format!("{who}: {name}"),
-                        BANNER_BASIC,
-                        17.0,
-                        look.banner_basic,
-                    ),
+                    // Умение — название над головой бойца; обычная атака — без надписи.
+                    AbilityKind::Skill => {
+                        if let Some((at, height)) = place(&models, *unit) {
+                            let from = Vec3::new(at.x, at.y + height + 34.0, Z_FLOATING);
+                            float(
+                                &mut commands,
+                                from,
+                                format!("«{name}»"),
+                                SKILL_LABEL,
+                                17.0,
+                                look.banner_skill,
+                                16.0,
+                                1.0,
+                            );
+                        }
+                    }
+                    AbilityKind::Basic => {}
                 }
                 // Рывок к первой цели; к своим (лечение) — короче, к центру поля — если цели нет.
                 let to = focus
@@ -149,7 +162,7 @@ pub fn spawn_effects(
                 }
             }
             Event::BroadsideFired => {
-                set_banner("ЗАЛП КОРАБЛЯ!".into(), BROADSIDE, 34.0, look.banner_ult);
+                set_band("ЗАЛП КОРАБЛЯ!".into(), BROADSIDE, look.banner_ult);
                 screen_fx.shake = Some((once(look.screen_shake_time), look.screen_shake_px * 1.3));
             }
             Event::Damage {
@@ -185,22 +198,37 @@ pub fn spawn_effects(
                 } else {
                     DAMAGE_SIZE
                 };
-                let label = match (crit, weakness) {
-                    (true, _) => format!("-{amount}!"),
-                    (_, true) => format!("-{amount}\nслабость"),
-                    _ => format!("-{amount}"),
+                // Слабость — золотая цифра, крит — крупная с «!».
+                let label = if *crit {
+                    format!("-{amount}!")
+                } else {
+                    format!("-{amount}")
                 };
-                float(&mut commands, at, height, label, color, size);
+                *hits += 1;
+                let dx = DAMAGE_JITTER[*hits % DAMAGE_JITTER.len()];
+                float(
+                    &mut commands,
+                    head(at, height, dx),
+                    label,
+                    color,
+                    size,
+                    look.float_time,
+                    look.float_px,
+                    look.pop_scale,
+                );
             }
             Event::Healed { target, amount, .. } => {
                 if let Some((at, height)) = place(&models, *target) {
+                    let from = head(at, height, 0.0);
                     float(
                         &mut commands,
-                        at,
-                        height,
+                        from,
                         format!("+{amount}"),
                         HEAL,
                         DAMAGE_SIZE * 0.9,
+                        look.float_time,
+                        look.float_px,
+                        look.pop_scale,
                     );
                 }
             }
@@ -211,7 +239,17 @@ pub fn spawn_effects(
                     "отброшен"
                 };
                 if let Some((at, height)) = place(&models, *unit) {
-                    float(&mut commands, at, height * 0.7, label.into(), SHIFT, 16.0);
+                    let from = head(at, height * 0.7, 0.0);
+                    float(
+                        &mut commands,
+                        from,
+                        label.into(),
+                        SHIFT,
+                        16.0,
+                        look.float_time,
+                        look.float_px * 0.5,
+                        1.0,
+                    );
                 }
             }
             Event::Defeated { unit } => {
@@ -269,25 +307,36 @@ pub fn animate_floating(
     }
 }
 
-pub fn animate_banner(
+/// Полоса ульты: выезжает слева, держится и гаснет.
+pub fn animate_band(
     time: Res<Time>,
     screen: Res<BattleScreen>,
-    mut fx: ResMut<BannerFx>,
-    mut banner: Query<&mut TextColor, With<Banner>>,
+    mut fx: ResMut<BandFx>,
+    mut band: Query<(&mut BackgroundColor, &mut UiTransform), With<UltBand>>,
+    mut text: Query<&mut TextColor, With<UltBandText>>,
 ) {
     let dt = fx_delta(&time, &screen);
     let color = fx.color;
-    let alpha = match &mut fx.timer {
+    let (alpha, slide) = match &mut fx.timer {
         Some(timer) => {
             timer.tick(dt);
-            // Держим баннер, затем быстро гасим.
             let t = timer.fraction();
-            if t < 0.7 { 1.0 } else { 1.0 - (t - 0.7) / 0.3 }
+            let alpha = if t < 0.75 {
+                1.0
+            } else {
+                1.0 - (t - 0.75) / 0.25
+            };
+            let slide = if t < 0.12 { 1.0 - t / 0.12 } else { 0.0 };
+            (alpha, slide)
         }
-        None => 0.0,
+        None => (0.0, 0.0),
     };
-    for mut text in &mut banner {
-        text.0 = color.with_alpha(alpha * color.alpha());
+    for (mut bg, mut transform) in &mut band {
+        bg.0 = BAND.with_alpha(BAND.alpha() * alpha);
+        transform.translation = Val2::px(-BAND_SLIDE * slide, 0.0);
+    }
+    for mut text in &mut text {
+        text.0 = color.with_alpha(alpha);
     }
 }
 

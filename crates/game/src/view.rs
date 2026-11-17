@@ -1,5 +1,6 @@
-//! Интерфейс поверх поля боя: сверху — здоровье отрядов и очередь ходов, снизу — кнопки ульт
-//! героев, залп корабля и управление боем. Само поле с моделями — в `battlefield.rs`.
+//! Интерфейс поверх поля боя, в духе Zero City: сверху — здоровье отрядов вокруг значка хода
+//! и очередь ходов портретами; снизу — круглые портреты ульт с заливкой энергии, очки умений,
+//! залп корабля и кнопки АВТО и скорости сбоку. Само поле с моделями — в `battlefield.rs`.
 
 use battle_core::{BROADSIDE_MAX, ENERGY_MAX, Element, Outcome, SKILL_POINTS_MAX, Side, UnitId};
 use bevy::prelude::*;
@@ -9,22 +10,23 @@ use crate::battlefield;
 
 const SKY: Color = Color::srgb(0.53, 0.75, 0.92);
 const PANEL: Color = Color::srgba(0.05, 0.10, 0.20, 0.80);
-const ALLY: Color = Color::srgb(0.13, 0.22, 0.34);
-const ENEMY: Color = Color::srgb(0.32, 0.15, 0.19);
+const ENEMY: Color = Color::srgb(0.40, 0.14, 0.17);
 const HP_ALLY: Color = Color::srgb(0.38, 0.85, 0.45);
 const HP_ENEMY: Color = Color::srgb(0.92, 0.32, 0.30);
-const BAR_TRACK: Color = Color::srgba(0.0, 0.0, 0.0, 0.45);
+const BAR_TRACK: Color = Color::srgba(0.0, 0.0, 0.0, 0.5);
 const ENERGY: Color = Color::srgb(0.35, 0.65, 1.0);
 const ACCENT: Color = Color::srgb(1.0, 0.85, 0.35);
-const BUTTON: Color = Color::srgb(0.16, 0.27, 0.42);
+const BROADSIDE: Color = Color::srgb(1.0, 0.55, 0.20);
+const BUTTON: Color = Color::srgba(0.10, 0.18, 0.30, 0.85);
 const BUTTON_ON: Color = Color::srgb(0.85, 0.62, 0.20);
-const TURN_CHIPS: usize = 7;
-/// Баннер действия: доля ширины экрана слева и отступ сверху, %.
-const BANNER_WIDTH: f32 = 46.0;
-const BANNER_TOP: f32 = 27.0;
-const ULT_PORTRAIT: f32 = 46.0;
-/// Готовая ульта: кнопка пульсирует.
-const READY_PULSE: f32 = 0.05;
+const DARK_TEXT: Color = Color::srgb(0.08, 0.10, 0.16);
+const TURN_CHIPS: usize = 8;
+const CHIP: f32 = 30.0;
+const ULT_SIZE: f32 = 70.0;
+const SMALL_BUTTON: f32 = 54.0;
+const PIP: f32 = 12.0;
+/// Готовая ульта: портрет пульсирует.
+const READY_PULSE: f32 = 0.06;
 
 pub fn element_color(element: Element) -> Color {
     match element {
@@ -52,6 +54,13 @@ impl Fonts {
     }
 }
 
+fn shadow() -> TextShadow {
+    TextShadow {
+        offset: Vec2::new(1.0, 1.0),
+        color: Color::srgba(0.0, 0.0, 0.0, 0.7),
+    }
+}
+
 #[derive(Component)]
 pub struct ScreenRoot;
 
@@ -61,34 +70,44 @@ pub struct SquadFill(pub Side);
 #[derive(Component, Clone, Copy)]
 pub struct SquadText(pub Side);
 
+#[derive(Component)]
+pub struct TurnBadge;
+
 #[derive(Component, Clone, Copy)]
 pub struct TurnChip(pub usize);
 
+/// Полоса через экран для ульт и залпа.
 #[derive(Component)]
-pub struct Banner;
+pub struct UltBand;
 
-/// Кнопка ульты героя: тап — ульта, даже вне его хода.
+#[derive(Component)]
+pub struct UltBandText;
+
+/// Портрет героя внизу: тап — ульта, даже вне его хода.
 #[derive(Component, Clone, Copy)]
 pub struct UltButton(pub UnitId);
 
+/// Заливка энергии внутри портрета (снизу вверх).
 #[derive(Component, Clone, Copy)]
 pub struct UltFill(pub UnitId);
 
 #[derive(Component, Clone, Copy)]
 pub struct UltLabel(pub UnitId);
 
-#[derive(Component)]
-pub struct StatusText;
+#[derive(Component, Clone, Copy)]
+pub struct SkillPip(pub u32);
 
 #[derive(Component)]
 pub struct BroadsideFill;
+
+#[derive(Component)]
+pub struct BroadsideLabel;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub enum ButtonKind {
     Auto,
     Speed,
     Pause,
-    Restart,
 }
 
 #[derive(Component)]
@@ -149,60 +168,55 @@ fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts) {
                 height: percent(100),
                 flex_direction: FlexDirection::Column,
                 justify_content: JustifyContent::SpaceBetween,
-                padding: UiRect::all(px(10)),
+                padding: UiRect::all(px(8)),
                 ..default()
             },
             Pickable::IGNORE,
         ))
         .with_children(|root| {
-            root.spawn((Node {
+            root.spawn(Node {
                 flex_direction: FlexDirection::Column,
-                row_gap: px(6),
+                align_items: AlignItems::Center,
+                row_gap: px(5),
                 ..default()
-            },))
-                .with_children(|top| {
-                    spawn_squads(top, fonts);
-                    spawn_turn_order(top, fonts);
-                    top.spawn((
-                        Text::new(format!(
-                            "Этап {} · {}",
-                            screen.stage_id(),
-                            screen.stage_name()
-                        )),
-                        fonts.text(true, 16.0),
-                        TextColor(Color::WHITE),
-                        TextShadow {
-                            offset: Vec2::new(1.0, 1.0),
-                            color: Color::srgba(0.0, 0.0, 0.0, 0.6),
-                        },
-                    ));
-                });
+            })
+            .with_children(|top| {
+                spawn_squads(top, fonts);
+                top.spawn((
+                    Text::new(format!("{} · {}", screen.stage_id(), screen.stage_name())),
+                    fonts.text(true, 13.0),
+                    TextColor(Color::WHITE),
+                    shadow(),
+                ));
+                spawn_turn_order(top, fonts);
+            });
             spawn_bottom(root, &heroes, screen, fonts);
         });
 
-    // Баннер с названием действия — в пустом небе слева сверху, чтобы не закрывать модели.
+    // Полоса ульты через весь экран (видна только во время ульты и залпа).
     commands
         .spawn((
             ScreenRoot,
+            UltBand,
             Node {
                 position_type: PositionType::Absolute,
-                width: percent(BANNER_WIDTH),
-                top: percent(BANNER_TOP),
+                width: percent(100),
+                top: percent(40),
+                padding: UiRect::axes(px(12), px(10)),
                 justify_content: JustifyContent::Center,
                 ..default()
             },
+            BackgroundColor(Color::NONE),
+            UiTransform::default(),
             Pickable::IGNORE,
         ))
         .with_child((
-            Banner,
+            UltBandText,
             Text::new(""),
-            fonts.text(true, 26.0),
-            TextShadow {
-                offset: Vec2::new(2.0, 2.0),
-                color: Color::srgba(0.0, 0.0, 0.0, 0.7),
-            },
-            TextColor(ACCENT.with_alpha(0.0)),
+            fonts.text(true, 30.0),
+            TextColor(Color::NONE),
             TextLayout::justify(Justify::Center),
+            shadow(),
         ));
 
     // Итог боя поверх всего экрана.
@@ -244,64 +258,109 @@ fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts) {
         });
 }
 
-/// Общее здоровье отрядов, как в Zero City: экипаж слева, враги справа.
+/// Здоровье отрядов по бокам от значка с номером хода, как в Zero City.
 fn spawn_squads(top: &mut ChildSpawnerCommands, fonts: &Fonts) {
-    top.spawn((
-        Node {
-            flex_direction: FlexDirection::Row,
-            column_gap: px(8),
-            padding: UiRect::all(px(6)),
-            border_radius: BorderRadius::all(px(8)),
-            ..default()
-        },
-        BackgroundColor(PANEL),
-    ))
+    top.spawn(Node {
+        width: percent(100),
+        flex_direction: FlexDirection::Row,
+        align_items: AlignItems::Center,
+        column_gap: px(6),
+        ..default()
+    })
     .with_children(|row| {
-        for (side, color) in [(Side::Ally, HP_ALLY), (Side::Enemy, HP_ENEMY)] {
-            row.spawn(Node {
-                flex_grow: 1.0,
-                flex_basis: px(0),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(2),
-                ..default()
-            })
-            .with_children(|col| {
-                col.spawn((
+        let bar = |row: &mut ChildSpawnerCommands, side: Side, color: Color| {
+            row.spawn((
+                Node {
+                    flex_grow: 1.0,
+                    flex_basis: px(0),
+                    height: px(22),
+                    border_radius: BorderRadius::all(px(6)),
+                    overflow: Overflow::clip(),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BackgroundColor(BAR_TRACK),
+            ))
+            .with_children(|b| {
+                b.spawn((
+                    SquadFill(side),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        // Враги убывают к центру, экипаж — тоже к центру: полосы «смотрят» друг на друга.
+                        left: if side == Side::Ally { px(0) } else { auto() },
+                        right: if side == Side::Enemy { px(0) } else { auto() },
+                        width: percent(100),
+                        height: percent(100),
+                        ..default()
+                    },
+                    BackgroundColor(color),
+                ));
+                b.spawn((
                     SquadText(side),
                     Text::new(""),
                     fonts.text(true, 13.0),
                     TextColor(Color::WHITE),
+                    shadow(),
                 ));
-                spawn_bar(col, color, SquadFill(side), 10.0);
             });
-        }
+        };
+        bar(row, Side::Ally, HP_ALLY);
+        row.spawn((
+            Node {
+                width: px(46),
+                height: px(46),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(px(3)),
+                border_radius: BorderRadius::all(px(23)),
+                ..default()
+            },
+            BackgroundColor(PANEL),
+            BorderColor::all(ACCENT),
+        ))
+        .with_child((
+            TurnBadge,
+            Text::new(""),
+            fonts.text(true, 17.0),
+            TextColor(Color::WHITE),
+        ));
+        bar(row, Side::Enemy, HP_ENEMY);
     });
 }
 
+/// Очередь ходов: кружки с первой буквой, рамка — цвет стороны, первый — крупнее.
 fn spawn_turn_order(top: &mut ChildSpawnerCommands, fonts: &Fonts) {
-    top.spawn((Node {
+    top.spawn(Node {
         flex_direction: FlexDirection::Row,
+        align_items: AlignItems::Center,
         column_gap: px(4),
         ..default()
-    },))
-        .with_children(|row| {
-            for i in 0..TURN_CHIPS {
-                row.spawn((
-                    TurnChip(i),
-                    Node {
-                        padding: UiRect::axes(px(6), px(3)),
-                        border_radius: BorderRadius::all(px(6)),
-                        ..default()
-                    },
-                    BackgroundColor(BUTTON),
-                ))
-                .with_child((
-                    Text::new(""),
-                    fonts.text(i == 0, if i == 0 { 16.0 } else { 13.0 }),
-                    TextColor(Color::WHITE),
-                ));
-            }
-        });
+    })
+    .with_children(|row| {
+        for i in 0..TURN_CHIPS {
+            let size = if i == 0 { CHIP * 1.3 } else { CHIP };
+            row.spawn((
+                TurnChip(i),
+                Node {
+                    width: px(size),
+                    height: px(size),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(px(3)),
+                    border_radius: BorderRadius::all(px(size / 2.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::NONE),
+                BorderColor::all(Color::NONE),
+            ))
+            .with_child((
+                Text::new(""),
+                fonts.text(true, size * 0.5),
+                TextColor(DARK_TEXT),
+            ));
+        }
+    });
 }
 
 fn spawn_bottom(
@@ -310,64 +369,111 @@ fn spawn_bottom(
     screen: &BattleScreen,
     fonts: &Fonts,
 ) {
-    root.spawn((
-        Node {
-            flex_direction: FlexDirection::Column,
-            padding: UiRect::all(px(8)),
-            row_gap: px(7),
-            border_radius: BorderRadius::all(px(10)),
-            ..default()
-        },
-        BackgroundColor(PANEL),
-    ))
-    .with_children(|panel| {
-        // Кнопки ульт героев.
-        panel
+    root.spawn(Node {
+        flex_direction: FlexDirection::Column,
+        row_gap: px(6),
+        ..default()
+    })
+    .with_children(|bottom| {
+        // Очки умений (общие на команду) и залп корабля.
+        bottom
             .spawn(Node {
                 flex_direction: FlexDirection::Row,
-                column_gap: px(6),
+                align_items: AlignItems::Center,
+                column_gap: px(5),
+                ..default()
+            })
+            .with_children(|row| {
+                for i in 0..SKILL_POINTS_MAX {
+                    row.spawn((
+                        SkillPip(i),
+                        Node {
+                            width: px(PIP),
+                            height: px(PIP),
+                            border: UiRect::all(px(2)),
+                            border_radius: BorderRadius::all(px(PIP / 2.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::NONE),
+                        BorderColor::all(ACCENT),
+                    ));
+                }
+                row.spawn((
+                    Text::new("очки умений"),
+                    fonts.text(false, 12.0),
+                    TextColor(Color::WHITE),
+                    shadow(),
+                ));
+                row.spawn(Node {
+                    flex_grow: 1.0,
+                    ..default()
+                });
+                row.spawn((
+                    BroadsideLabel,
+                    Text::new(""),
+                    fonts.text(true, 12.0),
+                    TextColor(BROADSIDE),
+                    shadow(),
+                ));
+                row.spawn((
+                    Node {
+                        width: px(110),
+                        height: px(10),
+                        border_radius: BorderRadius::all(px(5)),
+                        overflow: Overflow::clip(),
+                        ..default()
+                    },
+                    BackgroundColor(BAR_TRACK),
+                ))
+                .with_child((
+                    BroadsideFill,
+                    Node {
+                        width: percent(0),
+                        height: percent(100),
+                        ..default()
+                    },
+                    BackgroundColor(BROADSIDE),
+                ));
+            });
+
+        // Портреты ульт и кнопки сбоку.
+        bottom
+            .spawn(Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::FlexEnd,
+                column_gap: px(8),
                 ..default()
             })
             .with_children(|row| {
                 for &id in heroes {
                     spawn_ult_button(row, id, screen, fonts);
                 }
-            });
-        panel.spawn((
-            StatusText,
-            Text::new(""),
-            fonts.text(false, 13.0),
-            TextColor(Color::WHITE),
-        ));
-        spawn_bar(panel, ACCENT, BroadsideFill, 8.0);
-        panel
-            .spawn(Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: px(6),
-                ..default()
-            })
-            .with_children(|buttons| {
-                for kind in [
-                    ButtonKind::Auto,
-                    ButtonKind::Speed,
-                    ButtonKind::Pause,
-                    ButtonKind::Restart,
-                ] {
-                    buttons
-                        .spawn((
+                row.spawn(Node {
+                    flex_grow: 1.0,
+                    ..default()
+                });
+                row.spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(6),
+                    ..default()
+                })
+                .with_children(|col| {
+                    for kind in [ButtonKind::Pause, ButtonKind::Speed, ButtonKind::Auto] {
+                        col.spawn((
                             kind,
                             Node {
-                                flex_grow: 1.0,
-                                padding: UiRect::axes(px(6), px(8)),
+                                width: px(SMALL_BUTTON),
+                                height: px(SMALL_BUTTON * 0.62),
                                 justify_content: JustifyContent::Center,
-                                border_radius: BorderRadius::all(px(8)),
+                                align_items: AlignItems::Center,
+                                border_radius: BorderRadius::all(px(SMALL_BUTTON * 0.31)),
                                 ..default()
                             },
                             BackgroundColor(BUTTON),
                         ))
                         .with_child((
                             Text::new(""),
-                            fonts.text(true, 15.0),
+                            fonts.text(true, 14.0),
                             TextColor(Color::WHITE),
                         ))
                         .observe(
@@ -375,14 +481,16 @@ fn spawn_bottom(
                                 press(&mut screen, kind);
                             },
                         );
-                }
+                    }
+                });
             });
+
         #[cfg(feature = "dev")]
-        panel.spawn((
+        bottom.spawn((
             DevText,
             Text::new(""),
             fonts.text(false, 11.0),
-            TextColor(Color::srgb(0.75, 0.82, 0.92)),
+            TextColor(Color::srgb(0.10, 0.18, 0.32)),
         ));
     });
 }
@@ -398,48 +506,59 @@ fn spawn_ult_button(
     row.spawn((
         UltButton(id),
         Node {
-            flex_grow: 1.0,
-            flex_basis: px(0),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
-            padding: UiRect::all(px(5)),
-            row_gap: px(3),
-            border: UiRect::all(px(3)),
-            border_radius: BorderRadius::all(px(10)),
+            row_gap: px(2),
             ..default()
         },
-        BackgroundColor(ALLY),
-        BorderColor::all(Color::NONE),
         UiTransform::default(),
     ))
     .with_children(|b| {
+        // Круглый портрет с буквой; энергия — полоской под ним (Bevy режет потомков
+        // по прямоугольнику, а не по кругу, поэтому заливка внутри круга торчала бы углами).
         b.spawn((
             Node {
-                width: px(ULT_PORTRAIT),
-                height: px(ULT_PORTRAIT),
+                width: px(ULT_SIZE),
+                height: px(ULT_SIZE),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                border_radius: BorderRadius::all(px(ULT_PORTRAIT / 2.0)),
+                border: UiRect::all(px(4)),
+                border_radius: BorderRadius::all(px(ULT_SIZE / 2.0)),
                 ..default()
             },
             BackgroundColor(element_color(unit.def.element)),
+            BorderColor::all(PANEL),
         ))
         .with_child((
             Text::new(initial),
-            fonts.text(true, 24.0),
-            TextColor(Color::srgb(0.08, 0.10, 0.16)),
+            fonts.text(true, 30.0),
+            TextColor(DARK_TEXT),
         ));
         b.spawn((
-            Text::new(unit.def.name.clone()),
-            fonts.text(true, 13.0),
-            TextColor(Color::WHITE),
+            Node {
+                width: px(ULT_SIZE * 0.85),
+                height: px(7),
+                border_radius: BorderRadius::all(px(3.5)),
+                overflow: Overflow::clip(),
+                ..default()
+            },
+            BackgroundColor(BAR_TRACK),
+        ))
+        .with_child((
+            UltFill(id),
+            Node {
+                width: percent(0),
+                height: percent(100),
+                ..default()
+            },
+            BackgroundColor(ENERGY),
         ));
-        spawn_bar(b, ENERGY, UltFill(id), 6.0);
         b.spawn((
             UltLabel(id),
             Text::new(""),
-            fonts.text(true, 11.0),
-            TextColor(ENERGY),
+            fonts.text(true, 12.0),
+            TextColor(Color::WHITE),
+            shadow(),
         ));
     })
     .observe(
@@ -449,35 +568,11 @@ fn spawn_ult_button(
     );
 }
 
-fn spawn_bar(parent: &mut ChildSpawnerCommands, fill: Color, marker: impl Component, height: f32) {
-    parent
-        .spawn((
-            Node {
-                width: percent(100),
-                height: px(height),
-                border_radius: BorderRadius::all(px(height / 2.0)),
-                overflow: Overflow::clip(),
-                ..default()
-            },
-            BackgroundColor(BAR_TRACK),
-        ))
-        .with_child((
-            marker,
-            Node {
-                width: percent(100),
-                height: percent(100),
-                ..default()
-            },
-            BackgroundColor(fill),
-        ));
-}
-
 pub fn press(screen: &mut BattleScreen, kind: ButtonKind) {
     match kind {
         ButtonKind::Auto => screen.auto = !screen.auto,
         ButtonKind::Speed => screen.speed = screen.speed % 3 + 1,
         ButtonKind::Pause => screen.paused = !screen.paused,
-        ButtonKind::Restart => screen.restart_with_new_seed(),
     }
 }
 
@@ -485,27 +580,22 @@ fn button_label(screen: &BattleScreen, kind: ButtonKind) -> (String, bool) {
     match kind {
         ButtonKind::Auto => ("АВТО".into(), screen.auto),
         ButtonKind::Speed => (format!("x{}", screen.speed), screen.speed > 1),
-        ButtonKind::Pause => (
-            if screen.paused {
-                "Дальше"
-            } else {
-                "Пауза"
-            }
-            .into(),
-            screen.paused,
-        ),
-        ButtonKind::Restart => ("Заново".into(), false),
+        ButtonKind::Pause => (if screen.paused { ">" } else { "II" }.into(), screen.paused),
     }
 }
 
-/// Здоровье отрядов, залп и строка состояния.
+/// Здоровье отрядов, номер хода, очки умений и залп.
 #[allow(clippy::type_complexity)] // обычные для Bevy фильтры запросов
 pub fn refresh_status(
     screen: Res<BattleScreen>,
     mut squad_fill: Query<(&SquadFill, &mut Node), Without<BroadsideFill>>,
     mut broadside: Query<&mut Node, With<BroadsideFill>>,
-    mut squad_text: Query<(&SquadText, &mut Text), Without<StatusText>>,
-    mut status: Query<&mut Text, With<StatusText>>,
+    mut texts: ParamSet<(
+        Query<(&SquadText, &mut Text)>,
+        Query<&mut Text, With<TurnBadge>>,
+        Query<&mut Text, With<BroadsideLabel>>,
+    )>,
+    mut pips: Query<(&SkillPip, &mut BackgroundColor)>,
 ) {
     let battle = &screen.battle;
     let total = |side: Side| {
@@ -521,62 +611,60 @@ pub fn refresh_status(
         let (hp, max) = total(*side);
         node.width = percent(100.0 * hp as f32 / max.max(1) as f32);
     }
-    for (SquadText(side), mut text) in &mut squad_text {
+    for (SquadText(side), mut text) in &mut texts.p0() {
         let (hp, max) = total(*side);
-        let name = if *side == Side::Ally {
-            "Экипаж"
-        } else {
-            "Враги"
-        };
-        text.0 = format!("{name}  {hp}/{max}");
+        text.0 = format!("{hp}/{max}");
+    }
+    for mut text in &mut texts.p1() {
+        text.0 = battle.turn().to_string();
+    }
+    for mut text in &mut texts.p2() {
+        text.0 = format!("Залп {}%", battle.broadside() * 100 / BROADSIDE_MAX);
     }
     for mut node in &mut broadside {
         node.width = percent(100.0 * battle.broadside() as f32 / BROADSIDE_MAX as f32);
     }
-    for mut text in &mut status {
-        text.0 = format!(
-            "Ход {}   Очки умений {}/{}   Залп корабля {}%",
-            battle.turn(),
-            battle.skill_points(),
-            SKILL_POINTS_MAX,
-            battle.broadside() * 100 / BROADSIDE_MAX,
-        );
+    for (SkillPip(i), mut bg) in &mut pips {
+        bg.0 = if *i < battle.skill_points() {
+            ACCENT
+        } else {
+            Color::NONE
+        };
     }
 }
 
-/// Кнопки ульт: энергия, подсветка и пульс готовой ульты, блёклая кнопка павшего героя.
+/// Портреты ульт: заливка энергии, пульс и золотая рамка готовой ульты, блёклый — выбыл.
 #[allow(clippy::type_complexity)]
 pub fn refresh_ult_buttons(
     time: Res<Time>,
     screen: Res<BattleScreen>,
-    mut buttons: Query<(
-        &UltButton,
-        &mut BorderColor,
-        &mut BackgroundColor,
-        &mut UiTransform,
-    )>,
-    mut fills: Query<(&UltFill, &mut Node, &mut BackgroundColor), Without<UltButton>>,
+    mut buttons: Query<(&UltButton, &Children, &mut UiTransform)>,
+    mut frames: Query<(&mut BorderColor, &mut BackgroundColor), Without<UltFill>>,
+    mut fills: Query<(&UltFill, &mut Node, &mut BackgroundColor)>,
     mut labels: Query<(&UltLabel, &mut Text, &mut TextColor)>,
 ) {
     let battle = &screen.battle;
     let pulse = 0.5 + 0.5 * (time.elapsed_secs() * 7.0).sin();
-    for (UltButton(id), mut border, mut bg, mut transform) in &mut buttons {
+    for (UltButton(id), children, mut transform) in &mut buttons {
         let unit = battle.unit(*id);
         let alive = screen.shown_hp[id.0] > 0;
         let ready = alive && unit.ultimate_ready() && screen.shown_outcome.is_none();
-        *border = BorderColor::all(if ready { ACCENT } else { Color::NONE });
-        bg.0 = if alive { ALLY } else { ALLY.with_alpha(0.35) };
         transform.scale = Vec2::splat(if ready {
             1.0 + READY_PULSE * pulse
         } else {
             1.0
         });
+        if let Some((mut border, mut bg)) = children.first().and_then(|&c| frames.get_mut(c).ok()) {
+            *border = BorderColor::all(if ready { ACCENT } else { PANEL });
+            let base = element_color(unit.def.element);
+            bg.0 = if alive { base } else { base.with_alpha(0.3) };
+        }
     }
     for (UltFill(id), mut node, mut bg) in &mut fills {
         let unit = battle.unit(*id);
         node.width = percent(100.0 * unit.energy as f32 / ENERGY_MAX as f32);
         bg.0 = if unit.ultimate_ready() {
-            ACCENT
+            ACCENT.with_alpha(0.55)
         } else {
             ENERGY
         };
@@ -584,20 +672,20 @@ pub fn refresh_ult_buttons(
     for (UltLabel(id), mut text, mut color) in &mut labels {
         let unit = battle.unit(*id);
         (text.0, color.0) = if screen.shown_hp[id.0] == 0 {
-            ("выбыл".into(), Color::srgb(0.6, 0.6, 0.65))
+            ("выбыл".into(), Color::srgb(0.75, 0.75, 0.8))
         } else if unit.ultimate_ready() {
             ("УЛЬТА!".into(), ACCENT)
         } else {
-            (format!("{}%", unit.energy * 100 / ENERGY_MAX), ENERGY)
+            (unit.def.name.clone(), Color::WHITE)
         };
     }
 }
 
-/// Кнопки управления и фишки очереди ходов.
+/// Кнопки сбоку и кружки очереди ходов.
 pub fn refresh_controls(
     screen: Res<BattleScreen>,
     mut buttons: Query<(&ButtonKind, &Children, &mut BackgroundColor), Without<TurnChip>>,
-    mut chips: Query<(&TurnChip, &Children, &mut BackgroundColor)>,
+    mut chips: Query<(&TurnChip, &Children, &mut BackgroundColor, &mut BorderColor)>,
     mut texts: Query<&mut Text>,
 ) {
     let battle = &screen.battle;
@@ -613,27 +701,22 @@ pub fn refresh_controls(
     } else {
         battle.turn_order_preview(TURN_CHIPS)
     };
-    for (TurnChip(i), children, mut bg) in &mut chips {
+    for (TurnChip(i), children, mut bg, mut border) in &mut chips {
         let unit = order.get(*i).map(|&id| battle.unit(id));
-        bg.0 = match unit.map(|u| u.side) {
-            Some(Side::Ally) => ALLY,
+        bg.0 = unit
+            .map(|u| element_color(u.def.element))
+            .unwrap_or(Color::NONE);
+        *border = BorderColor::all(match unit.map(|u| u.side) {
+            Some(Side::Ally) => HP_ALLY,
             Some(Side::Enemy) => ENEMY,
             None => Color::NONE,
-        };
+        });
         if let Some(mut text) = children.first().and_then(|&c| texts.get_mut(c).ok()) {
-            text.0 = unit.map(|u| short_name(&u.def.name)).unwrap_or_default();
+            text.0 = unit
+                .map(|u| u.def.name.chars().take(1).collect())
+                .unwrap_or_default();
         }
     }
-}
-
-/// Короткое имя для очереди ходов: «Имперский морпех» → «Морпех».
-fn short_name(name: &str) -> String {
-    let word = name.split_whitespace().last().unwrap_or(name);
-    let mut chars = word.chars();
-    chars
-        .next()
-        .map(|first| first.to_uppercase().chain(chars).collect())
-        .unwrap_or_default()
 }
 
 /// Итог боя поверх экрана.

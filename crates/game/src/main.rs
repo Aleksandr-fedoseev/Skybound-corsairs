@@ -46,7 +46,7 @@ fn main() {
             Presentation::bundled(),
             battlefield::FieldConfig::bundled(),
         ))
-        .init_resource::<fx::BannerFx>()
+        .init_resource::<fx::BandFx>()
         .init_resource::<fx::ScreenFx>()
         .add_systems(Startup, view::setup)
         .add_systems(
@@ -66,7 +66,7 @@ fn main() {
                 (
                     battlefield::animate_models,
                     fx::animate_floating,
-                    fx::animate_banner,
+                    fx::animate_band,
                     fx::animate_screen,
                 ),
             )

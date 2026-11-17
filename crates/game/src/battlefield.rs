@@ -10,7 +10,7 @@ use std::f32::consts::{FRAC_PI_2, PI};
 
 use battle_core::{ENERGY_MAX, Side, UnitId};
 use bevy::prelude::*;
-use bevy::sprite::{Anchor, Text2dShadow};
+use bevy::sprite::Anchor;
 use serde::Deserialize;
 
 use crate::battle_screen::BattleScreen;
@@ -397,19 +397,6 @@ fn spawn_model(
         let energy_fill = commands.spawn(EnergyBar(id)).id();
         overhead_children.extend(bar(commands, top - 9.0, 4.0, ENERGY, Some(energy_fill)));
     }
-    let name = commands
-        .spawn((
-            Text2d::new(unit.def.name.clone()),
-            fonts.text(true, 13.0),
-            TextColor(Color::WHITE),
-            Text2dShadow {
-                offset: Vec2::new(1.0, -1.0),
-                color: Color::srgba(0.0, 0.0, 0.0, 0.8),
-            },
-            Transform::from_xyz(0.0, top + 14.0, 0.0),
-        ))
-        .id();
-    overhead_children.push(name);
     let overhead = commands
         .spawn((
             Overhead(id),
