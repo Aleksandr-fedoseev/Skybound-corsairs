@@ -5,7 +5,6 @@
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
-use bevy::window::WindowResizeConstraints;
 
 const SCREENSHOT_VAR: &str = "SKYBOUND_SCREENSHOT";
 const SHOT_AFTER_SECONDS: f32 = 4.0;
@@ -16,22 +15,6 @@ struct AutoScreenshot {
     path: String,
     elapsed: f32,
     taken: bool,
-}
-
-/// В режиме скриншота окно получает неизменяемый размер. Иначе тайловый оконный менеджер
-/// (например, niri) растягивает его, и кадр выходит не в пропорциях телефона.
-pub fn fix_window_size(window: &mut Window) {
-    if std::env::var_os(SCREENSHOT_VAR).is_none() {
-        return;
-    }
-    let (width, height) = (window.resolution.width(), window.resolution.height());
-    window.resizable = false;
-    window.resize_constraints = WindowResizeConstraints {
-        min_width: width,
-        min_height: height,
-        max_width: width,
-        max_height: height,
-    };
 }
 
 pub fn plugin(app: &mut App) {

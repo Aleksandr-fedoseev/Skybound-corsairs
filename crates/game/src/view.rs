@@ -22,8 +22,11 @@ const MUTED: Color = Color::srgb(0.70, 0.76, 0.84);
 const BUTTON: Color = Color::srgb(0.16, 0.27, 0.42);
 const BUTTON_ON: Color = Color::srgb(0.85, 0.62, 0.20);
 
-const ALLY_CARD_WIDTH: f32 = 116.0;
-const ENEMY_CARD_WIDTH: f32 = 104.0;
+/// Четыре карточки в ряд на экране шириной 540.
+const CARD_WIDTH: f32 = 122.0;
+const PORTRAIT: f32 = 78.0;
+/// Высота неба между врагами и экипажем: место для баннера ульты в две строки.
+const SKY_GAP: f32 = 130.0;
 const TURN_CHIPS: usize = 7;
 
 pub fn element_color(element: Element) -> Color {
@@ -54,6 +57,14 @@ impl Fonts {
 
 #[derive(Component)]
 pub struct ScreenRoot;
+
+/// Корень экрана боя: его трясёт на ульте и залпе.
+#[derive(Component)]
+pub struct BattleRoot;
+
+/// Затемнение неба за карточками на ульте.
+#[derive(Component)]
+pub struct SkyDim;
 
 /// Карточка бойца. На ней же живут сдвиг и тряска.
 #[derive(Component, Clone, Copy)]
@@ -143,17 +154,34 @@ fn spawn_screen(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts) {
     };
     let (allies, enemies) = (ids(Side::Ally), ids(Side::Enemy));
 
+    // Небо темнеет за карточками, когда герой выпускает ульту.
+    commands.spawn((
+        ScreenRoot,
+        SkyDim,
+        Node {
+            position_type: PositionType::Absolute,
+            width: percent(100),
+            height: percent(100),
+            ..default()
+        },
+        BackgroundColor(Color::NONE),
+        GlobalZIndex(-1),
+        Pickable::IGNORE,
+    ));
+
     commands
         .spawn((
             ScreenRoot,
+            BattleRoot,
             Node {
                 width: percent(100),
                 height: percent(100),
                 flex_direction: FlexDirection::Column,
                 padding: UiRect::all(px(12)),
-                row_gap: px(10),
+                row_gap: px(8),
                 ..default()
             },
+            UiTransform::default(),
         ))
         .with_children(|root| {
             // Очередь ходов.
@@ -180,7 +208,7 @@ fn spawn_screen(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts) {
                     ))
                     .with_child((
                         Text::new(""),
-                        fonts.text(i == 0, if i == 0 { 15.0 } else { 13.0 }),
+                        fonts.text(i == 0, if i == 0 { 17.0 } else { 14.0 }),
                         TextColor(Color::WHITE),
                     ));
                 }
@@ -196,24 +224,39 @@ fn spawn_screen(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts) {
                 TextColor(Color::WHITE),
             ));
 
-            spawn_row(root, &enemies, screen, fonts, ENEMY_CARD_WIDTH);
-
-            // Небо между кораблями: здесь всплывают названия умений.
+            // Поле боя прижато к палубе: враги нависают над экипажем, свободное небо — сверху.
             root.spawn(Node {
                 flex_grow: 1.0,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::FlexEnd,
+                row_gap: px(8),
                 ..default()
             })
-            .with_child((
-                Banner,
-                Text::new(""),
-                fonts.text(true, 26.0),
-                TextColor(ACCENT.with_alpha(0.0)),
-                TextLayout::justify(Justify::Center),
-            ));
+            .with_children(|field| {
+                spawn_row(field, &enemies, screen, fonts);
 
-            spawn_row(root, &allies, screen, fonts, ALLY_CARD_WIDTH);
+                // Небо между кораблями: здесь всплывают названия действий.
+                field
+                    .spawn(Node {
+                        height: px(SKY_GAP),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    })
+                    .with_child((
+                        Banner,
+                        Text::new(""),
+                        fonts.text(true, 26.0),
+                        TextShadow {
+                            offset: Vec2::new(2.0, 2.0),
+                            color: Color::srgba(0.0, 0.0, 0.0, 0.6),
+                        },
+                        TextColor(ACCENT.with_alpha(0.0)),
+                        TextLayout::justify(Justify::Center),
+                    ));
+
+                spawn_row(field, &allies, screen, fonts);
+            });
 
             // Палуба «Ласточки».
             root.spawn((
@@ -280,7 +323,6 @@ fn spawn_row(
     ids: &[UnitId],
     screen: &BattleScreen,
     fonts: &Fonts,
-    width: f32,
 ) {
     root.spawn(Node {
         flex_direction: FlexDirection::Row,
@@ -290,18 +332,12 @@ fn spawn_row(
     })
     .with_children(|row| {
         for &id in ids {
-            spawn_card(row, id, screen, fonts, width);
+            spawn_card(row, id, screen, fonts);
         }
     });
 }
 
-fn spawn_card(
-    row: &mut ChildSpawnerCommands,
-    id: UnitId,
-    screen: &BattleScreen,
-    fonts: &Fonts,
-    width: f32,
-) {
+fn spawn_card(row: &mut ChildSpawnerCommands, id: UnitId, screen: &BattleScreen, fonts: &Fonts) {
     let unit = screen.battle.unit(id);
     let ally = unit.side == Side::Ally;
     let element = element_color(unit.def.element);
@@ -311,13 +347,13 @@ fn spawn_card(
         UnitCard(id),
         CardBody(id),
         Node {
-            width: px(width),
+            width: px(CARD_WIDTH),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
-            padding: UiRect::all(px(6)),
+            padding: UiRect::all(px(7)),
             row_gap: px(4),
-            border: UiRect::all(px(3)),
-            border_radius: BorderRadius::all(px(10)),
+            border: UiRect::all(px(4)),
+            border_radius: BorderRadius::all(px(12)),
             ..default()
         },
         BackgroundColor(if ally { ALLY_CARD } else { ENEMY_CARD }),
@@ -329,29 +365,29 @@ fn spawn_card(
         // Заглушка портрета: круг цвета стихии с первой буквой имени.
         c.spawn((
             Node {
-                width: px(46),
-                height: px(46),
+                width: px(PORTRAIT),
+                height: px(PORTRAIT),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                border_radius: BorderRadius::all(px(23)),
+                border_radius: BorderRadius::all(px(PORTRAIT / 2.0)),
                 ..default()
             },
             BackgroundColor(element),
         ))
         .with_child((
             Text::new(initial),
-            fonts.text(true, 24.0),
+            fonts.text(true, 40.0),
             TextColor(Color::srgb(0.08, 0.10, 0.16)),
         ));
         c.spawn((
             Text::new(unit.def.name.clone()),
-            fonts.text(true, 13.0),
+            fonts.text(true, 16.0),
             TextColor(Color::WHITE),
             TextLayout::justify(Justify::Center),
         ));
         c.spawn((
             Text::new(text::element_name(unit.def.element)),
-            fonts.text(false, 11.0),
+            fonts.text(false, 13.0),
             TextColor(element),
         ));
         spawn_bar(
@@ -359,20 +395,20 @@ fn spawn_card(
             BAR_TRACK,
             if ally { HP_ALLY } else { HP_ENEMY },
             HpFill(id),
-            8.0,
+            12.0,
         );
         c.spawn((
             HpText(id),
             Text::new(""),
-            fonts.text(false, 11.0),
+            fonts.text(false, 14.0),
             TextColor(MUTED),
         ));
         if unit.def.ultimate.is_some() {
-            spawn_bar(c, BAR_TRACK, ENERGY, EnergyFill(id), 6.0);
+            spawn_bar(c, BAR_TRACK, ENERGY, EnergyFill(id), 9.0);
             c.spawn((
                 EnergyText(id),
                 Text::new(""),
-                fonts.text(true, 11.0),
+                fonts.text(true, 13.0),
                 TextColor(ENERGY),
             ));
         }

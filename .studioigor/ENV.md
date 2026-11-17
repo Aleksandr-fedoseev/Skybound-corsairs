@@ -33,7 +33,7 @@ CAPTURE: mkdir -p .studioigor/captures/hello && SKYBOUND_SCREENSHOT=.studioigor/
 EDITOR: none — у Bevy нет редактора, код в репозитории
 
 ## Pitfalls
-- niri (тайловый Wayland) растягивает окно; в режиме SKYBOUND_SCREENSHOT размер окна зафиксирован (dev::fix_window_size), кадр 540×960.
+- niri (тайловый Wayland) растягивал окно — теперь окно всегда 540×960 и неизменяемого размера (main.rs).
 - Игру запускать через cargo run: бинарник, запущенный напрямую, ищет assets/ рядом с exe и рисует экран без текста.
 - MCP-сервер не в PATH ассистента — регистрировать по абсолютному пути ~/.cargo/bin/bevy_brp_mcp.
 - Не убивать cargo посреди сборки: битые .rlib («memory map must have a non-zero length»), лечится пересборкой.

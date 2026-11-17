@@ -6,7 +6,7 @@
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use battle_core::{Battle, Event, Outcome, Ship, UnitId};
+use battle_core::{AbilityKind, Battle, Event, Outcome, Ship, UnitId};
 use bevy::prelude::*;
 use game_data::GameData;
 use serde::Deserialize;
@@ -19,25 +19,41 @@ const SHIP: Ship = Ship {
 /// Не больше стольких событий за кадр, чтобы на x3 бой не «проскакивал».
 const MAX_EVENTS_PER_FRAME: usize = 8;
 
-/// Темп и размах анимаций боя. Лежит в `data/presentation.json`.
+/// Темп и размах анимаций боя. Лежит в `data/presentation.json`, время — в секундах на x1.
 #[derive(Clone, Debug, Deserialize)]
 pub struct Presentation {
-    /// Пауза между ходами, с (на x1).
+    /// Пауза после каждого хода.
     pub step_pause: f32,
-    /// Пауза между событиями внутри хода (удары по нескольким целям), с.
-    pub event_gap: f32,
-    /// Сколько показываем название умения до удара, с.
-    pub ability_banner: f32,
+    /// Замах перед ударом: обычная атака короткая, ульта и залп — событие.
+    pub basic_windup: f32,
+    pub skill_windup: f32,
+    pub ult_windup: f32,
+    pub broadside_windup: f32,
+    /// Пауза между попаданиями по нескольким целям.
+    pub hit_gap: f32,
+    /// Стоп-кадр после крита или удара по слабости.
+    pub crit_hitstop: f32,
     pub defeat_pause: f32,
+    /// Сколько висит баннер с названием действия.
+    pub banner_basic: f32,
+    pub banner_skill: f32,
+    pub banner_ult: f32,
     pub lunge_px: f32,
     pub lunge_time: f32,
     pub shake_px: f32,
     pub shake_time: f32,
     pub flash_time: f32,
+    /// Тряска всего экрана на ульте и залпе.
+    pub screen_shake_px: f32,
+    pub screen_shake_time: f32,
+    /// Затемнение неба на ульте.
+    pub dim_alpha: f32,
+    pub dim_time: f32,
     pub float_px: f32,
     pub float_time: f32,
+    /// Во сколько раз цифра урона больше в момент появления.
+    pub pop_scale: f32,
     pub crit_scale: f32,
-    pub banner_time: f32,
 }
 
 impl Presentation {
@@ -144,11 +160,21 @@ impl BattleScreen {
     fn delay_after(&self, event: &Event) -> f32 {
         let look = &self.look;
         match event {
-            Event::AbilityUsed { .. } | Event::BroadsideFired => look.ability_banner,
-            Event::Damage { .. }
-            | Event::Healed { .. }
-            | Event::Advanced { .. }
-            | Event::Delayed { .. } => look.event_gap,
+            Event::AbilityUsed { kind, .. } => match kind {
+                AbilityKind::Basic => look.basic_windup,
+                AbilityKind::Skill => look.skill_windup,
+                AbilityKind::Ultimate => look.ult_windup,
+            },
+            Event::BroadsideFired => look.broadside_windup,
+            Event::Damage { weakness, crit, .. } => {
+                look.hit_gap
+                    + if *weakness || *crit {
+                        look.crit_hitstop
+                    } else {
+                        0.0
+                    }
+            }
+            Event::Healed { .. } | Event::Advanced { .. } | Event::Delayed { .. } => look.hit_gap,
             Event::Defeated { .. } => look.defeat_pause,
             Event::TurnStarted { .. }
             | Event::SkillPointsChanged { .. }
