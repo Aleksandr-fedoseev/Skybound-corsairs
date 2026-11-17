@@ -1,12 +1,12 @@
 //! Skybound Corsairs — прототип экрана боя «Живая палуба».
 //!
-//! Бой идёт сам (логика в battle-core), экран проигрывает его события с анимациями.
-//! Игрок вмешивается ультами: тап по светящейся карточке героя. Арт пока — заглушки.
+//! Бой идёт сам (логика в battle-core), экран проигрывает его события анимациями моделей.
+//! Игрок вмешивается ультами: кнопки героев внизу. Модели пока — силуэты-заглушки.
 
 mod battle_screen;
+mod battlefield;
 mod dev;
 mod fx;
-mod text;
 mod view;
 
 use bevy::prelude::*;
@@ -41,7 +41,11 @@ fn main() {
         }))
         .add_plugins(dev::plugin)
         .add_message::<Shown>()
-        .insert_resource(BattleScreen::new(data, Presentation::bundled()))
+        .insert_resource(BattleScreen::new(
+            data,
+            Presentation::bundled(),
+            battlefield::FieldConfig::bundled(),
+        ))
         .init_resource::<fx::BannerFx>()
         .init_resource::<fx::ScreenFx>()
         .add_systems(Startup, view::setup)
@@ -53,14 +57,14 @@ fn main() {
                 battle_screen::play_events,
                 fx::spawn_effects,
                 (
-                    view::refresh_bars,
-                    view::refresh_labels,
+                    view::refresh_status,
+                    view::refresh_ult_buttons,
                     view::refresh_controls,
-                    view::refresh_cards,
                     view::refresh_result,
+                    battlefield::refresh_overhead,
                 ),
                 (
-                    fx::animate_cards,
+                    battlefield::animate_models,
                     fx::animate_floating,
                     fx::animate_banner,
                     fx::animate_screen,

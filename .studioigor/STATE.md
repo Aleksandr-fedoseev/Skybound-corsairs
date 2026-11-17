@@ -1,7 +1,7 @@
 # studioigor — Skybound Corsairs
 
 PROJECT: Skybound Corsairs
-PHASE: 4 — Environment
+PHASE: 6 — Mechanics
 UPDATED: 2026-11-18 01:44
 
 ## Now

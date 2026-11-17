@@ -68,6 +68,16 @@ fn gym_keys(
             screen.restart();
         }
     }
+    // V — следующая раскладка поля (диагональ / боковая полоса).
+    if keys.just_pressed(KeyCode::KeyV) {
+        let names = screen.field.names();
+        let next = names
+            .iter()
+            .position(|n| *n == screen.layout)
+            .map_or(0, |i| (i + 1) % names.len());
+        screen.layout = names[next].clone();
+        screen.rebuild = true;
+    }
     if keys.just_pressed(KeyCode::BracketRight) {
         screen.level += 1;
         screen.restart();
@@ -78,19 +88,31 @@ fn gym_keys(
     }
     if keys.just_pressed(KeyCode::KeyL) {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data");
-        let look = std::fs::read_to_string(dir.join("presentation.json"))
-            .map_err(|e| e.to_string())
-            .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()));
-        match (game_data::GameData::load_dir(&dir), look) {
-            (Ok(data), Ok(look)) => {
+        fn read_json<T: serde::de::DeserializeOwned>(
+            path: std::path::PathBuf,
+        ) -> Result<T, String> {
+            let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
+        }
+        let look = read_json(dir.join("presentation.json"));
+        let field = read_json::<crate::battlefield::FieldConfig>(dir.join("battlefield.json"));
+        match (
+            game_data::GameData::load_dir(&dir),
+            look.and_then(|l| field.map(|f| (l, f))),
+        ) {
+            (Ok(data), Ok((look, field))) => {
                 screen.data = data;
                 screen.look = look;
+                if !field.layouts.contains_key(&screen.layout) {
+                    screen.layout = field.default.clone();
+                }
+                screen.field = field;
                 screen.stage = screen.stage.min(screen.data.stages.len() - 1);
                 screen.notice = Some("данные перечитаны".into());
                 screen.restart();
             }
             (Err(e), _) => screen.notice = Some(format!("ошибка данных: {e}")),
-            (_, Err(e)) => screen.notice = Some(format!("ошибка presentation.json: {e}")),
+            (_, Err(e)) => screen.notice = Some(format!("ошибка: {e}")),
         }
     }
 }
@@ -102,11 +124,12 @@ fn gym_text(
 ) {
     for mut text in &mut texts {
         text.0 = format!(
-            "GYM  этап {} (1–{}) · ур. {} ([ ]) · seed {} · R повтор · N новый · L данные{}",
+            "GYM этап {} (1–{}) · ур. {} ([ ]) · seed {} · V {} · R/N · L{}",
             screen.stage_id(),
             screen.data.stages.len(),
             screen.level,
             screen.seed % 100_000,
+            screen.field.layouts[&screen.layout].name,
             screen
                 .notice
                 .as_deref()

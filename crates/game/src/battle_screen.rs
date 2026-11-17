@@ -9,6 +9,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use battle_core::{AbilityKind, Battle, Event, Outcome, Ship, UnitId};
 use bevy::prelude::*;
 use game_data::GameData;
+
+use crate::battlefield::FieldConfig;
 use serde::Deserialize;
 
 /// Пока стартовый состав задан здесь; со временем его будет выбирать игрок.
@@ -38,10 +40,20 @@ pub struct Presentation {
     pub banner_basic: f32,
     pub banner_skill: f32,
     pub banner_ult: f32,
-    pub lunge_px: f32,
-    pub lunge_time: f32,
-    pub shake_px: f32,
-    pub shake_time: f32,
+    /// Атака: рывок к цели на долю расстояния и назад.
+    pub attack_time: f32,
+    pub attack_reach: f32,
+    /// Ульта: присед, затем рывок дальше обычного.
+    pub ult_time: f32,
+    pub ult_reach: f32,
+    /// Попадание: отброс назад и вспышка.
+    pub hit_time: f32,
+    pub hit_knockback: f32,
+    /// Смерть: падение и угасание.
+    pub death_time: f32,
+    /// Дыхание в ожидании: период (с) и размах (доля роста).
+    pub idle_period: f32,
+    pub idle_amp: f32,
     pub flash_time: f32,
     /// Тряска всего экрана на ульте и залпе.
     pub screen_shake_px: f32,
@@ -65,12 +77,19 @@ impl Presentation {
 
 /// Что показать на экране: событие боя, которое уже пора проиграть.
 #[derive(Message, Clone, Debug)]
-pub struct Shown(pub Event);
+pub struct Shown {
+    pub event: Event,
+    /// Для действия — первая цель, к которой боец делает рывок.
+    pub focus: Option<UnitId>,
+}
 
 #[derive(Resource)]
 pub struct BattleScreen {
     pub data: GameData,
     pub look: Presentation,
+    /// Раскладки поля боя и текущая (в тестовой сцене переключается клавишей V).
+    pub field: FieldConfig,
+    pub layout: String,
     pub stage: usize,
     pub level: u32,
     pub seed: u64,
@@ -93,12 +112,14 @@ pub struct BattleScreen {
 }
 
 impl BattleScreen {
-    pub fn new(data: GameData, look: Presentation) -> Self {
+    pub fn new(data: GameData, look: Presentation, field: FieldConfig) -> Self {
         let seed = random_seed();
         let battle = new_battle(&data, 0, 1, seed);
         let mut screen = Self {
             data,
             look,
+            layout: field.default.clone(),
+            field,
             stage: 0,
             level: 1,
             seed,
@@ -244,7 +265,11 @@ pub fn play_events(
         if let Some(event) = screen.queue.pop_front() {
             screen.apply_shown(&event);
             screen.wait += screen.delay_after(&event);
-            shown.write(Shown(event));
+            let focus = match event {
+                Event::AbilityUsed { unit, .. } => first_target(&screen.queue, unit),
+                _ => None,
+            };
+            shown.write(Shown { event, focus });
         } else if screen.battle.outcome().is_none() {
             let events = if screen.auto {
                 screen.battle.auto_step()
@@ -277,4 +302,23 @@ pub fn keyboard(keys: Res<ButtonInput<KeyCode>>, mut screen: ResMut<BattleScreen
     if keys.just_pressed(KeyCode::KeyR) {
         screen.restart();
     }
+}
+
+/// Первая цель действия: смотрим вперёд по очереди до следующего действия.
+fn first_target(queue: &VecDeque<Event>, actor: UnitId) -> Option<UnitId> {
+    for event in queue {
+        match *event {
+            Event::Damage {
+                source: Some(source),
+                target,
+                ..
+            } if source == actor => return Some(target),
+            Event::Healed { source, target, .. } if source == actor => return Some(target),
+            Event::AbilityUsed { .. } | Event::TurnStarted { .. } | Event::BattleEnded { .. } => {
+                return None;
+            }
+            _ => {}
+        }
+    }
+    None
 }

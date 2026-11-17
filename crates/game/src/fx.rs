@@ -1,14 +1,16 @@
-//! Эффекты боя: выпад к цели, тряска и вспышка при ударе, всплывающие цифры, баннер действия,
-//! тряска экрана и затемнение неба на ульте и залпе. Размах и длительность — в
+//! Эффекты боя: клипы моделей по событиям, всплывающие цифры над головами, баннер действия,
+//! тряска камеры и затемнение неба на ульте и залпе. Размах и длительность — в
 //! `data/presentation.json`.
 
 use std::f32::consts::PI;
 
 use battle_core::{AbilityKind, Event, Side};
 use bevy::prelude::*;
+use bevy::sprite::Text2dShadow;
 
 use crate::battle_screen::{BattleScreen, Shown};
-use crate::view::{Banner, BattleRoot, Fonts, SkyDim, UnitCard};
+use crate::battlefield::{Clip, ModelAnim, SkyDim, UnitModel, Z_FLOATING};
+use crate::view::{Banner, Fonts};
 
 const DAMAGE: Color = Color::WHITE;
 const WEAKNESS: Color = Color::srgb(1.0, 0.85, 0.30);
@@ -17,28 +19,17 @@ const HEAL: Color = Color::srgb(0.45, 1.0, 0.55);
 const SHIFT: Color = Color::srgb(0.70, 0.85, 1.0);
 const BANNER_ULT: Color = Color::srgb(1.0, 0.85, 0.35);
 const BANNER_SKILL: Color = Color::srgb(0.85, 0.95, 1.0);
-const BANNER_BASIC: Color = Color::srgba(1.0, 1.0, 1.0, 0.8);
-const FLASH_STRENGTH: f32 = 0.6;
-const SHAKE_WAVES: f32 = 5.0;
-/// Откуда всплывает цифра: середина карточки, поверх портрета.
-const FLOAT_START: f32 = 40.0;
-const DAMAGE_SIZE: f32 = 30.0;
-/// Чей ход — карточка чуть крупнее; готовая ульта — карточка пульсирует.
-const CURRENT_SCALE: f32 = 1.07;
-const READY_PULSE: f32 = 0.04;
-const READY_PULSE_SPEED: f32 = 7.0;
-
-/// Движение карточки: выпад при своём действии, тряска и вспышка при попадании.
-#[derive(Component, Default)]
-pub struct CardMotion {
-    lunge: Option<(Timer, f32)>,
-    shake: Option<(Timer, f32)>,
-    flash: Option<Timer>,
-}
+const BANNER_BASIC: Color = Color::srgba(1.0, 1.0, 1.0, 0.85);
+const DAMAGE_SIZE: f32 = 28.0;
+/// Победная анимация идёт, пока игрок не начнёт новый бой.
+const VICTORY_SECONDS: f32 = 3600.0;
+/// Если цель не найдена (например, лечение себя), рывок — к центру поля.
+const FIELD_CENTER: Vec2 = Vec2::new(0.0, -20.0);
 
 #[derive(Component)]
 pub struct Floating {
     timer: Timer,
+    from: Vec3,
     rise: f32,
     pop: f32,
     color: Color,
@@ -50,7 +41,7 @@ pub struct BannerFx {
     color: Color,
 }
 
-/// Тряска всего экрана и затемнение неба — для ульт и залпа.
+/// Тряска камеры и затемнение неба — для ульт и залпа.
 #[derive(Resource, Default)]
 pub struct ScreenFx {
     shake: Option<(Timer, f32)>,
@@ -61,49 +52,48 @@ fn once(seconds: f32) -> Timer {
     Timer::from_seconds(seconds.max(0.01), TimerMode::Once)
 }
 
-/// Запускает эффекты по событиям, которые экран только что показал.
+/// Запускает клипы моделей и эффекты по событиям, которые экран только что показал.
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_effects(
     mut commands: Commands,
     mut shown: MessageReader<Shown>,
     screen: Res<BattleScreen>,
     fonts: Res<Fonts>,
-    mut cards: Query<(Entity, &UnitCard, &mut CardMotion)>,
+    mut models: Query<(&UnitModel, &mut ModelAnim)>,
     mut banner: Query<(&mut Text, &mut TextFont), With<Banner>>,
     mut banner_fx: ResMut<BannerFx>,
     mut screen_fx: ResMut<ScreenFx>,
 ) {
     let look = &screen.look;
-    let float = |commands: &mut Commands, card: Entity, label: String, color: Color, size: f32| {
-        let text = commands
-            .spawn((
+    // Где стоит модель и какого она роста.
+    let place = |models: &Query<(&UnitModel, &mut ModelAnim)>, id| {
+        models
+            .iter()
+            .find(|(m, _)| m.id == id)
+            .map(|(m, _)| (m.home, m.height))
+    };
+    let float =
+        |commands: &mut Commands, at: Vec2, height: f32, label: String, color: Color, size: f32| {
+            let from = Vec3::new(at.x, at.y + height * 0.95, Z_FLOATING);
+            commands.spawn((
                 Floating {
                     timer: once(look.float_time),
+                    from,
                     rise: look.float_px,
                     pop: look.pop_scale,
                     color,
                 },
-                Text::new(label),
+                Text2d::new(label),
                 fonts.text(true, size),
                 TextColor(color),
-                TextShadow {
-                    offset: Vec2::new(2.0, 2.0),
+                Text2dShadow {
+                    offset: Vec2::new(2.0, -2.0),
                     color: Color::srgba(0.0, 0.0, 0.0, 0.85),
                 },
                 TextLayout::justify(Justify::Center),
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(FLOAT_START),
-                    width: percent(100),
-                    ..default()
-                },
-                UiTransform::from_scale(Vec2::splat(look.pop_scale)),
-                GlobalZIndex(5),
-                Pickable::IGNORE,
-            ))
-            .id();
-        commands.entity(card).add_child(text);
-    };
+                Transform::from_translation(from).with_scale(Vec3::splat(look.pop_scale)),
+            ));
+        };
     let mut set_banner = |label: String, color: Color, size: f32, seconds: f32| {
         for (mut text, mut font) in &mut banner {
             text.0 = label.clone();
@@ -113,11 +103,12 @@ pub fn spawn_effects(
         banner_fx.color = color;
     };
 
-    for Shown(event) in shown.read() {
+    for Shown { event, focus } in shown.read() {
         match event {
             Event::AbilityUsed { unit, kind, name } => {
                 let actor = screen.battle.unit(*unit);
                 let who = &actor.def.name;
+                let big = *kind == AbilityKind::Ultimate;
                 match kind {
                     AbilityKind::Ultimate => {
                         set_banner(
@@ -133,29 +124,32 @@ pub fn spawn_effects(
                     AbilityKind::Skill => set_banner(
                         format!("{who}: «{name}»"),
                         BANNER_SKILL,
-                        24.0,
+                        22.0,
                         look.banner_skill,
                     ),
                     AbilityKind::Basic => set_banner(
                         format!("{who}: {name}"),
                         BANNER_BASIC,
-                        18.0,
+                        17.0,
                         look.banner_basic,
                     ),
                 }
-                // Союзники делают выпад вверх, к врагам; враги — вниз.
-                let dir = if actor.side == Side::Ally { -1.0 } else { 1.0 };
-                let size = if *kind == AbilityKind::Ultimate {
-                    1.5
-                } else {
-                    1.0
+                // Рывок к первой цели; к своим (лечение) — короче, к центру поля — если цели нет.
+                let to = focus
+                    .and_then(|t| place(&models, t))
+                    .map(|(at, _)| at)
+                    .unwrap_or(FIELD_CENTER);
+                let seconds = match kind {
+                    AbilityKind::Basic => look.attack_time,
+                    AbilityKind::Skill => look.attack_time * 1.3,
+                    AbilityKind::Ultimate => look.ult_time,
                 };
-                if let Some((_, _, mut motion)) = cards.iter_mut().find(|(_, c, _)| c.0 == *unit) {
-                    motion.lunge = Some((once(look.lunge_time), dir * size * look.lunge_px));
+                if let Some((_, mut anim)) = models.iter_mut().find(|(m, _)| m.id == *unit) {
+                    anim.play(Clip::Attack { to, big }, seconds);
                 }
             }
             Event::BroadsideFired => {
-                set_banner("ЗАЛП КОРАБЛЯ!".into(), BROADSIDE, 36.0, look.banner_ult);
+                set_banner("ЗАЛП КОРАБЛЯ!".into(), BROADSIDE, 34.0, look.banner_ult);
                 screen_fx.shake = Some((once(look.screen_shake_time), look.screen_shake_px * 1.3));
             }
             Event::Damage {
@@ -165,38 +159,45 @@ pub fn spawn_effects(
                 weakness,
                 crit,
             } => {
-                if let Some((card, _, mut motion)) =
-                    cards.iter_mut().find(|(_, c, _)| c.0 == *target)
-                {
-                    let strong = *crit || *weakness;
-                    motion.shake = Some((
-                        once(look.shake_time),
-                        look.shake_px * if strong { 1.7 } else { 1.0 },
-                    ));
-                    motion.flash = Some(once(look.flash_time));
-                    let color = match (source, weakness) {
-                        (None, _) => BROADSIDE,
-                        (_, true) => WEAKNESS,
-                        _ => DAMAGE,
-                    };
-                    let size = if *crit {
-                        DAMAGE_SIZE * look.crit_scale
-                    } else {
-                        DAMAGE_SIZE
-                    };
-                    let label = match (crit, weakness) {
-                        (true, _) => format!("-{amount}!"),
-                        (_, true) => format!("-{amount}\nслабость"),
-                        _ => format!("-{amount}"),
-                    };
-                    float(&mut commands, card, label, color, size);
+                let Some((at, height)) = place(&models, *target) else {
+                    continue;
+                };
+                // Отброс — от атакующего; залп корабля бьёт «с нашей стороны».
+                let from = source
+                    .and_then(|s| place(&models, s))
+                    .map(|(p, _)| p)
+                    .unwrap_or(Vec2::new(-270.0, -480.0));
+                let dir = (at - from).normalize_or_zero();
+                if let Some((_, mut anim)) = models.iter_mut().find(|(m, _)| m.id == *target) {
+                    anim.play(
+                        Clip::Hit { dir },
+                        look.hit_time * if *crit || *weakness { 1.4 } else { 1.0 },
+                    );
+                    anim.flash = 1.0;
                 }
+                let color = match (source, weakness) {
+                    (None, _) => BROADSIDE,
+                    (_, true) => WEAKNESS,
+                    _ => DAMAGE,
+                };
+                let size = if *crit {
+                    DAMAGE_SIZE * look.crit_scale
+                } else {
+                    DAMAGE_SIZE
+                };
+                let label = match (crit, weakness) {
+                    (true, _) => format!("-{amount}!"),
+                    (_, true) => format!("-{amount}\nслабость"),
+                    _ => format!("-{amount}"),
+                };
+                float(&mut commands, at, height, label, color, size);
             }
             Event::Healed { target, amount, .. } => {
-                if let Some((card, _, _)) = cards.iter().find(|(_, c, _)| c.0 == *target) {
+                if let Some((at, height)) = place(&models, *target) {
                     float(
                         &mut commands,
-                        card,
+                        at,
+                        height,
                         format!("+{amount}"),
                         HEAL,
                         DAMAGE_SIZE * 0.9,
@@ -209,8 +210,28 @@ pub fn spawn_effects(
                 } else {
                     "отброшен"
                 };
-                if let Some((card, _, _)) = cards.iter().find(|(_, c, _)| c.0 == *unit) {
-                    float(&mut commands, card, label.into(), SHIFT, 18.0);
+                if let Some((at, height)) = place(&models, *unit) {
+                    float(&mut commands, at, height * 0.7, label.into(), SHIFT, 16.0);
+                }
+            }
+            Event::Defeated { unit } => {
+                if let Some((_, mut anim)) = models.iter_mut().find(|(m, _)| m.id == *unit) {
+                    anim.play(Clip::Death, look.death_time);
+                }
+            }
+            Event::BattleEnded { outcome } => {
+                // Победители радуются.
+                let winners = if *outcome == battle_core::Outcome::Victory {
+                    Side::Ally
+                } else {
+                    Side::Enemy
+                };
+                for (model, mut anim) in &mut models {
+                    if screen.battle.unit(model.id).side == winners
+                        && screen.shown_hp[model.id.0] > 0
+                    {
+                        anim.play(Clip::Victory, VICTORY_SECONDS);
+                    }
                 }
             }
             _ => {}
@@ -227,78 +248,20 @@ fn fx_delta(time: &Time, screen: &BattleScreen) -> std::time::Duration {
     }
 }
 
-pub fn animate_cards(
-    time: Res<Time>,
-    screen: Res<BattleScreen>,
-    mut cards: Query<(
-        &UnitCard,
-        &mut CardMotion,
-        &mut UiTransform,
-        &mut BackgroundColor,
-    )>,
-) {
-    let dt = fx_delta(&time, &screen);
-    let now = time.elapsed_secs();
-    for (UnitCard(id), mut motion, mut transform, mut bg) in &mut cards {
-        let mut offset = Vec2::ZERO;
-        if let Some((timer, size)) = &mut motion.lunge {
-            timer.tick(dt);
-            offset.y += *size * (PI * timer.fraction()).sin();
-            if timer.is_finished() {
-                motion.lunge = None;
-            }
-        }
-        if let Some((timer, size)) = &mut motion.shake {
-            timer.tick(dt);
-            let t = timer.fraction();
-            offset.x += *size * (1.0 - t) * (t * SHAKE_WAVES * 2.0 * PI).sin();
-            if timer.is_finished() {
-                motion.shake = None;
-            }
-        }
-        if let Some(timer) = &mut motion.flash {
-            timer.tick(dt);
-            let k = FLASH_STRENGTH * (1.0 - timer.fraction());
-            bg.0 = bg.0.mix(&Color::WHITE, k);
-            if timer.is_finished() {
-                motion.flash = None;
-            }
-        }
-        let alive = screen.shown_hp[id.0] > 0;
-        let scale = if !alive || screen.shown_outcome.is_some() {
-            1.0
-        } else if screen.shown_current == Some(*id) {
-            CURRENT_SCALE
-        } else if screen.battle.unit(*id).ultimate_ready() {
-            1.0 + READY_PULSE * (0.5 + 0.5 * (now * READY_PULSE_SPEED).sin())
-        } else {
-            1.0
-        };
-        transform.translation = Val2::px(offset.x, offset.y);
-        transform.scale = Vec2::splat(scale);
-    }
-}
-
 pub fn animate_floating(
     mut commands: Commands,
     time: Res<Time>,
     screen: Res<BattleScreen>,
-    mut texts: Query<(
-        Entity,
-        &mut Floating,
-        &mut Node,
-        &mut TextColor,
-        &mut UiTransform,
-    )>,
+    mut texts: Query<(Entity, &mut Floating, &mut Transform, &mut TextColor)>,
 ) {
     let dt = fx_delta(&time, &screen);
-    for (entity, mut float, mut node, mut color, mut transform) in &mut texts {
+    for (entity, mut float, mut transform, mut color) in &mut texts {
         float.timer.tick(dt);
         let t = float.timer.fraction();
         // Цифра «выстреливает» крупной и быстро садится в обычный размер, затем всплывает.
         let pop = (t / 0.15).min(1.0);
-        transform.scale = Vec2::splat(float.pop + (1.0 - float.pop) * pop);
-        node.top = px(FLOAT_START - float.rise * t);
+        transform.scale = Vec3::splat(float.pop + (1.0 - float.pop) * pop);
+        transform.translation = float.from + Vec3::Y * float.rise * t;
         color.0 = float.color.with_alpha(1.0 - t.powi(3));
         if float.timer.is_finished() {
             commands.entity(entity).despawn();
@@ -332,8 +295,8 @@ pub fn animate_screen(
     time: Res<Time>,
     screen: Res<BattleScreen>,
     mut fx: ResMut<ScreenFx>,
-    mut root: Query<&mut UiTransform, With<BattleRoot>>,
-    mut dim: Query<&mut BackgroundColor, With<SkyDim>>,
+    mut camera: Query<&mut Transform, With<Camera2d>>,
+    mut dim: Query<&mut Sprite, With<SkyDim>>,
 ) {
     let dt = fx_delta(&time, &screen);
     let mut offset = Vec2::ZERO;
@@ -364,10 +327,11 @@ pub fn animate_screen(
             fx.dim = None;
         }
     }
-    for mut transform in &mut root {
-        transform.translation = Val2::px(offset.x, offset.y);
+    for mut transform in &mut camera {
+        transform.translation.x = offset.x;
+        transform.translation.y = offset.y;
     }
-    for mut bg in &mut dim {
-        bg.0 = Color::srgba(0.02, 0.04, 0.12, alpha);
+    for mut sprite in &mut dim {
+        sprite.color = Color::srgba(0.02, 0.04, 0.12, alpha);
     }
 }
