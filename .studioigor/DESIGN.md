@@ -1,0 +1,56 @@
+# Design — Skybound Corsairs
+
+A living document. Changes after playtests — with a line in "Changelog".
+
+## Mechanics
+<!-- Statuses: idea → spec → gym → playtest → locked, or cut. tier: mvp — needed
+for the vertical slice; full — later. Before a mechanic — research research/mech-<id>.md. -->
+| id | mechanic | tier | pillar | status | scene | notes |
+|---|---|---|---|---|---|---|
+| M01 | Бой: шкала ходов, атака/умение, общие очки умений | mvp | Ручной бой сильнее автобоя | spec | — | логика в battle-core, есть только автобой |
+| M02 | Ручное управление: выбор действия и цели тапом | mvp | Ручной бой сильнее автобоя | idea | — | ядро 30-секундного цикла, ещё не начато |
+| M03 | Ульта в любой момент, даже вне своего хода | mvp | Ручной бой сильнее автобоя | spec | — | логика есть, кнопок нет |
+| M04 | Залп корабля, сила от пушечной палубы | mvp | Корабль стреляет в бою | spec | — | сила залпа пока константа 120 в коде |
+| M05 | Стихии и слабости (круг из 5) | mvp | Состав решает | spec | — | логика есть |
+| M06 | Автобой и ускорение x2/x3 | mvp | Сессия одной рукой | gym | crates/game | текстовый экран автобоя |
+| M07 | Экран корабля: 6–7 отсеков с уровнями | mvp | Корабль стреляет в бою | idea | — | этап 2 концепта |
+| M08 | Ресурсы, таймеры, пассивная добыча | mvp | Сессия одной рукой | idea | — | этап 2 |
+| M09 | Таверна: найм за игровую валюту, гарант | mvp | Состав решает | idea | — | крутки только на сервере |
+| M10 | Прокачка героев | mvp | Состав решает | idea | — | этап 2 |
+| M11 | Карта первой зоны | mvp | Сессия одной рукой | idea | — | этап 2 |
+| M12 | Эффекты: оглушение, снижение защиты, снятие дебаффов | full | Состав решает | idea | — | роли шамана и врача из концепта |
+| M13 | Экспедиции на шлюпках | full | Сессия одной рукой | idea | — | |
+| M14 | Отношения и каюты | full | — | idea | — | дешёвый контент: текст |
+| M15 | Асинхронное PvP | full | Состав решает | idea | — | |
+
+## Game designer ideas
+<!-- references/gamedesigner.md. Statuses: proposed → approved → M## | rejected (why) | deferred.
+Do not propose rejected ideas again. Do not implement unapproved ones. -->
+| id | idea | why it's fun | cost S/M/L | point (phase) | status |
+|---|---|---|---|---|---|
+
+## Content
+<!-- phase 8 (references/production.md): one line per unit. Statuses: sketch → blockout → art → final. -->
+| id | new | signature moment | difficulty 1–10 | axes of difference from the neighbor | story beat | status |
+|---|---|---|---|---|---|---|
+
+## Progression and meta
+- Герои: уровень, снаряжение, звёзды за копии. Корабль: уровни отсеков, потолок — уровень корпуса. Карта: зоны по штурманской рубке и сюжету.
+
+## Economy
+<!-- resource: sources → sinks, rate (a guess is fine) -->
+- Считается только на сервере. Ресурсы, валюта, крутки — этап 2, цифр пока нет.
+
+## Difficulty
+- philosophy: сейчас стартовая команда 1-го уровня берёт все 4 этапа в 100% боёв — слишком легко.
+- axes: 
+
+## Mechanic specs
+<!-- ### M01 — Name
+what · why (pillar) · controls · rules · parameters (in data files) ·
+acceptance criteria · "feel" (targets) · research: research/mech-M01.md -->
+
+## Changelog
+| date | what | why |
+|---|---|---|
+| 2026-11-18 | таблица механик перенесена из концепта и кода | подключение studioigor |
