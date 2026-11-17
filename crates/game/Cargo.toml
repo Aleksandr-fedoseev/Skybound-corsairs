@@ -1,0 +1,16 @@
+[package]
+name = "game"
+description = "Клиент Skybound Corsairs на Bevy."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "skybound"
+path = "src/main.rs"
+
+[dependencies]
+battle-core = { workspace = true }
+game-data = { workspace = true }
+bevy = { workspace = true }

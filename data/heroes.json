@@ -1,0 +1,146 @@
+[
+  {
+    "id": "ren",
+    "name": "Рэн",
+    "title": "Клинок грозы",
+    "rarity": "SSR",
+    "role": "duelist",
+    "element": "lightning",
+    "base_stats": { "max_hp": 900, "atk": 115, "def": 45, "spd": 110 },
+    "growth": { "max_hp": 60, "atk": 6, "def": 3, "spd": 0 },
+    "basic": {
+      "name": "Выпад",
+      "effects": [{ "target": "single_enemy", "type": "damage", "multiplier": 1.0 }]
+    },
+    "skill": {
+      "name": "Двойной удар",
+      "effects": [{ "target": "single_enemy", "type": "damage", "multiplier": 2.0 }]
+    },
+    "ultimate": {
+      "name": "Гроза над палубой",
+      "effects": [{ "target": "single_enemy", "type": "damage", "multiplier": 3.6 }]
+    }
+  },
+  {
+    "id": "sora",
+    "name": "Сора",
+    "title": "Шаманка ветров",
+    "rarity": "SSR",
+    "role": "wind_shaman",
+    "element": "wind",
+    "base_stats": { "max_hp": 950, "atk": 90, "def": 50, "spd": 115 },
+    "growth": { "max_hp": 60, "atk": 5, "def": 3, "spd": 0 },
+    "basic": {
+      "name": "Порыв",
+      "effects": [{ "target": "single_enemy", "type": "damage", "multiplier": 1.0 }]
+    },
+    "skill": {
+      "name": "Вихрь",
+      "effects": [
+        { "target": "all_enemies", "type": "damage", "multiplier": 0.5 },
+        { "target": "all_enemies", "type": "delay", "fraction": 0.15 }
+      ]
+    },
+    "ultimate": {
+      "name": "Буря",
+      "effects": [{ "target": "all_enemies", "type": "damage", "multiplier": 1.6 }]
+    }
+  },
+  {
+    "id": "kaya",
+    "name": "Кая",
+    "title": "Канонир",
+    "rarity": "SR",
+    "role": "gunner",
+    "element": "powder",
+    "base_stats": { "max_hp": 950, "atk": 95, "def": 45, "spd": 100 },
+    "growth": { "max_hp": 55, "atk": 5, "def": 3, "spd": 0 },
+    "basic": {
+      "name": "Мушкет",
+      "effects": [{ "target": "single_enemy", "type": "damage", "multiplier": 1.0 }]
+    },
+    "skill": {
+      "name": "Картечь",
+      "effects": [{ "target": "all_enemies", "type": "damage", "multiplier": 0.7 }]
+    },
+    "ultimate": {
+      "name": "Бортовой залп",
+      "effects": [{ "target": "all_enemies", "type": "damage", "multiplier": 1.4 }]
+    }
+  },
+  {
+    "id": "lira",
+    "name": "Лира",
+    "title": "Штурман",
+    "rarity": "SR",
+    "role": "navigator",
+    "element": "mist",
+    "base_stats": { "max_hp": 1000, "atk": 70, "def": 55, "spd": 125 },
+    "growth": { "max_hp": 55, "atk": 4, "def": 3, "spd": 0 },
+    "basic": {
+      "name": "Сигнальный выстрел",
+      "effects": [{ "target": "single_enemy", "type": "damage", "multiplier": 1.0 }]
+    },
+    "skill": {
+      "name": "Попутный ветер",
+      "effects": [{ "target": "all_allies", "type": "advance", "fraction": 0.25 }]
+    },
+    "ultimate": {
+      "name": "Штурманский манёвр",
+      "effects": [
+        { "target": "all_allies", "type": "advance", "fraction": 0.5 },
+        { "target": "all_enemies", "type": "delay", "fraction": 0.3 }
+      ]
+    }
+  },
+  {
+    "id": "mei",
+    "name": "Мэй",
+    "title": "Корабельный врач",
+    "rarity": "SR",
+    "role": "medic",
+    "element": "wind",
+    "base_stats": { "max_hp": 1050, "atk": 75, "def": 55, "spd": 105 },
+    "growth": { "max_hp": 60, "atk": 4, "def": 3, "spd": 0 },
+    "basic": {
+      "name": "Скальпель",
+      "effects": [{ "target": "single_enemy", "type": "damage", "multiplier": 1.0 }]
+    },
+    "skill": {
+      "name": "Перевязка",
+      "effects": [{ "target": "single_ally", "type": "heal", "percent": 0.2 }]
+    },
+    "ultimate": {
+      "name": "Целебный бриз",
+      "effects": [{ "target": "all_allies", "type": "heal", "percent": 0.25 }]
+    }
+  },
+  {
+    "id": "borg",
+    "name": "Борг",
+    "title": "Абордажник",
+    "rarity": "R",
+    "role": "boarder",
+    "element": "steel",
+    "base_stats": { "max_hp": 1500, "atk": 65, "def": 90, "spd": 92 },
+    "growth": { "max_hp": 90, "atk": 3, "def": 5, "spd": 0 },
+    "basic": {
+      "name": "Абордажный крюк",
+      "effects": [{ "target": "single_enemy", "type": "damage", "multiplier": 1.0 }]
+    },
+    "skill": {
+      "name": "Таран",
+      "effects": [
+        { "target": "single_enemy", "type": "damage", "multiplier": 1.2 },
+        { "target": "single_enemy", "type": "delay", "fraction": 0.25 }
+      ]
+    },
+    "ultimate": {
+      "name": "Стальная воля",
+      "effects": [
+        { "target": "myself", "type": "heal", "percent": 0.2 },
+        { "target": "all_enemies", "type": "damage", "multiplier": 0.8 }
+      ]
+    }
+  }
+]

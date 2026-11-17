@@ -1,0 +1,130 @@
+[
+  {
+    "id": "imperial_marine",
+    "name": "Имперский морпех",
+    "element": "steel",
+    "base_stats": {
+      "max_hp": 480,
+      "atk": 70,
+      "def": 50,
+      "spd": 95
+    },
+    "growth": {
+      "max_hp": 45,
+      "atk": 5,
+      "def": 3,
+      "spd": 0
+    },
+    "basic": {
+      "name": "Удар штыком",
+      "effects": [
+        {
+          "target": "single_enemy",
+          "type": "damage",
+          "multiplier": 1.0
+        }
+      ]
+    }
+  },
+  {
+    "id": "imperial_gunner",
+    "name": "Имперский стрелок",
+    "element": "powder",
+    "base_stats": {
+      "max_hp": 380,
+      "atk": 90,
+      "def": 35,
+      "spd": 100
+    },
+    "growth": {
+      "max_hp": 35,
+      "atk": 6,
+      "def": 2,
+      "spd": 0
+    },
+    "basic": {
+      "name": "Выстрел",
+      "effects": [
+        {
+          "target": "single_enemy",
+          "type": "damage",
+          "multiplier": 1.0
+        }
+      ]
+    },
+    "skill": {
+      "name": "Граната",
+      "effects": [
+        {
+          "target": "all_enemies",
+          "type": "damage",
+          "multiplier": 0.5
+        }
+      ]
+    }
+  },
+  {
+    "id": "storm_ray",
+    "name": "Грозовой скат",
+    "element": "lightning",
+    "base_stats": {
+      "max_hp": 400,
+      "atk": 85,
+      "def": 40,
+      "spd": 120
+    },
+    "growth": {
+      "max_hp": 40,
+      "atk": 5,
+      "def": 2,
+      "spd": 0
+    },
+    "basic": {
+      "name": "Разряд",
+      "effects": [
+        {
+          "target": "single_enemy",
+          "type": "damage",
+          "multiplier": 1.0
+        }
+      ]
+    }
+  },
+  {
+    "id": "storm_leviathan",
+    "name": "Грозовой левиафан",
+    "element": "lightning",
+    "base_stats": {
+      "max_hp": 2600,
+      "atk": 170,
+      "def": 70,
+      "spd": 160
+    },
+    "growth": {
+      "max_hp": 200,
+      "atk": 10,
+      "def": 4,
+      "spd": 0
+    },
+    "basic": {
+      "name": "Удар хвостом",
+      "effects": [
+        {
+          "target": "single_enemy",
+          "type": "damage",
+          "multiplier": 1.2
+        }
+      ]
+    },
+    "skill": {
+      "name": "Грозовой рёв",
+      "effects": [
+        {
+          "target": "all_enemies",
+          "type": "damage",
+          "multiplier": 0.9
+        }
+      ]
+    }
+  }
+]
