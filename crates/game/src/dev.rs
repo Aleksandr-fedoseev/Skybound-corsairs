@@ -35,6 +35,8 @@ pub fn fix_window_size(window: &mut Window) {
 }
 
 pub fn plugin(app: &mut App) {
+    #[cfg(feature = "dev")]
+    app.add_plugins(bevy_brp_extras::BrpExtrasPlugin);
     if let Ok(path) = std::env::var(SCREENSHOT_VAR) {
         app.insert_resource(AutoScreenshot {
             path,

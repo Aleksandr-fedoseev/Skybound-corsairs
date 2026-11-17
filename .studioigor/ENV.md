@@ -14,19 +14,29 @@ VERIFIED: yes
 | системные библиотеки: alsa, udev, wayland, x11, xkbcommon, vulkan | есть | окно, звук, ввод, рендер |
 | GPU RX 570, Mesa radv, Vulkan | 26.2.5 | рендер |
 | clang + lld | системные | можно ускорить линковку |
+| rust-analyzer (компонент rustup) | 1.99.1 | LSP |
+| bevy_brp_mcp | 0.23.0 (~/.cargo/bin) | MCP для живой игры |
+| bevy_brp_extras | 0.23.0, фича dev клиента | скриншоты, клавиши, мышь через BRP |
 | node / npm | системные | будущие Cloud Functions |
 
 ## Agent integrations
-Пока нет: MCP для Bevy (BRP), LSP-плагин rust-analyzer — решить в фазе 4.
+- Плагин ассистента rust-analyzer-lsp (scope user).
+- MCP bevy-brp: `mcp add bevy-brp -- /home/nusip/.cargo/bin/bevy_brp_mcp` (local, этот проект); `mcp list` — Connected.
+- Проверено curl на порт 15702: rpc.discover отдаёт методы brp_extras, screenshot сохранил PNG, send_keys и shutdown ответили success.
+- Инструменты MCP появятся в новой сессии ассистента.
 
 ## Commands
 RUN: cargo run -p game
 TEST: cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings
-BUILD: cargo build --release -p game
+BUILD: cargo build --release -p game --no-default-features
 CAPTURE: mkdir -p .studioigor/captures/hello && SKYBOUND_SCREENSHOT=.studioigor/captures/hello/battle.png cargo run -p game
 EDITOR: none — у Bevy нет редактора, код в репозитории
 
 ## Pitfalls
 - niri (тайловый Wayland) растягивает окно; в режиме SKYBOUND_SCREENSHOT размер окна зафиксирован (dev::fix_window_size), кадр 540×960.
+- Игру запускать через cargo run: бинарник, запущенный напрямую, ищет assets/ рядом с exe и рисует экран без текста.
+- MCP-сервер не в PATH ассистента — регистрировать по абсолютному пути ~/.cargo/bin/bevy_brp_mcp.
+- Не убивать cargo посреди сборки: битые .rlib («memory map must have a non-zero length»), лечится пересборкой.
+- Фича dev включена по умолчанию; релиз — только с --no-default-features (BRP открывает порт 15702).
 - Нет Android SDK/NDK и target aarch64-linux-android — до сборки под телефон.
 - Стандартный шрифт Bevy без кириллицы — только Noto Sans из crates/game/assets/fonts.

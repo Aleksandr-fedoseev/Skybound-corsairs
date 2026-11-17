@@ -14,3 +14,11 @@ path = "src/main.rs"
 battle-core = { workspace = true }
 game-data = { workspace = true }
 bevy = { workspace = true }
+bevy_brp_extras = { version = "=0.23.0", optional = true }
+
+[features]
+# Инструменты разработки: Bevy Remote Protocol, через который агент делает скриншоты и нажимает
+# клавиши в запущенной игре (bevy_brp_mcp). В релизную сборку не входит:
+# cargo build --release -p game --no-default-features
+default = ["dev"]
+dev = ["dep:bevy_brp_extras", "bevy/bevy_remote"]

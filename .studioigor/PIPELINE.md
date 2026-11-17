@@ -18,7 +18,7 @@ files:
 files: CONCEPT.md
 - [x] interview done, concept slots filled with source tags — check: manual
 - [x] 3–5 falsifiable pillars and anti-pillars — check: manual
-- [ ] story skeleton in STORY.md (or decided there is no story) — check: manual
+- [x] story skeleton in STORY.md (or decided there is no story) — check: manual
 - [x] draft mechanics in DESIGN.md and scale in SCOPE.md — check: manual
 - [x] game designer proposed signature hooks, the user chose — check: user
 - [x] user approved the pitch card — check: user
@@ -37,10 +37,10 @@ files: TECH.md
 
 ## Phase 4 — Environment
 files: ENV.md
-- [ ] research of the best engine setup done — check: test -s .studioigor/research/environment.md
-- [ ] full setup installed: engine, CLI, plugin/skills, MCP, tests, linter, export — check: python3 {skill}/scripts/envcheck.py --engine {engine}
-- [ ] editor MCP connected: `mcp list` ✔ and a real tool call succeeded — check: manual
-- [ ] hello project: TEST and CAPTURE pass (studio.py verify) — check: grep -q "^VERIFIED: yes" .studioigor/ENV.md
+- [x] research of the best engine setup done — check: test -s .studioigor/research/environment.md
+- [ ] full setup installed: engine, CLI, plugin/skills, MCP, tests, linter, export — check: python3 {skill}/scripts/envcheck.py --engine {engine} SKIP: envcheck требует brew и git-lfs (шаблон macOS); на CachyOS всё нужное стоит, git-lfs поставим с первыми спрайтами через pacman
+- [x] editor MCP connected: `mcp list` ✔ and a real tool call succeeded — check: manual
+- [x] hello project: TEST and CAPTURE pass (studio.py verify) — check: grep -q "^VERIFIED: yes" .studioigor/ENV.md
 - [ ] user saw the project running on their machine — check: user
 
 ## Phase 5 — Assets and look-dev
