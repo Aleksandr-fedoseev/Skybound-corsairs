@@ -21,3 +21,9 @@ One session — one section. The user's feedback — verbatim. The first questio
 - what we tried: босс без АВТО, ручные ульты; новый ритм, эффекты удара, раскладка
 - is it fun? «Заметно лучше» · feedback (verbatim): «Заметно лучше»
 - conclusions → actions: M06 locked; дальше — баланс (сейчас 100% побед без потерь), чтобы ручные ульты решали
+
+## PT-03 — 2026-11-18 — M06 v3: поле боя с моделями (gym)
+- build: 2cc6113 · run: `cargo run -p game`
+- what we tried: рывки, отброс, смерть, ручные ульты кнопками, босс, переключение раскладок V
+- is it fun? не спрашивали отдельно · feedback (verbatim): раскладка — «Пока не решил»; доработать — «Интерфейс, Баланс»
+- conclusions → actions: обе раскладки остаются до референсов и первых спрайтов; дальше — интерфейс, затем баланс
