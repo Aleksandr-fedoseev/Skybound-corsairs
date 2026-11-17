@@ -32,13 +32,15 @@ const DEFEATED: Color = Color::srgb(0.5, 0.5, 0.5);
 const ACCENT: Color = Color::srgb(1.0, 0.85, 0.35);
 
 fn main() {
+    let mut window = Window {
+        title: "Skybound Corsairs".into(),
+        resolution: (540, 960).into(),
+        ..default()
+    };
+    dev::fix_window_size(&mut window);
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Skybound Corsairs".into(),
-                resolution: (540, 960).into(),
-                ..default()
-            }),
+            primary_window: Some(window),
             ..default()
         }))
         .insert_resource(ClearColor(SKY))

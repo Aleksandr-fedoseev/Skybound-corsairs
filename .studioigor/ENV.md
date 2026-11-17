@@ -27,6 +27,6 @@ CAPTURE: mkdir -p .studioigor/captures/hello && SKYBOUND_SCREENSHOT=.studioigor/
 EDITOR: none — у Bevy нет редактора, код в репозитории
 
 ## Pitfalls
-- niri (тайловый Wayland) растягивает окно 540×960: скриншот получается 936×1014, не в пропорциях телефона.
+- niri (тайловый Wayland) растягивает окно; в режиме SKYBOUND_SCREENSHOT размер окна зафиксирован (dev::fix_window_size), кадр 540×960.
 - Нет Android SDK/NDK и target aarch64-linux-android — до сборки под телефон.
 - Стандартный шрифт Bevy без кириллицы — только Noto Sans из crates/game/assets/fonts.

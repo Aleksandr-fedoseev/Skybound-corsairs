@@ -22,12 +22,18 @@ for the vertical slice; full — later. Before a mechanic — research research/
 | M13 | Экспедиции на шлюпках | full | Сессия одной рукой | idea | — | |
 | M14 | Отношения и каюты | full | — | idea | — | дешёвый контент: текст |
 | M15 | Асинхронное PvP | full | Состав решает | idea | — | |
+| M16 | Залп по команде с перезарядом | full | Корабль стреляет в бою | idea | — | хук I01 |
+| M17 | Ветер боя | full | Состав решает | idea | — | хук I02 |
 
 ## Game designer ideas
 <!-- references/gamedesigner.md. Statuses: proposed → approved → M## | rejected (why) | deferred.
 Do not propose rejected ideas again. Do not implement unapproved ones. -->
 | id | idea | why it's fun | cost S/M/L | point (phase) | status |
 |---|---|---|---|---|---|
+| I01 | Залп по команде: игрок сам даёт залп, удержание — перезаряд (сильнее, но корабль уязвим) | рискованное решение капитана в каждом бою | S | 1 | approved → M16 |
+| I02 | Ветер боя: погода усиливает стихию, меняется каждые N ходов, Лира разворачивает ветер | одна команда играет по-разному | M | 1 | approved → M17 |
+| I03 | Пленные в экипаж: добивание абордажным умением → найм R-героев | пиратская альтернатива гаче | M | 1 | rejected (не выбрано) |
+| I04 | Капитанский приказ раз за бой, набор растёт с мостиком | база влияет на бой | S | 1 | rejected (не выбрано) |
 
 ## Content
 <!-- phase 8 (references/production.md): one line per unit. Statuses: sketch → blockout → art → final. -->
