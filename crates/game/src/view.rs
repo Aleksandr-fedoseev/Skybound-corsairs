@@ -1,5 +1,5 @@
-//! Интерфейс поверх поля боя, в духе Zero City: сверху — номер хода, этап и очередь ходов
-//! кружками; снизу — круглые портреты героев со здоровьем, энергией и перезарядкой спецатаки,
+//! Интерфейс поверх поля боя, в духе Zero City: сверху — здоровье отрядов вокруг значка хода
+//! и очередь ходов портретами; снизу — круглые портреты ульт с заливкой энергии, очки умений,
 //! залп корабля и кнопки АВТО и скорости сбоку. Само поле с моделями — в `battlefield.rs`.
 
 use battle_core::{BROADSIDE_MAX, ENERGY_MAX, Element, Outcome, Side, UnitId};
@@ -12,6 +12,7 @@ const SKY: Color = Color::srgb(0.53, 0.75, 0.92);
 const PANEL: Color = Color::srgba(0.05, 0.10, 0.20, 0.80);
 const ENEMY: Color = Color::srgb(0.40, 0.14, 0.17);
 const HP_ALLY: Color = Color::srgb(0.38, 0.85, 0.45);
+const HP_ENEMY: Color = Color::srgb(0.92, 0.32, 0.30);
 const BAR_TRACK: Color = Color::srgba(0.0, 0.0, 0.0, 0.5);
 const ENERGY: Color = Color::srgb(0.35, 0.65, 1.0);
 const ACCENT: Color = Color::srgb(1.0, 0.85, 0.35);
@@ -64,9 +65,11 @@ fn shadow() -> TextShadow {
 #[derive(Component)]
 pub struct ScreenRoot;
 
-/// Здоровье героя под его портретом.
 #[derive(Component, Clone, Copy)]
-pub struct UltHp(pub UnitId);
+pub struct SquadFill(pub Side);
+
+#[derive(Component, Clone, Copy)]
+pub struct SquadText(pub Side);
 
 #[derive(Component)]
 pub struct TurnBadge;
@@ -180,7 +183,13 @@ fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts) {
                 ..default()
             })
             .with_children(|top| {
-                spawn_header(top, screen, fonts);
+                spawn_squads(top, fonts);
+                top.spawn((
+                    Text::new(format!("{} · {}", screen.stage_id(), screen.stage_name())),
+                    fonts.text(true, 13.0),
+                    TextColor(Color::WHITE),
+                    shadow(),
+                ));
                 spawn_turn_order(top, fonts);
             });
             spawn_bottom(root, &heroes, screen, fonts);
@@ -251,16 +260,54 @@ fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts) {
         });
 }
 
-/// Шапка: значок с номером хода и название этапа. Здоровье — у каждого бойца отдельно
-/// (над головой и под портретом героя), общей полоски отряда нет.
-fn spawn_header(top: &mut ChildSpawnerCommands, screen: &BattleScreen, fonts: &Fonts) {
+/// Здоровье отрядов по бокам от значка с номером хода, как в Zero City.
+fn spawn_squads(top: &mut ChildSpawnerCommands, fonts: &Fonts) {
     top.spawn(Node {
+        width: percent(100),
         flex_direction: FlexDirection::Row,
         align_items: AlignItems::Center,
-        column_gap: px(8),
+        column_gap: px(6),
         ..default()
     })
     .with_children(|row| {
+        let bar = |row: &mut ChildSpawnerCommands, side: Side, color: Color| {
+            row.spawn((
+                Node {
+                    flex_grow: 1.0,
+                    flex_basis: px(0),
+                    height: px(22),
+                    border_radius: BorderRadius::all(px(6)),
+                    overflow: Overflow::clip(),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BackgroundColor(BAR_TRACK),
+            ))
+            .with_children(|b| {
+                b.spawn((
+                    SquadFill(side),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        // Враги убывают к центру, экипаж — тоже к центру: полосы «смотрят» друг на друга.
+                        left: if side == Side::Ally { px(0) } else { auto() },
+                        right: if side == Side::Enemy { px(0) } else { auto() },
+                        width: percent(100),
+                        height: percent(100),
+                        ..default()
+                    },
+                    BackgroundColor(color),
+                ));
+                b.spawn((
+                    SquadText(side),
+                    Text::new(""),
+                    fonts.text(true, 13.0),
+                    TextColor(Color::WHITE),
+                    shadow(),
+                ));
+            });
+        };
+        bar(row, Side::Ally, HP_ALLY);
         row.spawn((
             Node {
                 width: px(46),
@@ -280,12 +327,7 @@ fn spawn_header(top: &mut ChildSpawnerCommands, screen: &BattleScreen, fonts: &F
             fonts.text(true, 17.0),
             TextColor(Color::WHITE),
         ));
-        row.spawn((
-            Text::new(format!("{} · {}", screen.stage_id(), screen.stage_name())),
-            fonts.text(true, 15.0),
-            TextColor(Color::WHITE),
-            shadow(),
-        ));
+        bar(row, Side::Enemy, HP_ENEMY);
     });
 }
 
@@ -502,26 +544,7 @@ fn spawn_ult_button(
         b.spawn((
             Node {
                 width: px(ULT_SIZE * 0.85),
-                height: px(8),
-                border_radius: BorderRadius::all(px(4)),
-                overflow: Overflow::clip(),
-                ..default()
-            },
-            BackgroundColor(BAR_TRACK),
-        ))
-        .with_child((
-            UltHp(id),
-            Node {
-                width: percent(100),
-                height: percent(100),
-                ..default()
-            },
-            BackgroundColor(HP_ALLY),
-        ));
-        b.spawn((
-            Node {
-                width: px(ULT_SIZE * 0.85),
-                height: px(6),
+                height: px(7),
                 border_radius: BorderRadius::all(px(3.5)),
                 overflow: Overflow::clip(),
                 ..default()
@@ -568,21 +591,40 @@ fn button_label(screen: &BattleScreen, kind: ButtonKind) -> (String, bool) {
     }
 }
 
-/// Номер хода и залп.
+/// Здоровье отрядов, номер хода, очки умений и залп.
 #[allow(clippy::type_complexity)] // обычные для Bevy фильтры запросов
 pub fn refresh_status(
     screen: Res<BattleScreen>,
+    mut squad_fill: Query<(&SquadFill, &mut Node), Without<BroadsideFill>>,
     mut broadside: Query<&mut Node, With<BroadsideFill>>,
     mut texts: ParamSet<(
+        Query<(&SquadText, &mut Text)>,
         Query<&mut Text, With<TurnBadge>>,
         Query<&mut Text, With<BroadsideLabel>>,
     )>,
 ) {
     let battle = &screen.battle;
-    for mut text in &mut texts.p0() {
-        text.0 = battle.turn().to_string();
+    let total = |side: Side| {
+        battle
+            .units()
+            .iter()
+            .filter(|u| u.side == side)
+            .fold((0u32, 0u32), |(hp, max), u| {
+                (hp + screen.shown_hp[u.id.0], max + u.def.stats.max_hp)
+            })
+    };
+    for (SquadFill(side), mut node) in &mut squad_fill {
+        let (hp, max) = total(*side);
+        node.width = percent(100.0 * hp as f32 / max.max(1) as f32);
+    }
+    for (SquadText(side), mut text) in &mut texts.p0() {
+        let (hp, max) = total(*side);
+        text.0 = format!("{hp}/{max}");
     }
     for mut text in &mut texts.p1() {
+        text.0 = battle.turn().to_string();
+    }
+    for mut text in &mut texts.p2() {
         text.0 = format!("Залп {}%", battle.broadside() * 100 / BROADSIDE_MAX);
     }
     for mut node in &mut broadside {
@@ -590,15 +632,14 @@ pub fn refresh_status(
     }
 }
 
-/// Портреты ульт: здоровье и энергия героя, пульс и золотая рамка готовой ульты, блёклый — выбыл.
+/// Портреты ульт: заливка энергии, пульс и золотая рамка готовой ульты, блёклый — выбыл.
 #[allow(clippy::type_complexity)]
 pub fn refresh_ult_buttons(
     time: Res<Time>,
     screen: Res<BattleScreen>,
     mut buttons: Query<(&UltButton, &Children, &mut UiTransform)>,
     mut frames: Query<(&mut BorderColor, &mut BackgroundColor), Without<UltFill>>,
-    mut fills: Query<(&UltFill, &mut Node, &mut BackgroundColor), Without<UltHp>>,
-    mut hp: Query<(&UltHp, &mut Node), Without<UltFill>>,
+    mut fills: Query<(&UltFill, &mut Node, &mut BackgroundColor)>,
     mut labels: Query<(&UltLabel, &mut Text, &mut TextColor)>,
 ) {
     let battle = &screen.battle;
@@ -622,14 +663,10 @@ pub fn refresh_ult_buttons(
         let unit = battle.unit(*id);
         node.width = percent(100.0 * unit.energy as f32 / ENERGY_MAX as f32);
         bg.0 = if unit.ultimate_ready() {
-            ACCENT
+            ACCENT.with_alpha(0.55)
         } else {
             ENERGY
         };
-    }
-    for (UltHp(id), mut node) in &mut hp {
-        let max = battle.unit(*id).def.stats.max_hp.max(1);
-        node.width = percent(100.0 * screen.shown_hp[id.0] as f32 / max as f32);
     }
     for (UltLabel(id), mut text, mut color) in &mut labels {
         let unit = battle.unit(*id);

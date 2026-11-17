@@ -31,7 +31,7 @@ const HP_ALLY: Color = Color::srgb(0.38, 0.88, 0.45);
 const HP_ENEMY: Color = Color::srgb(0.95, 0.30, 0.28);
 const ENERGY: Color = Color::srgb(0.35, 0.65, 1.0);
 const GOLD: Color = Color::srgb(1.0, 0.85, 0.35);
-const BAR_WIDTH: f32 = 86.0;
+const BAR_WIDTH: f32 = 72.0;
 /// Слои по глубине: фон, затемнение, модели (чем ниже на экране, тем ближе), цифры.
 const Z_DECK: f32 = 1.0;
 const Z_DIM: f32 = 2.0;
@@ -389,13 +389,13 @@ fn spawn_model(
     let mut overhead_children = Vec::from(bar(
         commands,
         top,
-        10.0,
+        7.0,
         if ally { HP_ALLY } else { HP_ENEMY },
         Some(hp_fill),
     ));
     if unit.def.ultimate.is_some() {
         let energy_fill = commands.spawn(EnergyBar(id)).id();
-        overhead_children.extend(bar(commands, top - 12.0, 5.0, ENERGY, Some(energy_fill)));
+        overhead_children.extend(bar(commands, top - 9.0, 4.0, ENERGY, Some(energy_fill)));
     }
     let overhead = commands
         .spawn((
