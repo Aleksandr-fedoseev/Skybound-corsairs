@@ -25,9 +25,9 @@ files: CONCEPT.md
 
 ## Phase 2 — Style
 files: ART_BIBLE.md
-- [ ] ≥3 directions with real references shown on the board — check: manual
-- [ ] user locked the style — check: user
-- [ ] art bible: hex palette, lighting, form, ≥3 signature techniques, "forbidden" — check: manual
+- [ ] ≥3 directions with real references shown on the board — check: manual SKIP: отложено: сначала автобой, референсы готовит пользователь
+- [ ] user locked the style — check: user SKIP: отложено: сначала автобой, референсы готовит пользователь
+- [ ] art bible: hex palette, lighting, form, ≥3 signature techniques, "forbidden" — check: manual SKIP: отложено: сначала автобой, референсы готовит пользователь
 
 ## Phase 3 — Platform and engine
 files: TECH.md
@@ -45,11 +45,11 @@ files: ENV.md
 
 ## Phase 5 — Assets and look-dev
 files: ASSETS.md
-- [ ] asset and pipeline research done — check: test -s .studioigor/research/assets.md
-- [ ] strategy by category agreed — check: user
-- [ ] look-dev scene built per the art bible and captured — check: ls .studioigor/captures/lookdev/*.png
-- [ ] user approved the look-dev: "this is how the game will look" — check: user
-- [ ] everything third-party is in the license registry — check: manual
+- [ ] asset and pipeline research done — check: test -s .studioigor/research/assets.md SKIP: отложено: прототип боя на заглушках, стиль ещё не выбран
+- [ ] strategy by category agreed — check: user SKIP: отложено: прототип боя на заглушках, стиль ещё не выбран
+- [ ] look-dev scene built per the art bible and captured — check: ls .studioigor/captures/lookdev/*.png SKIP: отложено: прототип боя на заглушках, стиль ещё не выбран
+- [ ] user approved the look-dev: "this is how the game will look" — check: user SKIP: отложено: прототип боя на заглушках, стиль ещё не выбран
+- [ ] everything third-party is in the license registry — check: manual SKIP: отложено: прототип боя на заглушках, стиль ещё не выбран
 
 ## Phase 6 — Mechanics
 files:
