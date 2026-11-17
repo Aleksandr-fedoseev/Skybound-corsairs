@@ -1,0 +1,15 @@
+{
+  "step_pause": 0.35,
+  "event_gap": 0.14,
+  "ability_banner": 0.45,
+  "defeat_pause": 0.3,
+  "lunge_px": 28.0,
+  "lunge_time": 0.28,
+  "shake_px": 7.0,
+  "shake_time": 0.24,
+  "flash_time": 0.18,
+  "float_px": 48.0,
+  "float_time": 0.9,
+  "crit_scale": 1.4,
+  "banner_time": 0.9
+}

@@ -38,5 +38,7 @@ EDITOR: none — у Bevy нет редактора, код в репозитор
 - MCP-сервер не в PATH ассистента — регистрировать по абсолютному пути ~/.cargo/bin/bevy_brp_mcp.
 - Не убивать cargo посреди сборки: битые .rlib («memory map must have a non-zero length»), лечится пересборкой.
 - Фича dev включена по умолчанию; релиз — только с --no-default-features (BRP открывает порт 15702).
+- BRP-клик: сначала brp_extras/move_mouse с position, потом click_mouse (у click_mouse нет координат). Позиции карточек — world.query ComputedNode + UiGlobalTransform.
+- Под niri невидимое окно почти не получает кадров: shutdown и таймеры игры идут медленно.
 - Нет Android SDK/NDK и target aarch64-linux-android — до сборки под телефон.
 - Стандартный шрифт Bevy без кириллицы — только Noto Sans из crates/game/assets/fonts.

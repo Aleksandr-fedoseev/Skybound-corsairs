@@ -10,10 +10,10 @@
 ## Strategy by category
 | category | source (pack / Blender / procedural / generation / user) | why | status |
 |---|---|---|---|
-| <category> | <source> | <why> | plan |
+| бой (прототип) | заглушки: фигуры и текст в коде | стиль ещё не выбран (решение #10) | plan |
 
 ## Conventions
-<units, up axis, pivot, naming, formats, textures, poly count, collisions, import>
+Отложено до фазы 5. Шрифты: Noto Sans (OFL) в crates/game/assets/fonts.
 
 ## Requests to the user
 - none

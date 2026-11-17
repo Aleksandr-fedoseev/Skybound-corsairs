@@ -404,6 +404,13 @@ impl Battle {
             }
         }
 
+        events.extend(self.auto_turn());
+        events
+    }
+
+    /// Ход текущего бойца по решению ИИ, без ульт: их нажимает игрок.
+    pub fn auto_turn(&mut self) -> Vec<Event> {
+        let mut events = Vec::new();
         let Some(actor) = self.current else {
             return events;
         };

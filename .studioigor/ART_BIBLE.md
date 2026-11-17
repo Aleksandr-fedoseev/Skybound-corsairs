@@ -2,34 +2,9 @@
 
 <!-- Phase 2 (references/style.md). Brief. Changes only by the user's decision. -->
 
-## Direction
-<one opinionated phrase: "rain-soaked neon noir", not "stylish and colorful">
+Отложено (решение #10): сначала прототип автобоя на заглушках. Референсы готовит пользователь;
+когда принесёт — возвращаемся в фазу 2 (`studio.py tick --phase 2 "…" --reopen`) и заполняем по шаблону
+скилла `scripts/templates/project/studioigor/ART_BIBLE.md`.
 
-## What we steal from
-<another medium (film, album cover, architecture, illustration) + what exactly we take>
-
-## Palette
-<4–6 hex with roles: dominant, secondary, reserved accent (what it means); forbidden colors>
-
-## Lighting
-<source, color, shadow hardness, fog/atmosphere, post-processing>
-
-## Form and materials
-<what silhouettes are built from, what is forbidden; surfaces and textures>
-
-## Camera and composition
-<angle, FOV, camera movement>
-
-## UI
-<interface style, fonts, icons>
-
-## Signature techniques
-- <technique 1 — the dominant one>
-- <technique 2>
-- <technique 3>
-
-## Forbidden
-- <what would kill the style>
-
-## References
-<the refs/... set, the boards/... board, and what we take from the key images>
+Из концепта: 2D, аниме-стиль, вид сбоку в бою; ИИ-генерация — заглушки и фоны, корабль и отсеки —
+Blender → 2D-спрайты, финальные герои — фрилансер, послойно.
