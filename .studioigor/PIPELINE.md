@@ -17,11 +17,11 @@ files:
 ## Phase 1 — Idea
 files: CONCEPT.md
 - [x] interview done, concept slots filled with source tags — check: manual
-- [ ] 3–5 falsifiable pillars and anti-pillars — check: manual
+- [x] 3–5 falsifiable pillars and anti-pillars — check: manual
 - [ ] story skeleton in STORY.md (or decided there is no story) — check: manual
 - [x] draft mechanics in DESIGN.md and scale in SCOPE.md — check: manual
 - [x] game designer proposed signature hooks, the user chose — check: user
-- [ ] user approved the pitch card — check: user
+- [x] user approved the pitch card — check: user
 
 ## Phase 2 — Style
 files: ART_BIBLE.md

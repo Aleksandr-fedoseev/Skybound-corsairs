@@ -46,6 +46,7 @@ Do not propose rejected ideas again. Do not implement unapproved ones. -->
 ## Economy
 <!-- resource: sources → sinks, rate (a guess is fine) -->
 - Считается только на сервере. Ресурсы, валюта, крутки — этап 2, цифр пока нет.
+- Донат: боевой пропуск, VIP (месячная карта), крутки героев за премиум-валюту, стартовый набор, реклама за награду, скины.
 
 ## Difficulty
 - philosophy: сейчас стартовая команда 1-го уровня берёт все 4 этапа в 100% боёв — слишком легко.
@@ -60,3 +61,4 @@ acceptance criteria · "feel" (targets) · research: research/mech-M01.md -->
 | date | what | why |
 |---|---|---|
 | 2026-11-18 | таблица механик перенесена из концепта и кода | подключение studioigor |
+| 2026-11-18 | столпы утверждены: «Острее, без сдвигов» | выбор пользователя |
