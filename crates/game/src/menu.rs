@@ -15,6 +15,7 @@ use crate::audio::Sfx;
 use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
 use crate::contracts::{BoardOpen, ContractData, Contracts, Deed};
 use crate::convoys::Convoys;
+use crate::events::{EventData, StormEvent};
 use crate::ship::{Compartment, OpenCompartment, Ship, ShipData};
 use crate::story::{StoryQueue, VoyageRequest};
 use crate::view::{Fonts, ResultNote};
@@ -95,6 +96,9 @@ pub struct Profile {
     /// Детали старого мира — создание и усиление снаряжения.
     #[serde(default)]
     pub details: u32,
+    /// Буревые ядра — из ивентов; для отсеков 8–10 и легендарного снаряжения.
+    #[serde(default)]
+    pub storm_cores: u32,
     /// Эфир, который накопили Ветроловы и который ещё не собран.
     pub ether_pending: f32,
 }
@@ -111,6 +115,7 @@ impl Profile {
             charts: 0,
             figureheads: 0,
             details: 0,
+            storm_cores: 0,
             ether_pending: start.ether_waiting,
         }
     }
@@ -698,7 +703,12 @@ fn side_buttons(root: &mut ChildSpawnerCommands, fonts: &Fonts, contracts_ready:
                         ));
                     }
                 });
-                if title == "Контракты" {
+                if title == "Буря" {
+                    pressable(&mut button);
+                    button.observe(|_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
+                        next.set(Screen::Activities);
+                    });
+                } else if title == "Контракты" {
                     pressable(&mut button);
                     button.observe(
                         |_: On<PointerClick>,
@@ -1106,8 +1116,10 @@ fn count_victory(
     mut notes: Query<&mut Text, With<ResultNote>>,
     mut deeds: MessageWriter<Deed>,
     abyss: (Res<AbyssData>, ResMut<Abyss>),
+    events: (Res<EventData>, ResMut<StormEvent>),
 ) {
     let (abyss_data, mut abyss) = abyss;
+    let (event_data, mut storm) = events;
     let Some(outcome) = screen.shown_outcome else {
         return;
     };
@@ -1117,6 +1129,20 @@ fn count_victory(
     }
     *counted = Some(battle);
     let note = match (outcome, &screen.custom) {
+        // Буря: считается урон в любом исходе.
+        (_, Some(fight)) if fight.kind == FightKind::Storm => {
+            let damage: u32 = screen
+                .battle
+                .units()
+                .iter()
+                .filter(|u| u.side == battle_core::Side::Enemy)
+                .map(|u| u.def.stats.max_hp - u.hp)
+                .sum();
+            if outcome == Outcome::Victory {
+                deeds.write(Deed("win"));
+            }
+            storm.record(damage, &event_data.storm, &mut spoils.profile)
+        }
         (Outcome::Defeat, _) => "Усильте отряд или смените тактику".to_string(),
         (Outcome::Victory, Some(fight)) if matches!(fight.kind, FightKind::Abyss(_)) => {
             let FightKind::Abyss(floor) = fight.kind else {
@@ -1143,15 +1169,25 @@ fn count_victory(
             "Конвоев в очереди нет — добычи нет. Новое судно скоро появится".to_string()
         }
         (Outcome::Victory, Some(fight)) => {
-            spoils.give(fight.silver, fight.planks, fight.journals);
+            // Попутный ветер по выходным: добыча с конвоя больше.
+            let k = if fight.kind == FightKind::Convoy {
+                event_data.convoy_multiplier()
+            } else {
+                1
+            };
+            let (silver, planks) = (fight.silver * k, fight.planks * k);
+            spoils.give(silver, planks, fight.journals);
             deeds.write(Deed("win"));
             if fight.kind == FightKind::Convoy {
                 convoys.ready -= 1;
                 deeds.write(Deed("convoy"));
             }
-            let mut parts = vec![format!("+{} серебра", fight.silver)];
-            if fight.planks > 0 {
-                parts.push(format!("+{} досок", fight.planks));
+            let mut parts = vec![format!("+{silver} серебра")];
+            if planks > 0 {
+                parts.push(format!("+{planks} досок"));
+            }
+            if k > 1 {
+                parts.push(format!("попутный ветер ×{k}"));
             }
             if fight.journals > 0 {
                 parts.push(format!("+{} журналов", fight.journals));

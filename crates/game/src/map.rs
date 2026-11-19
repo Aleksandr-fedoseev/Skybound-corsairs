@@ -484,6 +484,7 @@ fn refresh_card(
     selected: Res<Selected>,
     pick: Res<ConvoyPick>,
     convoy: (Res<ConvoyData>, Res<Convoys>),
+    events: Res<crate::events::EventData>,
     screen: Res<BattleScreen>,
     progress: Res<Progress>,
     menu: Res<MenuData>,
@@ -524,7 +525,17 @@ fn refresh_card(
                     }
                 }
                 CardText::Status => {
-                    format!("Добыча: +{} досок · +{} серебра", tier.planks, tier.silver)
+                    let k = events.convoy_multiplier();
+                    let wind = if k > 1 {
+                        format!(" · попутный ветер ×{k}")
+                    } else {
+                        String::new()
+                    };
+                    format!(
+                        "Добыча: +{} досок · +{} серебра{wind}",
+                        tier.planks * k,
+                        tier.silver * k
+                    )
                 }
             };
             if text.0 != value {

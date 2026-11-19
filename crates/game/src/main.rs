@@ -12,6 +12,7 @@ mod contracts;
 mod convoys;
 mod crew;
 mod dev;
+mod events;
 mod expeditions;
 mod fx;
 mod gear;
@@ -92,6 +93,7 @@ fn main() {
         expeditions::plugin,
         cabins::plugin,
         gear::plugin,
+        events::plugin,
     ))
     .add_message::<Shown>()
     .insert_resource(crew)

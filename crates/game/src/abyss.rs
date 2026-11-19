@@ -174,6 +174,8 @@ struct View<'w> {
     exps: Res<'w, Expeditions>,
     ship: Res<'w, Ship>,
     ship_data: Res<'w, ShipData>,
+    event_data: Res<'w, crate::events::EventData>,
+    storm: Res<'w, crate::events::StormEvent>,
 }
 
 fn spawn_activities(mut commands: Commands, view: View) {
@@ -261,6 +263,7 @@ fn build(commands: &mut Commands, view: &View) {
                 ..default()
             })
             .with_children(|col| {
+                crate::events::storm_card(col, fonts, &view.event_data, &view.storm);
                 abyss_card(col, fonts, data, screen, floor, abyss.best);
                 crate::expeditions::section(
                     col,
@@ -271,20 +274,13 @@ fn build(commands: &mut Commands, view: &View) {
                     screen,
                     now(),
                 );
-                for (title, sub, message) in [
-                    (
-                        "Руины старого мира",
-                        "подземелье на 10 этажей с выбором пути",
-                        "Руины откроются после запуска игры",
-                    ),
-                    (
-                        "Арена капитанов",
-                        "бои против отрядов других игроков",
-                        "Арена откроется после запуска игры",
-                    ),
-                ] {
-                    soon_card(col, fonts, title, sub, message);
-                }
+                soon_card(
+                    col,
+                    fonts,
+                    "Скоро: Руины старого мира и Арена капитанов",
+                    "подземелье с выбором пути и бои против отрядов других игроков",
+                    "Руины и Арена откроются после запуска игры",
+                );
             });
             bottom_nav(root, assets, fonts, Screen::Activities);
             spawn_toast(root, fonts);
@@ -321,7 +317,7 @@ fn abyss_card(
         card.spawn(text(fonts, "Бездна облаков", true, 22.0, PARCHMENT));
         card.spawn(text(
             fonts,
-            "Бесконечная башня вниз: каждый этаж сложнее, каждый 10-й — босс. Награда за этаж — один раз.",
+            "Каждый этаж сложнее, каждый 10-й — босс. Награда за этаж — один раз.",
             false,
             13.0,
             MUTED,

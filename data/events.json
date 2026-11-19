@@ -1,0 +1,15 @@
+{
+  "cycle": ["storm"],
+  "storm": {
+    "name": "Буря",
+    "about": "Из глубин поднялась буревая тварь. Бейте её всем отрядом: засчитывается лучший бой недели.",
+    "enemies": [["storm_ray", 20], ["storm_leviathan", 30], ["storm_ray", 20]],
+    "milestones": [
+      { "damage": 1500, "reward": { "charts": 1, "doubloons": 20 } },
+      { "damage": 4000, "reward": { "storm_cores": 1, "charts": 1 } },
+      { "damage": 7000, "reward": { "storm_cores": 2, "doubloons": 50 } },
+      { "damage": 10000, "reward": { "storm_cores": 3, "charts": 2 } }
+    ]
+  },
+  "tailwind": { "days": [5, 6], "convoy_multiplier": 2 }
+}

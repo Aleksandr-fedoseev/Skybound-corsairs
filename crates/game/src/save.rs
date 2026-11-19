@@ -15,6 +15,7 @@ use crate::cabins::Cabins;
 use crate::contracts::Contracts;
 use crate::convoys::{ConvoyData, Convoys};
 use crate::crew::Roster;
+use crate::events::StormEvent;
 use crate::expeditions::Expeditions;
 use crate::gear::Gear;
 use crate::menu::{Profile, Progress, Toast};
@@ -47,6 +48,8 @@ pub struct SaveData {
     pub cabins: Cabins,
     #[serde(default)]
     pub gear: Gear,
+    #[serde(default)]
+    pub storm: StormEvent,
 }
 
 pub fn now() -> u64 {
@@ -158,7 +161,8 @@ pub fn apply(app: &mut App, mut save: SaveData) {
         .insert_resource(save.abyss)
         .insert_resource(save.expeditions)
         .insert_resource(save.cabins)
-        .insert_resource(save.gear);
+        .insert_resource(save.gear)
+        .insert_resource(save.storm);
     if !report.is_empty() {
         app.world_mut().resource_mut::<Toast>().show_long(&report);
     }
@@ -182,6 +186,7 @@ struct State<'w> {
     expeditions: Res<'w, Expeditions>,
     cabins: Res<'w, Cabins>,
     gear: Res<'w, Gear>,
+    storm: Res<'w, StormEvent>,
 }
 
 impl State<'_> {
@@ -200,6 +205,7 @@ impl State<'_> {
             expeditions: self.expeditions.clone(),
             cabins: self.cabins.clone(),
             gear: self.gear.clone(),
+            storm: self.storm.clone(),
         }
     }
 }
@@ -245,6 +251,7 @@ mod tests {
             expeditions: Expeditions::default(),
             cabins: Cabins::default(),
             gear: Gear::default(),
+            storm: StormEvent::default(),
         }
     }
 
