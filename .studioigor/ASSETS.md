@@ -21,3 +21,4 @@
 ## License registry
 | asset / pack | source (URL) | license | author | path | attribution |
 |---|---|---|---|---|---|
+| спрайт-листы Каи и Мэй | Meshy (image-to-3D, авториг, библиотека анимаций) по референсам nano-banana | по условиям подписки Meshy пользователя — проверить перед релизом | команда | crates/game/assets/units/ | — |

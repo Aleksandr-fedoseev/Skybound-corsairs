@@ -1,14 +1,15 @@
 //! Поле боя в мире: палубы, модели бойцов на слотах и их анимации.
 //!
-//! Модель пока — силуэт-заглушка из простых фигур (тень, ноги, корпус, голова, оружие),
-//! собранный на «риге»: анимации двигают риг, поэтому заглушку потом можно заменить спрайтом
-//! или скелетной моделью, не трогая логику. Раскладка слотов — в `data/battlefield.json`
+//! Модель — анимированный спрайт-лист (`data/animated.json`: 3D-модель Meshy, отрендеренная в 2D,
+//! `tools/meshy/`) или, если листа нет, силуэт-заглушка из простых фигур. И то и другое висит на
+//! «риге»: рывки, отбросы и падение двигают риг, а кадры листа показывают движение тела. Раскладка слотов — в `data/battlefield.json`
 //! (сейчас «диагональ» и «боковая полоса», в тестовой сцене переключаются клавишей V).
 
 use std::collections::HashMap;
 use std::f32::consts::{FRAC_PI_2, PI};
 
 use battle_core::{ENERGY_MAX, Side, UnitId};
+use bevy::math::Affine2;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use serde::Deserialize;
@@ -73,12 +74,65 @@ pub struct FieldConfig {
     /// Во сколько раз крупнее модель (боссы).
     pub unit_scale: HashMap<String, f32>,
     pub layouts: HashMap<String, Layout>,
+    /// Спрайт-листы бойцов из `data/animated.json`; у кого нет — заглушка.
+    #[serde(skip)]
+    pub animated: HashMap<String, AnimatedArt>,
+}
+
+/// Спрайт-лист бойца: строка — клип, столбец — кадр; боец смотрит вправо.
+#[derive(Clone, Debug, Deserialize)]
+pub struct AnimatedArt {
+    /// Путь внутри `assets/`.
+    pub sheet: String,
+    /// Размер кадра в пикселях листа — для пропорций.
+    pub frame: [f32; 2],
+    pub columns: u32,
+    pub rows: u32,
+    /// Высота кадра в долях высоты модели.
+    pub height: f32,
+    /// Где в кадре ноги и макушка (доли высоты кадра снизу).
+    pub foot: f32,
+    pub top: f32,
+    pub clips: HashMap<String, SheetClip>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct SheetClip {
+    pub row: u32,
+    pub frames: u32,
+    /// Только у зацикленных (ожидание, победа); остальные растягиваются на время клипа рига.
+    #[serde(default)]
+    pub fps: Option<f32>,
+}
+
+impl AnimatedArt {
+    /// Клип листа для клипа рига: ульта и умение — `skill`, если он есть.
+    fn clip(&self, clip: Clip) -> Option<&SheetClip> {
+        let name = match clip {
+            Clip::Idle => "idle",
+            Clip::Attack { big: true, .. } if self.clips.contains_key("skill") => "skill",
+            Clip::Attack { .. } => "attack",
+            Clip::Hit { .. } => "hit",
+            Clip::Death => "death",
+            Clip::Victory => "victory",
+        };
+        self.clips.get(name).or_else(|| self.clips.get("idle"))
+    }
+
+    /// Сдвиг UV на кадр `frame` строки `row`.
+    fn uv(&self, row: u32, frame: u32) -> Affine2 {
+        let size = Vec2::new(1.0 / self.columns as f32, 1.0 / self.rows as f32);
+        Affine2::from_scale_angle_translation(size, 0.0, size * Vec2::new(frame as f32, row as f32))
+    }
 }
 
 impl FieldConfig {
     pub fn bundled() -> Self {
-        serde_json::from_str(include_str!("../../../data/battlefield.json"))
-            .expect("data/battlefield.json корректен")
+        let mut config: Self = serde_json::from_str(include_str!("../../../data/battlefield.json"))
+            .expect("data/battlefield.json корректен");
+        config.animated = serde_json::from_str(include_str!("../../../data/animated.json"))
+            .expect("data/animated.json корректен");
+        config
     }
 
     /// Имена раскладок в постоянном порядке, чтобы V переключала их по кругу.
@@ -113,7 +167,15 @@ pub struct Rig;
 /// Материалы частей модели: для вспышки при ударе и угасания при смерти.
 #[derive(Component)]
 pub struct ModelParts {
-    parts: Vec<(Handle<ColorMaterial>, Color)>,
+    /// Материал, исходный цвет и есть ли текстура (её не осветлить смешиванием с белым).
+    parts: Vec<(Handle<ColorMaterial>, Color, bool)>,
+}
+
+/// Модель со спрайт-листом: материал, у которого меняется кадр.
+#[derive(Component)]
+pub struct Flipbook {
+    material: Handle<ColorMaterial>,
+    art: AnimatedArt,
 }
 
 #[derive(Component)]
@@ -257,6 +319,7 @@ pub fn spawn_field(
             .unwrap_or(1.0);
         let model = spawn_model(
             commands,
+            assets,
             meshes,
             materials,
             fonts,
@@ -272,6 +335,7 @@ pub fn spawn_field(
 #[allow(clippy::too_many_arguments)]
 fn spawn_model(
     commands: &mut Commands,
+    assets: &AssetServer,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<ColorMaterial>,
     fonts: &Fonts,
@@ -294,7 +358,7 @@ fn spawn_model(
     let mut parts = Vec::new();
     let mut mat = |materials: &mut Assets<ColorMaterial>, color: Color| {
         let handle = materials.add(color);
-        parts.push((handle.clone(), color));
+        parts.push((handle.clone(), color, false));
         MeshMaterial2d(handle)
     };
 
@@ -359,17 +423,50 @@ fn spawn_model(
             Transform::from_xyz(0.0, h * 0.5, 0.04).with_scale(Vec3::new(facing, 1.0, 1.0)),
         ))
         .id();
+    let art = screen.field.animated.get(&unit.def.id).cloned();
+    let mut flipbook = None;
+    let rig_children = if let Some(art) = &art {
+        // Спрайт-лист вместо заглушки: ноги кадра — на слоте.
+        for part in [legs, weapon, body, head, letter] {
+            commands.entity(part).despawn();
+        }
+        parts.clear();
+        let size = Vec2::new(art.frame[0] / art.frame[1], 1.0) * art.height * h;
+        let material = materials.add(ColorMaterial {
+            texture: Some(assets.load(art.sheet.clone())),
+            uv_transform: art.uv(0, 0),
+            ..default()
+        });
+        parts.push((material.clone(), Color::WHITE, true));
+        flipbook = Some(Flipbook {
+            material: material.clone(),
+            art: art.clone(),
+        });
+        let sprite = commands
+            .spawn((
+                Mesh2d(meshes.add(Rectangle::from_size(size))),
+                MeshMaterial2d(material),
+                Transform::from_xyz(0.0, size.y * (0.5 - art.foot), 0.0),
+            ))
+            .id();
+        vec![sprite]
+    } else {
+        vec![legs, weapon, body, head, letter]
+    };
     let rig = commands
         .spawn((
             Rig,
             Transform::from_xyz(0.0, 0.0, 0.02),
             Visibility::default(),
         ))
-        .add_children(&[legs, weapon, body, head, letter])
+        .add_children(&rig_children)
         .id();
 
     // Над головой: имя, здоровье, у героев — энергия. Не качается вместе с ригом.
-    let top = h * 1.0 + 12.0;
+    let top = art
+        .as_ref()
+        .map_or(h, |art| (art.top - art.foot) * art.height * h)
+        + 12.0;
     let bar =
         |commands: &mut Commands, y: f32, height: f32, color: Color, marker: Option<Entity>| {
             let back = commands
@@ -415,26 +512,28 @@ fn spawn_model(
         .add_children(&overhead_children)
         .id();
 
-    commands
-        .spawn((
-            UnitModel {
-                id,
-                home,
-                height: h,
-                facing,
-            },
-            ModelAnim {
-                clip: Clip::Idle,
-                timer: Timer::from_seconds(0.01, TimerMode::Once),
-                flash: 0.0,
-            },
-            ModelParts { parts },
-            // Ниже на экране — ближе к зрителю, значит выше по слою.
-            Transform::from_xyz(home.x, home.y, Z_MODELS - home.y / 100.0),
-            Visibility::default(),
-        ))
-        .add_children(&[shadow, ring, rig, overhead])
-        .id()
+    let mut model = commands.spawn((
+        UnitModel {
+            id,
+            home,
+            height: h,
+            facing,
+        },
+        ModelAnim {
+            clip: Clip::Idle,
+            timer: Timer::from_seconds(0.01, TimerMode::Once),
+            flash: 0.0,
+        },
+        ModelParts { parts },
+        // Ниже на экране — ближе к зрителю, значит выше по слою.
+        Transform::from_xyz(home.x, home.y, Z_MODELS - home.y / 100.0),
+        Visibility::default(),
+    ));
+    model.add_children(&[shadow, ring, rig, overhead]);
+    if let Some(flipbook) = flipbook {
+        model.insert(flipbook);
+    }
+    model.id()
 }
 
 fn ease_out(t: f32) -> f32 {
@@ -445,7 +544,13 @@ fn ease_out(t: f32) -> f32 {
 pub fn animate_models(
     time: Res<Time>,
     screen: Res<BattleScreen>,
-    mut models: Query<(&UnitModel, &mut ModelAnim, &ModelParts, &Children)>,
+    mut models: Query<(
+        &UnitModel,
+        &mut ModelAnim,
+        &ModelParts,
+        &Children,
+        Option<&Flipbook>,
+    )>,
     mut rigs: Query<&mut Transform, With<Rig>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
@@ -456,7 +561,7 @@ pub fn animate_models(
         time.delta().mul_f32(screen.speed as f32)
     };
     let now = time.elapsed_secs();
-    for (model, mut anim, parts, children) in &mut models {
+    for (model, mut anim, parts, children, flipbook) in &mut models {
         anim.timer.tick(dt);
         let t = anim.timer.fraction();
         let h = model.height;
@@ -510,7 +615,10 @@ pub fn animate_models(
             }
             Clip::Death => {
                 let k = ease_out(t);
-                angle = model.facing * FRAC_PI_2 * k;
+                // У спрайт-листа падение уже нарисовано в кадрах — риг не кладём.
+                if flipbook.is_none() {
+                    angle = model.facing * FRAC_PI_2 * k;
+                }
                 offset = Vec2::new(-model.facing * h * 0.25 * k, 0.0);
                 fade = 1.0 - 0.7 * k;
                 scale = Vec2::ONE;
@@ -518,6 +626,25 @@ pub fn animate_models(
             Clip::Victory => {
                 offset.y = (now * 6.0 + phase).sin().abs() * h * 0.08;
             }
+        }
+        // Кадр спрайт-листа: зацикленные клипы — по часам, остальные — на время клипа рига
+        // (смерть замирает на последнем кадре).
+        if let Some(book) = flipbook
+            && let Some(sheet) = book.art.clip(anim.clip)
+        {
+            let n = sheet.frames.max(1);
+            let frame = match sheet.fps {
+                Some(fps) => (now * fps + phase * 7.0) as u32 % n,
+                None => ((t * n as f32) as u32).min(n - 1),
+            };
+            if let Some(mut material) = materials.get_mut(&book.material) {
+                material.uv_transform = book.art.uv(sheet.row, frame);
+            }
+            // Тело уже «дышит» и шатается в кадрах: риг не сжимаем в покое и почти не наклоняем.
+            if anim.clip == Clip::Idle {
+                scale = Vec2::ONE;
+            }
+            angle *= 0.3;
         }
         if anim.timer.is_finished() && matches!(anim.clip, Clip::Attack { .. } | Clip::Hit { .. }) {
             anim.clip = Clip::Idle;
@@ -532,11 +659,17 @@ pub fn animate_models(
                 rig.scale = Vec3::new(scale.x * model.facing, scale.y, 1.0);
             }
         }
-        for (handle, base) in &parts.parts {
+        for (handle, base, textured) in &parts.parts {
             if let Some(mut material) = materials.get_mut(handle) {
-                let lit = base
-                    .mix(&GOLD, 0.6 * glow)
-                    .mix(&Color::WHITE, 0.7 * anim.flash);
+                let tinted = base.mix(&GOLD, 0.6 * glow);
+                let lit = if *textured {
+                    // Цвет умножается на текстуру: вспышку даёт множитель больше единицы.
+                    let k = 1.0 + 2.5 * anim.flash;
+                    let c = tinted.to_linear();
+                    Color::linear_rgb(c.red * k, c.green * k, c.blue * k)
+                } else {
+                    tinted.mix(&Color::WHITE, 0.7 * anim.flash)
+                };
                 material.color = lit.with_alpha(base.alpha() * fade);
             }
         }

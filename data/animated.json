@@ -1,0 +1,4 @@
+{
+  "kaya": {"sheet": "units/kaya.png", "frame": [223, 256], "columns": 16, "rows": 5, "height": 1.586, "foot": 0.0451, "top": 0.8646, "clips": {"idle": {"row": 0, "frames": 16, "fps": 6}, "attack": {"row": 1, "frames": 16}, "hit": {"row": 2, "frames": 16}, "death": {"row": 3, "frames": 16}, "victory": {"row": 4, "frames": 16, "fps": 6}}},
+  "mei": {"sheet": "units/mei.png", "frame": [215, 256], "columns": 16, "rows": 6, "height": 1.543, "foot": 0.0563, "top": 0.8662, "clips": {"idle": {"row": 0, "frames": 16, "fps": 6}, "attack": {"row": 1, "frames": 16}, "skill": {"row": 2, "frames": 16}, "hit": {"row": 3, "frames": 16}, "death": {"row": 4, "frames": 16}, "victory": {"row": 5, "frames": 16, "fps": 6}}}
+}
