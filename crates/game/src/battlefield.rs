@@ -120,6 +120,9 @@ pub struct SheetClip {
     /// Только у зацикленных (ожидание, победа); остальные растягиваются на время клипа рига.
     #[serde(default)]
     pub fps: Option<f32>,
+    /// Играть туда и обратно: отрезок длинного клипа зацикливается без шва.
+    #[serde(default)]
+    pub pingpong: bool,
 }
 
 impl AnimatedArt {
@@ -659,6 +662,10 @@ pub fn animate_models(
         {
             let n = sheet.frames.max(1);
             let frame = match sheet.fps {
+                Some(fps) if sheet.pingpong && n > 1 => {
+                    let k = (now * fps + phase * 7.0) as u32 % (2 * n - 2);
+                    if k < n { k } else { 2 * n - 2 - k }
+                }
                 Some(fps) => (now * fps + phase * 7.0) as u32 % n,
                 None => ((t * n as f32) as u32).min(n - 1),
             };

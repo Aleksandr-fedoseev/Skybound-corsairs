@@ -22,7 +22,9 @@ ORDER = ["idle", "attack", "skill", "hit", "death", "victory"]
 ap = argparse.ArgumentParser()
 ap.add_argument("name")
 ap.add_argument("--height", type=float, default=1.4)
+ap.add_argument("--id", help="id бойца в игре, если папка кадров называется иначе (kaya1 → kaya)")
 a = ap.parse_args()
+UNIT = a.id or a.name
 
 src = ROOT / "art" / "meshy" / a.name / "frames"
 # Только клипы из ORDER: черновые варианты рядом (например, attack_side104) не попадают в лист.
@@ -71,15 +73,17 @@ for r, c in enumerate(clips):
     meta[c] = {"row": r, "frames": len(frames[c])}
     if c in CLIP_FPS:
         meta[c]["fps"] = CLIP_FPS[c]
+    if c == "idle":
+        meta[c]["pingpong"] = True   # отрезок длинного ожидания: туда и обратно, без шва
 
-out = ROOT / "crates" / "game" / "assets" / "units" / f"{a.name}.png"
+out = ROOT / "crates" / "game" / "assets" / "units" / f"{UNIT}.png"
 out.parent.mkdir(parents=True, exist_ok=True)
 sheet.save(out, optimize=True)
 
 data_path = ROOT / "data" / "animated.json"
 data = json.loads(data_path.read_text()) if data_path.exists() else {}
-data[a.name] = {
-    "sheet": f"units/{a.name}.png",
+data[UNIT] = {
+    "sheet": f"units/{UNIT}.png",
     "frame": [fw, fh],
     "columns": cols,
     "rows": len(clips),

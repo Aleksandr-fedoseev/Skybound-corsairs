@@ -15,7 +15,7 @@ import os
 import sys
 
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SIZE = 512
@@ -25,7 +25,13 @@ UNLIT = 0.6               # доля свечения в материале: 1 �
 
 args = sys.argv[sys.argv.index("--") + 1:]
 NAME = args[0]
-CLIPS = dict(a.split("=") for a in args[1:])
+OPTS = [a.split("=", 1) for a in args[1:]]
+# Особые параметры: turn=<градусы>, prop=<файл.glb>:<кость>:<ось ручки> (можно несколько).
+TURN = math.radians(float(next((v for k, v in OPTS if k == "turn"), math.degrees(TURN))))
+PROPS = [v.split(":") for k, v in OPTS if k == "prop"]
+MAX_FRAMES = int(next((v for k, v in OPTS if k == "frames"), MAX_FRAMES))
+CLIPS = {k: v for k, v in OPTS if k not in ("turn", "prop", "frames")}
+PROP_LENGTH = 0.36   # длина оружия, м (при росте модели ~1,6 м — стилизованно крупное)
 SRC = os.path.join(ROOT, "art", "meshy", NAME)
 
 
@@ -103,11 +109,70 @@ def import_clip(action_id):
     bpy.ops.import_scene.gltf(filepath=os.path.join(SRC, f"anim_{action_id}.glb"))
     arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
     # В GLB Meshy бывает служебная сфера без привязки к скелету — она не часть персонажа.
-    for o in [o for o in bpy.context.scene.objects if o.type == "MESH" and o.parent is not arm]:
+    for o in [o for o in bpy.context.scene.objects if o.type == "MESH" and o.parent is not arm
+              and o.name.startswith("Icosphere")]:
         bpy.data.objects.remove(o, do_unlink=True)
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     action = arm.animation_data.action if arm.animation_data else None
     return arm, meshes, action
+
+
+AXES = {"x": Vector((1, 0, 0)), "y": Vector((0, 1, 0)), "z": Vector((0, 0, 1))}
+
+
+def attach_prop(arm, path, bone_name, grip_axis):
+    """Предмет в кулак: ствол — вдоль кости кисти (к пальцам), ручка — вдоль оси кости `grip_axis`
+    (x, -x, z, -z). Длинная ось предмета — ствол, ручка — там, где предмет уходит вниз."""
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=os.path.join(ROOT, path))
+    new = [o for o in bpy.data.objects if o not in before]
+    prop = next(o for o in new if o.type == "MESH")
+    world = prop.matrix_world.copy()
+    prop.parent = None
+    prop.matrix_world = world
+    for o in new:
+        if o is not prop:
+            bpy.data.objects.remove(o, do_unlink=True)
+    vs = [prop.matrix_world @ v.co for v in prop.data.vertices]
+    lo = Vector([min(v[i] for v in vs) for i in range(3)])
+    hi = Vector([max(v[i] for v in vs) for i in range(3)])
+    dims = hi - lo
+    order = sorted(range(3), key=lambda i: -dims[i])
+    long_i, up_i = order[0], order[1]
+    # Ручка — нижняя пятая часть по высоте; её середина по длине — казённая часть.
+    low = [v for v in vs if v[up_i] < lo[up_i] + dims[up_i] * 0.2]
+    grip_at = sum(v[long_i] for v in low) / len(low)
+    mid = (lo[long_i] + hi[long_i]) / 2
+    barrel = Vector((0, 0, 0))
+    barrel[long_i] = -1.0 if grip_at > mid else 1.0
+    down = Vector((0, 0, 0))
+    down[up_i] = -1.0
+    side = barrel.cross(down)
+    # Точка хвата: на ручке, у верха (там кулак).
+    grip = Vector((0, 0, 0))
+    grip[long_i] = grip_at
+    grip[up_i] = lo[up_i] + dims[up_i] * 0.55
+    grip[order[2]] = (lo[order[2]] + hi[order[2]]) / 2
+    src = Matrix((barrel, down, side)).transposed().to_4x4()
+    src.translation = grip
+
+    pb = arm.pose.bones[bone_name]
+    bone_world = arm.matrix_world @ pb.matrix
+    rot = bone_world.to_3x3().normalized()
+    y = (rot @ Vector((0, 1, 0))).normalized()
+    sign = -1.0 if grip_axis.startswith("-") else 1.0
+    g = (rot @ AXES[grip_axis.lstrip("-")] * sign).normalized()
+    g = (g - y * g.dot(y)).normalized()
+    dst = Matrix((y, g, y.cross(g))).transposed().to_4x4()
+    dst.translation = bone_world.translation + y * 0.07
+    scale = PROP_LENGTH / dims[long_i]
+    prop.matrix_world = dst @ Matrix.Scale(scale, 4) @ src.inverted()
+    final = prop.matrix_world.copy()
+    prop.parent = arm
+    prop.parent_type = "BONE"
+    prop.parent_bone = bone_name
+    prop.matrix_world = final
+    return prop
 
 
 def hips(arm):
@@ -145,6 +210,9 @@ def clip_window(sc, arm, clip, start, end):
     fps = sc.render.fps
     if clip == "victory":
         return start, min(end, start + 3 * fps)
+    if clip == "idle":
+        # Длинные ожидания (6–11 с): первые 4 секунды, в игре — туда и обратно (без шва).
+        return start, min(end, start + 4 * fps)
     if clip not in ("attack", "skill"):
         return start, end
     hands = [b for b in arm.pose.bones if "hand" in b.name.lower() and "thumb" not in b.name.lower()
@@ -177,14 +245,17 @@ def render_clip(clip, action_id, height):
     reset()
     arm, meshes, action = import_clip(action_id)
     sc = configure(bpy.context.scene)
+    for path, bone, axis in PROPS:
+        attach_prop(arm, path, bone, axis)
     flatten_materials()
     turn = setup_view(sc, arm, height)
     pelvis = hips(arm)
     start, end = (int(v) for v in action.frame_range) if action else (1, 1)
     start, end = clip_window(sc, arm, clip, start, end)
-    count = min(MAX_FRAMES, end - start + 1)
+    limit = MAX_FRAMES * 3 // 2 if clip == "idle" else MAX_FRAMES
+    count = min(limit, end - start + 1)
     frames = [round(start + (end - start) * i / max(1, count - 1)) for i in range(count)]
-    if clip in ("idle", "victory") and count > 1:
+    if clip == "victory" and count > 1:
         # Зацикленные: последний кадр совпадает с первым — не дублируем.
         frames = [round(start + (end - start) * i / count) for i in range(count)]
     out = os.path.join(SRC, "frames", clip)
