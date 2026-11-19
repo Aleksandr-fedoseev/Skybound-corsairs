@@ -70,6 +70,10 @@ pub struct Layout {
 pub struct FieldConfig {
     /// Фон боя во весь экран (путь в assets/).
     pub background: String,
+    /// Свой фон у этапа (id этапа → путь в assets/): палуба врага или грозовое небо. С ним
+    /// плашки палуб не рисуются — бойцы стоят на нарисованном.
+    #[serde(default)]
+    pub stage_backgrounds: HashMap<String, StageBackground>,
     pub default: String,
     /// Во сколько раз крупнее модель (боссы).
     pub unit_scale: HashMap<String, f32>,
@@ -97,6 +101,18 @@ pub enum Shot {
     Wind,
     /// Разряд молнии.
     Spark,
+}
+
+/// Фон этапа и, если на нём своя поверхность для врагов, их места и масштаб.
+#[derive(Clone, Debug, Deserialize)]
+pub struct StageBackground {
+    pub image: String,
+    /// Места врагов на нарисованной палубе (как `enemy_slots` раскладки); нет — из раскладки.
+    #[serde(default)]
+    pub enemy_slots: Option<Vec<[f32; 2]>>,
+    /// Враги дальше от камеры — мельче.
+    #[serde(default)]
+    pub enemy_scale: Option<f32>,
 }
 
 /// Спрайт-лист бойца: строка — клип, столбец — кадр; боец смотрит вправо.
@@ -279,11 +295,16 @@ pub fn spawn_field(
         commands.entity(root).add_child(id);
     };
 
-    // Фон: палуба «Ласточки» над морем облаков, во весь экран.
+    // Фон: палуба «Ласточки» над морем облаков или свой фон этапа, во весь экран.
+    let stage_background = screen.field.stage_backgrounds.get(screen.stage_id());
     let background = commands
         .spawn((
             Sprite {
-                image: assets.load(screen.field.background.clone()),
+                image: assets.load(
+                    stage_background
+                        .map_or(&screen.field.background, |b| &b.image)
+                        .clone(),
+                ),
                 custom_size: Some(Vec2::new(crate::WIDTH, crate::HEIGHT)),
                 ..default()
             },
@@ -295,7 +316,7 @@ pub fn spawn_field(
     for deck in &layout.decks {
         let angle = deck.angle.to_radians();
         let [w, h] = deck.size;
-        if deck.alpha <= 0.0 {
+        if deck.alpha <= 0.0 || stage_background.is_some() {
             continue;
         }
         let color = if deck.ally { ALLY_DECK } else { ENEMY_DECK }.with_alpha(deck.alpha);
@@ -334,9 +355,12 @@ pub fn spawn_field(
 
     let (mut ally_i, mut enemy_i) = (0, 0);
     for unit in screen.battle.units() {
+        let enemy_slots = stage_background
+            .and_then(|b| b.enemy_slots.as_ref())
+            .unwrap_or(&layout.enemy_slots);
         let (slots, i) = match unit.side {
             Side::Ally => (&layout.ally_slots, &mut ally_i),
-            Side::Enemy => (&layout.enemy_slots, &mut enemy_i),
+            Side::Enemy => (enemy_slots, &mut enemy_i),
         };
         let Some(&[x, y]) = slots.get(*i) else {
             continue;
@@ -347,7 +371,11 @@ pub fn spawn_field(
             .unit_scale
             .get(&unit.def.id)
             .copied()
-            .unwrap_or(1.0);
+            .unwrap_or(1.0)
+            * match unit.side {
+                Side::Enemy => stage_background.and_then(|b| b.enemy_scale).unwrap_or(1.0),
+                Side::Ally => 1.0,
+            };
         let model = spawn_model(
             commands,
             assets,
