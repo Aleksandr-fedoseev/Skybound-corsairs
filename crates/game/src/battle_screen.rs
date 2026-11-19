@@ -343,6 +343,8 @@ pub fn leave(
             With<crate::view::ScreenRoot>,
             With<crate::battlefield::FieldRoot>,
             With<crate::fx::Floating>,
+            With<crate::fx::Projectile>,
+            With<crate::fx::Flash>,
         )>,
     >,
     mut camera: Query<&mut Transform, With<Camera2d>>,

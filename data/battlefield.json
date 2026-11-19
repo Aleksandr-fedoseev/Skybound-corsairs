@@ -1,6 +1,7 @@
 {
   "background": "battle/deck.jpg",
   "default": "diagonal",
+  "ranged": { "kaya": "bullet", "lira": "bullet", "imperial_gunner": "bullet", "mei": "flask", "sora": "wind", "storm_ray": "spark" },
   "unit_scale": { "storm_leviathan": 1.5 },
   "layouts": {
     "diagonal": {

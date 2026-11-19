@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use bevy::sprite::Text2dShadow;
 
 use crate::battle_screen::{BattleScreen, Shown};
-use crate::battlefield::{Clip, ModelAnim, SkyDim, UnitModel, Z_FLOATING};
+use crate::battlefield::{Clip, ModelAnim, Shot, SkyDim, UnitModel, Z_FLOATING};
 use crate::view::{Fonts, UltBand, UltBandText};
 
 const DAMAGE: Color = Color::WHITE;
@@ -39,6 +39,25 @@ pub struct Floating {
     color: Color,
 }
 
+/// Снаряд дальнобойного бойца: летит от руки к цели за время замаха, к удару долетает.
+#[derive(Component)]
+pub struct Projectile {
+    timer: Timer,
+    from: Vec2,
+    to: Vec2,
+    /// Высота дуги в пикселях (склянка летит навесом).
+    arc: f32,
+    /// Вращение в оборотах за полёт (склянка кувыркается).
+    spin: f32,
+}
+
+/// Короткая вспышка у ствола: гаснет и растёт.
+#[derive(Component)]
+pub struct Flash {
+    timer: Timer,
+    color: Color,
+}
+
 #[derive(Resource, Default)]
 pub struct BandFx {
     timer: Option<Timer>,
@@ -64,6 +83,8 @@ pub fn spawn_effects(
     screen: Res<BattleScreen>,
     fonts: Res<Fonts>,
     mut models: Query<(&UnitModel, &mut ModelAnim)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
     mut band: Query<&mut Text, With<UltBandText>>,
     mut band_fx: ResMut<BandFx>,
     mut screen_fx: ResMut<ScreenFx>,
@@ -157,6 +178,27 @@ pub fn spawn_effects(
                     AbilityKind::Skill => look.attack_time * 1.3,
                     AbilityKind::Ultimate => look.ult_time,
                 };
+                // Дальнобойный: снаряд от руки к цели за время замаха (урон покажется к прилёту).
+                let shooter = models
+                    .iter()
+                    .find(|(m, _)| m.id == *unit)
+                    .and_then(|(m, _)| m.shot.map(|shot| (shot, m.home, m.height, m.facing)));
+                let mut seconds = seconds;
+                if let Some((shot, home, height, facing)) = shooter
+                    && let Some((target, target_h)) = focus.and_then(|t| place(&models, t))
+                {
+                    let flight = match kind {
+                        AbilityKind::Basic => look.basic_windup,
+                        AbilityKind::Skill => look.skill_windup,
+                        AbilityKind::Ultimate => look.ult_windup,
+                    }
+                    .max(0.1);
+                    let hand = home + Vec2::new(facing * height * 0.28, height * 0.55);
+                    let aim = target + Vec2::new(0.0, target_h * 0.5);
+                    spawn_shot(&mut commands, &mut meshes, &mut materials, shot, hand, aim, flight);
+                    // Выстрел виден дольше рывка: клип спрайта не сжимается в мелькание.
+                    seconds = seconds.max(flight + 0.35);
+                }
                 if let Some((_, mut anim)) = models.iter_mut().find(|(m, _)| m.id == *unit) {
                     anim.play(Clip::Attack { to, big }, seconds);
                 }
@@ -283,6 +325,114 @@ fn fx_delta(time: &Time, screen: &BattleScreen) -> std::time::Duration {
         std::time::Duration::ZERO
     } else {
         time.delta().mul_f32(screen.speed as f32)
+    }
+}
+
+/// Снаряд и вспышка у ствола. Простые формы — это эффекты, а не персонажи.
+fn spawn_shot(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<ColorMaterial>,
+    shot: Shot,
+    from: Vec2,
+    to: Vec2,
+    flight: f32,
+) {
+    let (mesh, color, arc, spin, flash): (Mesh, Color, f32, f32, Option<Color>) = match shot {
+        Shot::Bullet => (
+            Capsule2d::new(2.5, 16.0).into(),
+            Color::srgb(1.0, 0.92, 0.55),
+            0.0,
+            0.0,
+            Some(Color::srgb(1.0, 0.8, 0.3)),
+        ),
+        Shot::Flask => (
+            Circle::new(7.0).into(),
+            Color::srgb(0.45, 1.0, 0.5),
+            60.0,
+            1.5,
+            None,
+        ),
+        Shot::Wind => (
+            Ellipse::new(16.0, 5.0).into(),
+            Color::srgba(0.8, 1.0, 0.95, 0.85),
+            10.0,
+            0.0,
+            None,
+        ),
+        Shot::Spark => (
+            Capsule2d::new(2.0, 20.0).into(),
+            Color::srgb(0.6, 0.9, 1.0),
+            0.0,
+            0.0,
+            Some(Color::srgb(0.6, 0.9, 1.0)),
+        ),
+    };
+    commands.spawn((
+        Projectile {
+            timer: once(flight),
+            from,
+            to,
+            arc,
+            spin,
+        },
+        Mesh2d(meshes.add(mesh)),
+        MeshMaterial2d(materials.add(color)),
+        Transform::from_xyz(from.x, from.y, Z_FLOATING - 1.0),
+    ));
+    if let Some(color) = flash {
+        commands.spawn((
+            Flash {
+                timer: once(0.12),
+                color,
+            },
+            Mesh2d(meshes.add(Circle::new(9.0))),
+            MeshMaterial2d(materials.add(color)),
+            Transform::from_xyz(from.x, from.y, Z_FLOATING - 1.0),
+        ));
+    }
+}
+
+/// Полёт снарядов и угасание вспышек.
+pub fn animate_projectiles(
+    mut commands: Commands,
+    time: Res<Time>,
+    screen: Res<BattleScreen>,
+    mut shots: Query<(Entity, &mut Projectile, &mut Transform), Without<Flash>>,
+    mut flashes: Query<(Entity, &mut Flash, &mut Transform, &MeshMaterial2d<ColorMaterial>)>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let dt = fx_delta(&time, &screen);
+    for (entity, mut shot, mut transform) in &mut shots {
+        shot.timer.tick(dt);
+        let t = shot.timer.fraction();
+        let at = shot.from.lerp(shot.to, t) + Vec2::Y * shot.arc * 4.0 * t * (1.0 - t);
+        // Направление полёта с учётом дуги — пуля смотрит носом вперёд.
+        let ahead = shot.from.lerp(shot.to, (t + 0.02).min(1.0))
+            + Vec2::Y * shot.arc * 4.0 * (t + 0.02) * (1.0 - t - 0.02);
+        let dir = (ahead - at).normalize_or(shot.to - shot.from);
+        let angle = if shot.spin != 0.0 {
+            t * shot.spin * 2.0 * PI
+        } else {
+            dir.y.atan2(dir.x) - PI / 2.0
+        };
+        transform.translation.x = at.x;
+        transform.translation.y = at.y;
+        transform.rotation = Quat::from_rotation_z(angle);
+        if shot.timer.is_finished() {
+            commands.entity(entity).despawn();
+        }
+    }
+    for (entity, mut flash, mut transform, material) in &mut flashes {
+        flash.timer.tick(dt);
+        let t = flash.timer.fraction();
+        transform.scale = Vec3::splat(1.0 + t);
+        if let Some(mut m) = materials.get_mut(&material.0) {
+            m.color = flash.color.with_alpha(1.0 - t);
+        }
+        if flash.timer.is_finished() {
+            commands.entity(entity).despawn();
+        }
     }
 }
 

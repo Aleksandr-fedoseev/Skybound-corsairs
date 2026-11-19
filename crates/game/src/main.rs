@@ -115,6 +115,7 @@ fn main() {
             (
                 battlefield::animate_models,
                 fx::animate_floating,
+                fx::animate_projectiles,
                 fx::animate_band,
                 fx::animate_screen,
             ),

@@ -77,6 +77,23 @@ pub struct FieldConfig {
     /// Спрайт-листы бойцов из `data/animated.json`; у кого нет — заглушка.
     #[serde(skip)]
     pub animated: HashMap<String, AnimatedArt>,
+    /// Дальнобойные бойцы и чем они стреляют; остальные бьют вблизи (рывок к цели).
+    #[serde(default)]
+    pub ranged: HashMap<String, Shot>,
+}
+
+/// Снаряд дальнобойного бойца.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Shot {
+    /// Пуля: короткая яркая черта и вспышка у ствола.
+    Bullet,
+    /// Склянка: летит дугой, крутится.
+    Flask,
+    /// Порыв ветра.
+    Wind,
+    /// Разряд молнии.
+    Spark,
 }
 
 /// Спрайт-лист бойца: строка — клип, столбец — кадр; боец смотрит вправо.
@@ -158,6 +175,8 @@ pub struct UnitModel {
     pub height: f32,
     /// 1 — смотрит вправо, -1 — влево.
     pub facing: f32,
+    /// Чем стреляет дальнобойный боец; `None` — ближний бой.
+    pub shot: Option<Shot>,
 }
 
 /// То, что двигают анимации: силуэт сейчас, спрайт или скелет потом.
@@ -518,6 +537,7 @@ fn spawn_model(
             home,
             height: h,
             facing,
+            shot: screen.field.ranged.get(&unit.def.id).copied(),
         },
         ModelAnim {
             clip: Clip::Idle,
@@ -581,7 +601,12 @@ pub fn animate_models(
                 } else {
                     look.attack_reach
                 };
-                let full = (to - model.home) * reach;
+                // Дальнобойный не бежит к цели: стреляет с места, отдача назад.
+                let full = if model.shot.is_some() {
+                    (model.home - to).normalize_or_zero() * h * 0.06
+                } else {
+                    (to - model.home) * reach
+                };
                 // Ульта: присед до 35% клипа, затем рывок; обычная атака — сразу рывок.
                 let (crouch_end, dash_end, hold_end) = if big {
                     (0.35, 0.55, 0.7)

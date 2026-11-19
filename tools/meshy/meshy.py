@@ -4,6 +4,8 @@
 Ключ — ~/.config/meshy/key (в репозиторий не кладётся). Задачи и скачанные файлы —
 art/meshy/<имя>/ (вне git, это исходники). Только стандартная библиотека Python.
 
+  python3 tools/meshy/meshy.py ref kaya front prompt.txt art/meshy/kaya/ref.png  # image-to-image (nano-banana-pro)
+  python3 tools/meshy/meshy.py multi kaya front.png side.png       # модель по видам, поза — как на картинке
   python3 tools/meshy/meshy.py model kaya art/meshy/kaya/ref.png   # image-to-3D, A-поза
   python3 tools/meshy/meshy.py rig kaya                            # авториг готовой модели
   python3 tools/meshy/meshy.py anim kaya 0 232 178 189 59          # клипы по action_id
@@ -26,6 +28,8 @@ KEY = Path.home() / ".config" / "meshy" / "key"
 # Где лежит задача каждого вида и какой файл из неё скачивать.
 KINDS = {
     "model": ("v1/image-to-3d", lambda r: r.get("model_urls", {}).get("glb")),
+    "multi": ("v1/multi-image-to-3d", lambda r: r.get("model_urls", {}).get("glb")),
+    "ref": ("v1/image-to-image", lambda r: (r.get("image_urls") or [None])[0]),
     "rig": ("v1/rigging", lambda r: (r.get("result") or {}).get("rigged_character_glb_url")),
     "anim": ("v1/animations", lambda r: (r.get("result") or {}).get("animation_glb_url")),
 }
@@ -59,11 +63,51 @@ def save(name, t):
     (folder(name) / "tasks.json").write_text(json.dumps(t, indent=2, ensure_ascii=False) + "\n")
 
 
-def cmd_model(name, image):
+def data_uri(image):
     raw = Path(image).read_bytes()
-    mime = "image/png" if image.endswith(".png") else "image/jpeg"
+    mime = "image/png" if str(image).endswith(".png") else "image/jpeg"
+    return f"data:{mime};base64,{base64.b64encode(raw).decode()}"
+
+
+def cmd_ref(name, view, prompt_file, images):
+    """Перерисовать референс: вид `view` (front/side) по картинкам и промпту из файла."""
     body = {
-        "image_url": f"data:{mime};base64,{base64.b64encode(raw).decode()}",
+        "ai_model": "nano-banana-pro",
+        "prompt": Path(prompt_file).read_text().strip(),
+        "reference_image_urls": [data_uri(i) for i in images],
+        "aspect_ratio": "3:4",
+        "remove_background": True,
+    }
+    tid = request("POST", "v1/image-to-image", body)["result"]
+    t = tasks(name)
+    t.setdefault("ref", {})[view] = tid
+    save(name, t)
+    print(f"{name}: ref {view} {tid}")
+
+
+def cmd_multi(name, images):
+    """Модель по 1–4 видам (первый — спереди). Без pose_mode: поза берётся с картинки, оружие в руках."""
+    body = {
+        "image_urls": [data_uri(i) for i in images],
+        "ai_model": "latest",
+        "should_texture": True,
+        "should_remesh": True,
+        "target_polycount": 30000,
+        "target_formats": ["glb"],
+        "multi_view_thumbnails": True,
+    }
+    tid = request("POST", "v1/multi-image-to-3d", body)["result"]
+    t = tasks(name)
+    t["multi"] = tid
+    t.pop("rig", None)
+    t.pop("anim", None)
+    save(name, t)
+    print(f"{name}: multi {tid}")
+
+
+def cmd_model(name, image):
+    body = {
+        "image_url": data_uri(image),
         "ai_model": "latest",
         "pose_mode": "a-pose",
         "should_texture": True,
@@ -81,7 +125,8 @@ def cmd_model(name, image):
 
 def cmd_rig(name):
     t = tasks(name)
-    tid = request("POST", "v1/rigging", {"input_task_id": t["model"], "height_meters": 1.6})["result"]
+    model = t.get("multi") or t["model"]
+    tid = request("POST", "v1/rigging", {"input_task_id": model, "height_meters": 1.6})["result"]
     t["rig"] = tid
     save(name, t)
     print(f"{name}: rig {tid}")
@@ -102,7 +147,9 @@ def cmd_anim(name, ids):
 
 
 def all_tasks(t):
-    for kind in ("model", "rig"):
+    for view, tid in t.get("ref", {}).items():
+        yield "ref", f"ref_{view}", tid
+    for kind in ("model", "multi", "rig"):
         if kind in t:
             yield kind, kind, t[kind]
     for action, tid in t.get("anim", {}).items():
@@ -115,7 +162,7 @@ def cmd_status(name, wait=False):
     while pending:
         pending = False
         for kind, label, tid in all_tasks(t):
-            out = folder(name) / f"{label}.glb"
+            out = folder(name) / (f"{label}.png" if kind == "ref" else f"{label}.glb")
             if out.exists():
                 continue
             path, url_of = KINDS[kind]
@@ -125,7 +172,7 @@ def cmd_status(name, wait=False):
             if status == "SUCCEEDED":
                 url = url_of(r)
                 urllib.request.urlretrieve(url, out)
-                if kind == "model" and r.get("thumbnail_urls"):
+                if kind in ("model", "multi") and r.get("thumbnail_urls"):
                     for side, u in r["thumbnail_urls"].items():
                         urllib.request.urlretrieve(u, folder(name) / f"thumb_{side}.png")
                 print(f"  -> {out.relative_to(ROOT)}")
@@ -141,7 +188,11 @@ def cmd_status(name, wait=False):
 
 def main():
     cmd, name, *rest = sys.argv[1:]
-    if cmd == "model":
+    if cmd == "ref":
+        cmd_ref(name, rest[0], rest[1], rest[2:])
+    elif cmd == "multi":
+        cmd_multi(name, rest)
+    elif cmd == "model":
         cmd_model(name, rest[0])
     elif cmd == "rig":
         cmd_rig(name)

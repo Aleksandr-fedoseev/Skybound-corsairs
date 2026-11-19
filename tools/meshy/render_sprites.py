@@ -139,6 +139,28 @@ def setup_view(sc, arm, height):
     return root
 
 
+def clip_window(sc, arm, clip, start, end):
+    """Атака и умение — окно вокруг пика (кисть быстрее всего): 0,6 с до и 0,4 с после,
+    чтобы длинный клип не сжимался в мелькание. Победа — первые 3 секунды."""
+    fps = sc.render.fps
+    if clip == "victory":
+        return start, min(end, start + 3 * fps)
+    if clip not in ("attack", "skill"):
+        return start, end
+    hands = [b for b in arm.pose.bones if "hand" in b.name.lower() and "thumb" not in b.name.lower()
+             and "index" not in b.name.lower()]
+    best, peak, prev = -1.0, start, None
+    for f in range(start, end + 1):
+        sc.frame_set(f)
+        pos = [(arm.matrix_world @ b.head).copy() for b in hands]
+        if prev:
+            speed = max((p - q).length for p, q in zip(pos, prev))
+            if speed > best:
+                best, peak = speed, f
+        prev = pos
+    return max(start, peak - int(0.6 * fps)), min(end, peak + int(0.4 * fps))
+
+
 def model_height(meshes):
     """Рост по вычисленной сетке (с позой скелета): рамка скелетной сетки до позы неточна."""
     deps = bpy.context.evaluated_depsgraph_get()
@@ -159,6 +181,7 @@ def render_clip(clip, action_id, height):
     turn = setup_view(sc, arm, height)
     pelvis = hips(arm)
     start, end = (int(v) for v in action.frame_range) if action else (1, 1)
+    start, end = clip_window(sc, arm, clip, start, end)
     count = min(MAX_FRAMES, end - start + 1)
     frames = [round(start + (end - start) * i / max(1, count - 1)) for i in range(count)]
     if clip in ("idle", "victory") and count > 1:
@@ -180,7 +203,7 @@ def render_clip(clip, action_id, height):
         sc.render.filepath = os.path.join(out, f"{i:04d}.png")
         bpy.ops.render.render(write_still=True)
     fps = sc.render.fps / max(1, (end - start) / max(1, count - 1))
-    print(f"[render_sprites] {NAME} {clip}: {count} кадров из {start}–{end}, ~{fps:.1f} к/с", flush=True)
+    print(f"[render_sprites] {NAME} {clip}: {count} кадров из {start}–{end} (клип {action.frame_range[0]:.0f}–{action.frame_range[1]:.0f}), ~{fps:.1f} к/с", flush=True)
 
 
 # Высота по позе покоя первого клипа — общая камера для всех клипов.

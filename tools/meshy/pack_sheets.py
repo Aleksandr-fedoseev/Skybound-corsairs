@@ -25,6 +25,7 @@ ap.add_argument("--height", type=float, default=1.4)
 a = ap.parse_args()
 
 src = ROOT / "art" / "meshy" / a.name / "frames"
+# Только клипы из ORDER: черновые варианты рядом (например, attack_side104) не попадают в лист.
 clips = [c for c in ORDER if (src / c).is_dir()]
 OUTLINE = (40, 26, 26)   # цвет контура, как у линий в рисованных референсах
 
