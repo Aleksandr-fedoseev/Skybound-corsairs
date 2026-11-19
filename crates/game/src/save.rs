@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::convoys::{ConvoyData, Convoys};
 use crate::crew::Roster;
 use crate::menu::{Profile, Progress, Toast};
 use crate::ship::{Ship, ShipData};
@@ -29,6 +30,8 @@ pub struct SaveData {
     pub roster: Roster,
     pub ship: Ship,
     pub tavern: TavernState,
+    #[serde(default)]
+    pub convoys: Convoys,
 }
 
 pub fn now() -> u64 {
@@ -81,7 +84,7 @@ fn write(save: &SaveData) {
 }
 
 /// Что корабль накопил за `seconds` без игрока. Возвращает строку отчёта.
-pub fn offline(save: &mut SaveData, data: &ShipData, seconds: u64) -> String {
+pub fn offline(save: &mut SaveData, data: &ShipData, convoy: &ConvoyData, seconds: u64) -> String {
     let seconds = seconds.min(OFFLINE_CAP_SECONDS) as f32;
     let minutes = seconds / 60.0;
     let mut parts = Vec::new();
@@ -113,6 +116,11 @@ pub fn offline(save: &mut SaveData, data: &ShipData, seconds: u64) -> String {
         parts.push(format!("+{journals} журналов"));
     }
 
+    let arrived = save.convoys.pass(convoy, seconds);
+    if arrived > 0 {
+        parts.push(format!("конвоев на карте: +{arrived}"));
+    }
+
     if parts.is_empty() {
         String::new()
     } else {
@@ -124,12 +132,13 @@ pub fn offline(save: &mut SaveData, data: &ShipData, seconds: u64) -> String {
 pub fn apply(app: &mut App, mut save: SaveData) {
     let data = ShipData::bundled();
     let away = now().saturating_sub(save.saved_at);
-    let report = offline(&mut save, &data, away);
+    let report = offline(&mut save, &data, &ConvoyData::bundled(), away);
     app.insert_resource(save.profile)
         .insert_resource(save.progress)
         .insert_resource(save.roster)
         .insert_resource(save.ship)
-        .insert_resource(save.tavern);
+        .insert_resource(save.tavern)
+        .insert_resource(save.convoys);
     if !report.is_empty() {
         app.world_mut().resource_mut::<Toast>().show_long(&report);
     }
@@ -147,6 +156,7 @@ struct State<'w> {
     roster: Res<'w, Roster>,
     ship: Res<'w, Ship>,
     tavern: Res<'w, TavernState>,
+    convoys: Res<'w, Convoys>,
 }
 
 impl State<'_> {
@@ -159,6 +169,7 @@ impl State<'_> {
             roster: self.roster.clone(),
             ship: self.ship.clone(),
             tavern: self.tavern.clone(),
+            convoys: self.convoys.clone(),
         }
     }
 }
@@ -198,6 +209,7 @@ mod tests {
             roster: Roster::new(&CrewData::bundled()),
             ship: Ship::new(&ship),
             tavern: TavernState::default(),
+            convoys: Convoys::default(),
         }
     }
 
@@ -223,7 +235,7 @@ mod tests {
             to: 2,
             left: 60.0,
         });
-        let report = offline(&mut save, &data, 600);
+        let report = offline(&mut save, &data, &ConvoyData::bundled(), 600);
         assert!(save.ship.build.is_none());
         assert_eq!(save.ship.hull(), 2);
         assert!(save.profile.ether_pending > 0.0);
@@ -235,8 +247,13 @@ mod tests {
         let data = ShipData::bundled();
         let mut a = fresh();
         let mut b = fresh();
-        offline(&mut a, &data, OFFLINE_CAP_SECONDS);
-        offline(&mut b, &data, OFFLINE_CAP_SECONDS * 10);
+        offline(&mut a, &data, &ConvoyData::bundled(), OFFLINE_CAP_SECONDS);
+        offline(
+            &mut b,
+            &data,
+            &ConvoyData::bundled(),
+            OFFLINE_CAP_SECONDS * 10,
+        );
         assert_eq!(a.profile.ether_pending, b.profile.ether_pending);
     }
 }

@@ -11,7 +11,8 @@ use bevy::ecs::system::SystemParam;
 
 use crate::Screen;
 use crate::audio::Sfx;
-use crate::battle_screen::BattleScreen;
+use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
+use crate::convoys::Convoys;
 use crate::ship::{Compartment, OpenCompartment, Ship, ShipData};
 use crate::story::{StoryQueue, VoyageRequest};
 use crate::view::{Fonts, ResultNote};
@@ -166,6 +167,8 @@ struct ToastNode;
 pub struct Voyage {
     /// Этап, выбранный на карте; `None` — следующий непройденный.
     pub stage: Option<usize>,
+    /// Свой бой (конвой, Бездна) вместо этапа.
+    pub custom: Option<CustomFight>,
     pub from: Screen,
 }
 
@@ -173,6 +176,7 @@ impl Default for Voyage {
     fn default() -> Self {
         Self {
             stage: None,
+            custom: None,
             from: Screen::Menu,
         }
     }
@@ -975,15 +979,32 @@ fn bob_ship(time: Res<Time>, mut ships: Query<&mut UiTransform, With<ShipSprite>
     }
 }
 
-/// Победа открывает следующий этап и приносит добычу.
+/// Добыча в запас — с потолком Трюма.
+#[derive(SystemParam)]
+pub(crate) struct Spoils<'w> {
+    pub profile: ResMut<'w, Profile>,
+    ship: Res<'w, Ship>,
+    ship_data: Res<'w, ShipData>,
+}
+
+impl Spoils<'_> {
+    pub fn give(&mut self, silver: u32, planks: u32, journals: u32) {
+        let cap = self.ship.capacity(&self.ship_data);
+        let p = &mut self.profile;
+        p.silver = (p.silver + silver).min(cap.silver);
+        p.planks = (p.planks + planks).min(cap.planks);
+        p.journals += journals;
+    }
+}
+
+/// Победа приносит добычу; на этапе главы — открывает следующий этап и сюжет.
 #[allow(clippy::too_many_arguments)]
 fn count_victory(
     screen: Res<BattleScreen>,
     data: Res<MenuData>,
     mut progress: ResMut<Progress>,
-    mut profile: ResMut<Profile>,
-    ship: Res<Ship>,
-    ship_data: Res<ShipData>,
+    mut spoils: Spoils,
+    mut convoys: ResMut<Convoys>,
     mut counted: Local<Option<(usize, u64)>>,
     mut story: ResMut<StoryQueue>,
     mut notes: Query<&mut Text, With<ResultNote>>,
@@ -996,18 +1017,35 @@ fn count_victory(
         return;
     }
     *counted = Some(battle);
-    let note = match outcome {
-        Outcome::Victory => {
+    let note = match (outcome, &screen.custom) {
+        (Outcome::Defeat, _) => "Усильте отряд или смените тактику".to_string(),
+        (Outcome::Victory, Some(fight))
+            if fight.kind == FightKind::Convoy && convoys.ready == 0 =>
+        {
+            "Конвоев в очереди нет — добычи нет. Новое судно скоро появится".to_string()
+        }
+        (Outcome::Victory, Some(fight)) => {
+            spoils.give(fight.silver, fight.planks, fight.journals);
+            if fight.kind == FightKind::Convoy {
+                convoys.ready -= 1;
+            }
+            let mut parts = vec![format!("+{} серебра", fight.silver)];
+            if fight.planks > 0 {
+                parts.push(format!("+{} досок", fight.planks));
+            }
+            if fight.journals > 0 {
+                parts.push(format!("+{} журналов", fight.journals));
+            }
+            parts.join(" · ")
+        }
+        (Outcome::Victory, None) => {
             let reward = &data.victory_reward;
-            let cap = ship.capacity(&ship_data);
-            profile.silver = (profile.silver + reward.silver).min(cap.silver);
-            profile.planks = (profile.planks + reward.planks).min(cap.planks);
-            profile.journals += reward.journals;
+            spoils.give(reward.silver, reward.planks, reward.journals);
             let first = screen.stage == progress.cleared;
             if first {
                 story.0.push(screen.data.stages[screen.stage].id.clone());
                 progress.cleared += 1;
-                profile.doubloons += data.first_clear_doubloons;
+                spoils.profile.doubloons += data.first_clear_doubloons;
             }
             let stages = &screen.data.stages;
             let opened = match stages.get(progress.cleared) {
@@ -1025,7 +1063,6 @@ fn count_victory(
                 reward.silver, reward.planks, reward.journals
             )
         }
-        Outcome::Defeat => "Усильте отряд или смените тактику".to_string(),
     };
     for mut text in &mut notes {
         text.0 = note.clone();

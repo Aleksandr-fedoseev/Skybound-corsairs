@@ -104,6 +104,10 @@ fn start_voyage(
     if requests.read().count() == 0 {
         return;
     }
+    if voyage.custom.is_some() {
+        next.set(Screen::Battle);
+        return;
+    }
     let stages = &screen.data.stages;
     let stage = voyage.stage.unwrap_or(progress.next_stage(stages.len()));
     let id = &stages[stage].id;

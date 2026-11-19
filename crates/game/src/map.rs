@@ -8,15 +8,18 @@ use serde::Deserialize;
 
 use crate::Screen;
 use crate::battle_screen::BattleScreen;
+use crate::convoys::{ConvoyData, Convoys};
 use crate::crew::Roster;
 use crate::menu::{
     BRASS, DARK_WOOD, GO, GO_EDGE, GOLD, MUTED, MenuData, PARCHMENT, Progress, Toast, Voyage, WOOD,
     bottom_nav, pressable, spawn_toast, text,
 };
+use crate::ship::clock;
 use crate::story::VoyageRequest;
 use crate::view::Fonts;
 
 const CLEARED: Color = Color::srgb(0.30, 0.62, 0.38);
+const CONVOY: Color = Color::srgb(0.20, 0.45, 0.62);
 const READY: Color = Color::srgb(0.55, 0.88, 0.55);
 const WEAK: Color = Color::srgb(1.0, 0.55, 0.45);
 const LOCKED: Color = Color::srgb(0.36, 0.38, 0.43);
@@ -71,6 +74,14 @@ impl MapData {
 #[derive(Resource, Default)]
 struct Selected(Option<usize>);
 
+/// В карточке — конвой (а не этап).
+#[derive(Resource, Default)]
+struct ConvoyPick(bool);
+
+/// Подпись конвоя на карте: сколько судов.
+#[derive(Component)]
+struct ConvoyLabel;
+
 #[derive(Component)]
 struct Pulse;
 
@@ -88,10 +99,15 @@ enum CardText {
 pub fn plugin(app: &mut App) {
     app.insert_resource(MapData::bundled())
         .init_resource::<Selected>()
+        .init_resource::<ConvoyPick>()
         .add_systems(OnEnter(Screen::Map), spawn_map)
-        .add_systems(Update, (refresh_card, pulse).run_if(in_state(Screen::Map)));
+        .add_systems(
+            Update,
+            (refresh_card, refresh_convoy_label, pulse).run_if(in_state(Screen::Map)),
+        );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_map(
     mut commands: Commands,
     assets: Res<AssetServer>,
@@ -99,11 +115,14 @@ fn spawn_map(
     map: Res<MapData>,
     progress: Res<Progress>,
     screen: Res<BattleScreen>,
+    convoy: Res<ConvoyData>,
     mut selected: ResMut<Selected>,
+    mut pick: ResMut<ConvoyPick>,
 ) {
     let stages = &screen.data.stages;
     let next = progress.next_stage(stages.len());
     selected.0 = Some(next);
+    pick.0 = false;
 
     commands
         .spawn((
@@ -130,6 +149,7 @@ fn spawn_map(
             for spot in &map.locked {
                 locked(root, &fonts, spot);
             }
+            convoy_spot(root, &assets, &fonts, &convoy.spot);
             for spot in &map.stages {
                 let Some(index) = stages.iter().position(|s| s.id == spot.id) else {
                     continue;
@@ -334,10 +354,12 @@ fn stage_node(
             node.observe(
                 move |_: On<PointerClick>,
                       mut selected: ResMut<Selected>,
+                      mut pick: ResMut<ConvoyPick>,
                       mut toast: ResMut<Toast>,
                       screen: Res<BattleScreen>| {
                     if open {
                         selected.0 = Some(index);
+                        pick.0 = false;
                     } else {
                         let before = &screen.data.stages[cleared.min(index)].name;
                         toast.show(&format!("Сначала пройдите «{before}»"));
@@ -400,11 +422,30 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
         go.observe(
             |_: On<PointerClick>,
              selected: Res<Selected>,
+             pick: Res<ConvoyPick>,
+             convoy: (Res<ConvoyData>, Res<Convoys>, Res<Progress>),
+             mut toast: ResMut<Toast>,
              mut voyage: ResMut<Voyage>,
              mut requests: MessageWriter<VoyageRequest>| {
-                if let Some(stage) = selected.0 {
+                let (data, convoys, progress) = convoy;
+                if pick.0 {
+                    if convoys.ready == 0 {
+                        toast.show(&format!(
+                            "Конвоев нет — следующий через {}",
+                            clock(convoys.next_in(&data))
+                        ));
+                        return;
+                    }
+                    *voyage = Voyage {
+                        stage: None,
+                        custom: Some(data.fight(&progress)),
+                        from: Screen::Map,
+                    };
+                    requests.write(VoyageRequest);
+                } else if let Some(stage) = selected.0 {
                     *voyage = Voyage {
                         stage: Some(stage),
+                        custom: None,
                         from: Screen::Map,
                     };
                     requests.write(VoyageRequest);
@@ -416,12 +457,19 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
 
 /// Враги этапа одной строкой: «Имперский морпех ×2 · Имперский стрелок ×1».
 fn enemies_line(screen: &BattleScreen, stage: usize) -> String {
+    let ids: Vec<&str> = screen.data.stages[stage]
+        .enemies
+        .iter()
+        .map(|e| e.enemy.as_str())
+        .collect();
+    enemies_text(screen, &ids)
+}
+
+fn enemies_text(screen: &BattleScreen, ids: &[&str]) -> String {
     let data = &screen.data;
     let mut groups: Vec<(&str, usize)> = Vec::new();
-    for enemy in &data.stages[stage].enemies {
-        let name = data
-            .enemy(&enemy.enemy)
-            .map_or(enemy.enemy.as_str(), |e| e.name.as_str());
+    for id in ids {
+        let name = data.enemy(id).map_or(*id, |e| e.name.as_str());
         match groups.iter_mut().find(|(n, _)| *n == name) {
             Some((_, count)) => *count += 1,
             None => groups.push((name, 1)),
@@ -431,8 +479,11 @@ fn enemies_line(screen: &BattleScreen, stage: usize) -> String {
     names.join(" · ")
 }
 
+#[allow(clippy::too_many_arguments)]
 fn refresh_card(
     selected: Res<Selected>,
+    pick: Res<ConvoyPick>,
+    convoy: (Res<ConvoyData>, Res<Convoys>),
     screen: Res<BattleScreen>,
     progress: Res<Progress>,
     menu: Res<MenuData>,
@@ -441,11 +492,46 @@ fn refresh_card(
     mut texts: Query<(&CardText, &mut Text, &mut TextColor)>,
 ) {
     for mut vis in &mut cards {
-        vis.set_if_neq(if selected.0.is_some() {
+        vis.set_if_neq(if selected.0.is_some() || pick.0 {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         });
+    }
+    if pick.0 {
+        let (data, convoys) = convoy;
+        let tier = data.tier(&progress);
+        let ids: Vec<&str> = tier.enemies.iter().map(|(id, _)| id.as_str()).collect();
+        let level = tier.enemies.iter().map(|(_, l)| *l).max().unwrap_or(1);
+        for (kind, mut text, mut color) in &mut texts {
+            let value = match kind {
+                CardText::Title => format!("Конвой · {}", tier.name),
+                CardText::Enemies => format!("{} · ур. {level}", enemies_text(&screen, &ids)),
+                CardText::Level => {
+                    color.0 = if convoys.ready > 0 { READY } else { WEAK };
+                    if convoys.ready >= data.max_ready {
+                        format!(
+                            "Судов: {} из {} — очередь полна",
+                            convoys.ready, data.max_ready
+                        )
+                    } else {
+                        format!(
+                            "Судов: {} из {} · следующее через {}",
+                            convoys.ready,
+                            data.max_ready,
+                            clock(convoys.next_in(&data))
+                        )
+                    }
+                }
+                CardText::Status => {
+                    format!("Добыча: +{} досок · +{} серебра", tier.planks, tier.silver)
+                }
+            };
+            if text.0 != value {
+                text.0 = value;
+            }
+        }
+        return;
     }
     let Some(stage) = selected.0 else {
         return;
@@ -485,6 +571,74 @@ fn refresh_card(
                 )
             }
         };
+        if text.0 != value {
+            text.0 = value;
+        }
+    }
+}
+
+/// Точка конвоя на карте: шлюпка и подпись с числом судов.
+fn convoy_spot(
+    root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    spot: &crate::convoys::Spot,
+) {
+    root.spawn((spot_column(spot.x, spot.y, NODE), Pickable::IGNORE))
+        .with_children(|col| {
+            let mut node = col.spawn((
+                Node {
+                    width: px(NODE),
+                    height: px(NODE),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(px(3)),
+                    border_radius: BorderRadius::MAX,
+                    ..default()
+                },
+                BackgroundColor(CONVOY),
+                BorderColor::all(GO_EDGE),
+            ));
+            node.with_child((
+                Node {
+                    width: px(44),
+                    height: px(36),
+                    ..default()
+                },
+                ImageNode::new(assets.load("menu/module_boats.png")),
+                Pickable::IGNORE,
+            ));
+            pressable(&mut node);
+            node.observe(
+                |_: On<PointerClick>,
+                 mut selected: ResMut<Selected>,
+                 mut pick: ResMut<ConvoyPick>| {
+                    selected.0 = None;
+                    pick.0 = true;
+                },
+            );
+            col.spawn((
+                Node {
+                    margin: UiRect::top(px(4)),
+                    padding: UiRect::axes(px(8), px(2)),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    border_radius: BorderRadius::all(px(8)),
+                    ..default()
+                },
+                BackgroundColor(WOOD),
+                Pickable::IGNORE,
+            ))
+            .with_children(|p| {
+                p.spawn(text(fonts, spot.name.clone(), true, 12.0, PARCHMENT));
+                p.spawn((ConvoyLabel, text(fonts, "", false, 11.0, GOLD)));
+            });
+        });
+}
+
+fn refresh_convoy_label(convoys: Res<Convoys>, mut labels: Query<&mut Text, With<ConvoyLabel>>) {
+    for mut text in &mut labels {
+        let value = format!("судов: {}", convoys.ready);
         if text.0 != value {
             text.0 = value;
         }

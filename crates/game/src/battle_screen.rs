@@ -13,6 +13,23 @@ use game_data::GameData;
 use crate::battlefield::FieldConfig;
 use serde::Deserialize;
 
+/// Бой не из главы: свои враги, своя добыча.
+#[derive(Clone, Debug)]
+pub struct CustomFight {
+    pub title: String,
+    pub kind: FightKind,
+    /// Враги и их уровни.
+    pub enemies: Vec<(String, u32)>,
+    pub silver: u32,
+    pub planks: u32,
+    pub journals: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FightKind {
+    Convoy,
+}
+
 /// Залп до первых данных о корабле (Пушечная палуба ур. 1).
 const BASE_BROADSIDE: u32 = 120;
 /// Не больше стольких событий за кадр, чтобы на x3 бой не «проскакивал».
@@ -87,6 +104,8 @@ pub struct BattleScreen {
     pub field: FieldConfig,
     pub layout: String,
     pub stage: usize,
+    /// Свой бой вместо этапа главы (конвой, этаж Бездны).
+    pub custom: Option<CustomFight>,
     /// Отряд: герои, уровни и звёзды (собирается на экране «Экипаж»).
     pub team: Vec<crate::crew::Member>,
     /// Правила звёзд — чтобы собрать бойцов с бонусами звёзд.
@@ -123,13 +142,14 @@ impl BattleScreen {
         crew: crate::crew::CrewData,
     ) -> Self {
         let seed = random_seed();
-        let battle = new_battle(&data, &crew, 0, &team, 0, BASE_BROADSIDE, seed);
+        let battle = new_battle(&data, &crew, 0, None, &team, 0, BASE_BROADSIDE, seed);
         let mut screen = Self {
             data,
             look,
             layout: field.default.clone(),
             field,
             stage: 0,
+            custom: None,
             team,
             crew,
             gym_bonus: 0,
@@ -159,12 +179,21 @@ impl BattleScreen {
         &self.data.stages[self.stage].name
     }
 
+    /// Заголовок боя над полем.
+    pub fn title(&self) -> String {
+        match &self.custom {
+            Some(fight) => fight.title.clone(),
+            None => format!("{} · {}", self.stage_id(), self.stage_name()),
+        }
+    }
+
     /// Начать бой заново с текущими этапом, уровнем и seed.
     pub fn restart(&mut self) {
         self.battle = new_battle(
             &self.data,
             &self.crew,
             self.stage,
+            self.custom.as_ref(),
             &self.team,
             self.gym_bonus,
             self.broadside_power,
@@ -251,10 +280,12 @@ pub fn random_seed() -> u64 {
         .unwrap_or(0)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn new_battle(
     data: &GameData,
     crew: &crate::crew::CrewData,
     stage: usize,
+    custom: Option<&CustomFight>,
     team: &[crate::crew::Member],
     bonus: u32,
     broadside_power: u32,
@@ -267,9 +298,20 @@ fn new_battle(
             crew.hero_unit(hero, m.level + bonus, m.stars)
         })
         .collect();
-    let enemies = data
-        .stage_enemies(&data.stages[stage].id)
-        .expect("этап есть в data/stages.json");
+    let enemies = match custom {
+        Some(fight) => fight
+            .enemies
+            .iter()
+            .map(|(id, level)| {
+                data.enemy(id)
+                    .expect("враг есть в data/enemies.json")
+                    .to_unit(*level)
+            })
+            .collect(),
+        None => data
+            .stage_enemies(&data.stages[stage].id)
+            .expect("этап есть в data/stages.json"),
+    };
     Battle::new(team, enemies, Ship { broadside_power }, seed)
 }
 
@@ -286,6 +328,7 @@ pub fn enter(
     screen.broadside_power = ship.broadside(&ship_data);
     let next = progress.next_stage(screen.data.stages.len());
     screen.stage = voyage.stage.unwrap_or(next);
+    screen.custom = voyage.custom.clone();
     screen.paused = false;
     screen.restart_with_new_seed();
 }

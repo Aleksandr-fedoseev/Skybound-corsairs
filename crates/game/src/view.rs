@@ -205,7 +205,7 @@ fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts, back
             .with_children(|top| {
                 spawn_squads(top, fonts);
                 top.spawn((
-                    Text::new(format!("{} · {}", screen.stage_id(), screen.stage_name())),
+                    Text::new(screen.title()),
                     fonts.text(true, 13.0),
                     TextColor(Color::WHITE),
                     shadow(),
