@@ -87,8 +87,10 @@ pub struct BattleScreen {
     pub field: FieldConfig,
     pub layout: String,
     pub stage: usize,
-    /// Отряд: герои и их уровни (собирается на экране «Экипаж»).
-    pub team: Vec<(String, u32)>,
+    /// Отряд: герои, уровни и звёзды (собирается на экране «Экипаж»).
+    pub team: Vec<crate::crew::Member>,
+    /// Правила звёзд — чтобы собрать бойцов с бонусами звёзд.
+    pub crew: crate::crew::CrewData,
     /// Прибавка к уровню всех героев в тестовой сцене (клавиши [ и ]).
     pub gym_bonus: u32,
     /// Сила залпа: от уровня Пушечной палубы.
@@ -117,10 +119,11 @@ impl BattleScreen {
         data: GameData,
         look: Presentation,
         field: FieldConfig,
-        team: Vec<(String, u32)>,
+        team: Vec<crate::crew::Member>,
+        crew: crate::crew::CrewData,
     ) -> Self {
         let seed = random_seed();
-        let battle = new_battle(&data, 0, &team, 0, BASE_BROADSIDE, seed);
+        let battle = new_battle(&data, &crew, 0, &team, 0, BASE_BROADSIDE, seed);
         let mut screen = Self {
             data,
             look,
@@ -128,6 +131,7 @@ impl BattleScreen {
             field,
             stage: 0,
             team,
+            crew,
             gym_bonus: 0,
             broadside_power: BASE_BROADSIDE,
             seed,
@@ -159,6 +163,7 @@ impl BattleScreen {
     pub fn restart(&mut self) {
         self.battle = new_battle(
             &self.data,
+            &self.crew,
             self.stage,
             &self.team,
             self.gym_bonus,
@@ -248,18 +253,18 @@ pub fn random_seed() -> u64 {
 
 fn new_battle(
     data: &GameData,
+    crew: &crate::crew::CrewData,
     stage: usize,
-    team: &[(String, u32)],
+    team: &[crate::crew::Member],
     bonus: u32,
     broadside_power: u32,
     seed: u64,
 ) -> Battle {
     let team = team
         .iter()
-        .map(|(id, level)| {
-            data.hero(id)
-                .expect("герой есть в data/heroes.json")
-                .to_unit(level + bonus)
+        .map(|m| {
+            let hero = data.hero(&m.id).expect("герой есть в data/heroes.json");
+            crew.hero_unit(hero, m.level + bonus, m.stars)
         })
         .collect();
     let enemies = data
@@ -277,7 +282,7 @@ pub fn enter(
     ship: Res<crate::ship::Ship>,
     ship_data: Res<crate::ship::ShipData>,
 ) {
-    screen.team = roster.team_levels();
+    screen.team = roster.team_members();
     screen.broadside_power = ship.broadside(&ship_data);
     let next = progress.next_stage(screen.data.stages.len());
     screen.stage = voyage.stage.unwrap_or(next);

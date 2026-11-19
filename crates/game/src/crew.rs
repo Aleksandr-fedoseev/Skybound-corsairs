@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use battle_core::{Element, Role};
+use battle_core::{Effect, Element, Role, UnitDef};
 use bevy::prelude::*;
 use game_data::{GameData, HeroDef, Rarity};
 use serde::{Deserialize, Serialize};
@@ -23,20 +23,48 @@ const CARD_W: f32 = 164.0;
 const CARD_H: f32 = 182.0;
 const PORTRAIT: f32 = 72.0;
 const DISABLED: Color = Color::srgb(0.36, 0.38, 0.43);
+const STAR_FILL: Color = Color::srgb(0.62, 0.42, 0.10);
+const BETTER: Color = Color::srgb(0.55, 0.88, 0.55);
 const DARK_TEXT: Color = Color::srgb(0.08, 0.10, 0.16);
 
 /// Настройки экипажа: `data/crew.json`.
-#[derive(Resource, Deserialize)]
+#[derive(Resource, Deserialize, Clone)]
 pub struct CrewData {
     pub start_team: Vec<String>,
     pub team_size: usize,
-    /// Потолок уровня на 1★.
-    pub level_cap: u32,
-    /// Журналов за переход с уровня 1 на 2; дальше каждый уровень дороже в `journals_growth` раз.
-    pub journals_base: f32,
-    pub journals_growth: f32,
+    /// Опорные точки «уровень → журналов за следующий уровень» (из концепта); между ними
+    /// цена растёт плавно, в одно и то же число раз за уровень.
+    pub journal_steps: Vec<(u32, f32)>,
     /// Серебро за уровень: `silver_per_level × текущий уровень`.
     pub silver_per_level: u32,
+    /// Звёзды 1★–6★: потолок уровня, цена слияния, прибавка к характеристикам.
+    pub stars: Vec<StarRule>,
+    /// С этой звезды ульта сильнее во столько раз.
+    pub ult_boost_from_star: u32,
+    pub ult_boost: f32,
+    /// С этой звезды перезарядка спецатаки на ход короче (но не меньше минимума).
+    pub skill_cut_from_star: u32,
+    pub skill_min_cooldown: u32,
+}
+
+#[derive(Deserialize, Clone, Copy)]
+pub struct StarRule {
+    pub star: u32,
+    pub level_cap: u32,
+    /// Сколько копий самого героя нужно, чтобы дойти до этой звезды.
+    pub copies: u32,
+    /// Сколько копий других героев той же стихии (корма).
+    pub fodder: u32,
+    /// Прибавка ко всем характеристикам (0.2 = +20%).
+    pub stat_bonus: f32,
+}
+
+/// Что уйдёт на слияние: свои копии и копии других героев той же стихии.
+#[derive(Debug, PartialEq, Eq)]
+pub struct MergePlan {
+    pub to: u32,
+    pub own: u32,
+    pub fodder: Vec<(String, u32)>,
 }
 
 /// Цена перехода на следующий уровень.
@@ -52,21 +80,88 @@ impl CrewData {
             .expect("data/crew.json корректен")
     }
 
+    pub fn max_stars(&self) -> u32 {
+        self.stars.last().map_or(1, |r| r.star)
+    }
+
+    fn rule(&self, star: u32) -> StarRule {
+        self.stars
+            .iter()
+            .find(|r| r.star == star)
+            .or(self.stars.last())
+            .copied()
+            .expect("в data/crew.json есть звёзды")
+    }
+
+    pub fn level_cap(&self, stars: u32) -> u32 {
+        self.rule(stars).level_cap
+    }
+
+    /// Боец для боя: уровень, затем звёзды — прибавка к характеристикам, ульта, перезарядка.
+    pub fn hero_unit(&self, hero: &HeroDef, level: u32, stars: u32) -> UnitDef {
+        let mut unit = hero.to_unit(level);
+        let k = 1.0 + self.rule(stars).stat_bonus;
+        let boost = |v: u32| (v as f32 * k).round() as u32;
+        unit.stats.max_hp = boost(unit.stats.max_hp);
+        unit.stats.atk = boost(unit.stats.atk);
+        unit.stats.def = boost(unit.stats.def);
+        if stars >= self.ult_boost_from_star
+            && let Some(ult) = &mut unit.ultimate
+        {
+            for e in &mut ult.effects {
+                if let Effect::Damage { multiplier } = &mut e.effect {
+                    *multiplier *= self.ult_boost;
+                }
+            }
+        }
+        if stars >= self.skill_cut_from_star
+            && let Some(skill) = &mut unit.skill
+        {
+            skill.cooldown = skill
+                .cooldown
+                .saturating_sub(1)
+                .max(self.skill_min_cooldown);
+        }
+        unit
+    }
+
     /// Сколько стоит поднять героя с уровня `level` на `level + 1`.
     pub fn level_cost(&self, level: u32) -> LevelCost {
-        let steps = level.saturating_sub(1) as i32;
+        let steps = &self.journal_steps;
+        let journals = match steps.windows(2).find(|w| level <= w[1].0) {
+            Some(w) => {
+                let ((l0, j0), (l1, j1)) = (w[0], w[1]);
+                let t = (level.max(l0) - l0) as f32 / (l1 - l0) as f32;
+                j0 * (j1 / j0).powf(t)
+            }
+            None => steps.last().map_or(0.0, |s| s.1),
+        };
         LevelCost {
-            journals: (self.journals_base * self.journals_growth.powi(steps)).round() as u32,
+            journals: journals.round() as u32,
             silver: self.silver_per_level * level,
         }
     }
 }
 
-/// Нанятый герой: уровень и лишние копии (пойдут на звёзды через слияние).
+/// Нанятый герой: уровень, звёзды и лишние копии (идут на слияние).
 #[derive(Clone, Copy, Serialize, Deserialize)]
 struct Owned {
     level: u32,
     copies: u32,
+    #[serde(default = "first_star")]
+    stars: u32,
+}
+
+fn first_star() -> u32 {
+    1
+}
+
+/// Боец отряда для боя.
+#[derive(Clone, Debug)]
+pub struct Member {
+    pub id: String,
+    pub level: u32,
+    pub stars: u32,
 }
 
 /// Герои на борту и отряд. Стартовый отряд уже в команде, остальных нанимают в Таверне.
@@ -88,6 +183,7 @@ impl Roster {
                         Owned {
                             level: 1,
                             copies: 0,
+                            stars: 1,
                         },
                     )
                 })
@@ -121,6 +217,7 @@ impl Roster {
                     Owned {
                         level: 1,
                         copies: 0,
+                        stars: 1,
                     },
                 );
                 true
@@ -128,11 +225,95 @@ impl Roster {
         }
     }
 
+    pub fn stars(&self, id: &str) -> u32 {
+        self.heroes.get(id).map_or(1, |h| h.stars)
+    }
+
     pub fn team_levels(&self) -> Vec<(String, u32)> {
         self.team
             .iter()
             .map(|id| (id.clone(), self.level(id)))
             .collect()
+    }
+
+    pub fn team_members(&self) -> Vec<Member> {
+        self.team
+            .iter()
+            .map(|id| Member {
+                id: id.clone(),
+                level: self.level(id),
+                stars: self.stars(id),
+            })
+            .collect()
+    }
+
+    /// Что нужно для следующей звезды. Корм: сначала копии R-героев той же стихии, потом
+    /// реже, потом лишние свои копии.
+    pub fn merge_plan(
+        &self,
+        data: &GameData,
+        crew: &CrewData,
+        id: &str,
+    ) -> Result<MergePlan, String> {
+        let hero = data.hero(id).ok_or("нет такого героя")?;
+        let stars = self.stars(id);
+        if stars >= crew.max_stars() {
+            return Err("Максимум звёзд".into());
+        }
+        let rule = crew.rule(stars + 1);
+        let own = self.copies(id);
+        if own < rule.copies {
+            return Err(format!("Нужно копий героя: {}, есть {own}", rule.copies));
+        }
+        let mut spare = own - rule.copies;
+        let mut need = rule.fodder;
+        let mut others: Vec<(&String, Rarity, u32)> = data
+            .heroes
+            .iter()
+            .filter(|h| h.id != id && h.element == hero.element)
+            .filter_map(|h| {
+                let copies = self.copies(&h.id);
+                (copies > 0).then_some((&h.id, h.rarity, copies))
+            })
+            .collect();
+        others.sort_by_key(|(_, rarity, copies)| (*rarity, u32::MAX - copies));
+        let mut fodder = Vec::new();
+        for (other, _, copies) in others {
+            if need == 0 {
+                break;
+            }
+            let take = copies.min(need);
+            fodder.push((other.clone(), take));
+            need -= take;
+        }
+        let from_spare = spare.min(need);
+        spare -= from_spare;
+        need -= from_spare;
+        let _ = spare;
+        if need > 0 {
+            return Err(format!(
+                "Не хватает корма: ещё {need} копий героев стихии «{}» или своих",
+                element_label(hero.element)
+            ));
+        }
+        Ok(MergePlan {
+            to: stars + 1,
+            own: rule.copies + from_spare,
+            fodder,
+        })
+    }
+
+    /// Провести слияние по плану.
+    pub fn merge(&mut self, id: &str, plan: &MergePlan) {
+        if let Some(hero) = self.heroes.get_mut(id) {
+            hero.copies -= plan.own;
+            hero.stars = plan.to;
+        }
+        for (other, n) in &plan.fodder {
+            if let Some(h) = self.heroes.get_mut(other) {
+                h.copies -= n;
+            }
+        }
     }
 }
 
@@ -288,6 +469,7 @@ fn build(
                 for hero in &data.heroes {
                     hero_card(
                         grid,
+                        assets,
                         fonts,
                         hero,
                         roster,
@@ -296,7 +478,14 @@ fn build(
                 }
             });
             if let Some(hero) = selected.and_then(|id| data.hero(id)) {
-                details(root, fonts, crew, roster, profile, hero);
+                let plan = roster.merge_plan(data, crew, &hero.id);
+                let merge = (
+                    plan.as_ref().ok().map(|p| p.to),
+                    plan.as_ref()
+                        .map(|p| merge_line(p, data, hero))
+                        .map_err(|e| e.clone()),
+                );
+                details(root, assets, fonts, crew, roster, profile, hero, merge);
             }
             bottom_nav(root, assets, fonts, Screen::Crew);
             spawn_toast(root, fonts);
@@ -346,6 +535,7 @@ fn header(
 
 fn hero_card(
     grid: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     hero: &HeroDef,
     roster: &Roster,
@@ -401,6 +591,9 @@ fn hero_card(
             Pickable::IGNORE,
         ));
         c.spawn(text(fonts, hero.name.clone(), true, 16.0, PARCHMENT));
+        if owned {
+            stars_row(c, assets, roster.stars(&hero.id), 12.0);
+        }
         c.spawn(text(
             fonts,
             if owned {
@@ -447,16 +640,21 @@ fn hero_card(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn details(
     root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     crew: &CrewData,
     roster: &Roster,
     profile: &Profile,
     hero: &HeroDef,
+    merge: (Option<u32>, Result<String, String>),
 ) {
+    let (merge_to, merge_info) = merge;
     let level = roster.level(&hero.id);
-    let at_cap = level >= crew.level_cap;
+    let cap = crew.level_cap(roster.stars(&hero.id));
+    let at_cap = level >= cap;
     let now = hero.to_unit(level).stats;
     let next = hero.to_unit(level + 1).stats;
     let cost = crew.level_cost(level);
@@ -491,6 +689,9 @@ fn details(
             .with_children(|row| {
                 row.spawn(text(fonts, hero.name.clone(), true, 22.0, PARCHMENT));
                 row.spawn(text(fonts, hero.title.clone(), false, 15.0, MUTED));
+                if owned {
+                    stars_row(row, assets, roster.stars(&hero.id), 16.0);
+                }
             });
         panel.spawn(text(
             fonts,
@@ -500,7 +701,7 @@ fn details(
                 role_label(hero.role),
                 element_label(hero.element),
                 if owned {
-                    format!("уровень {level} из {} · копий {copies}", crew.level_cap)
+                    format!("уровень {level} из {cap} · копий {copies}")
                 } else {
                     "ещё не в команде".to_string()
                 }
@@ -552,15 +753,22 @@ fn details(
                 }
             });
 
-        for line in [
-            format!("Атака: {}", hero.basic.name),
+        panel.spawn(text(
+            fonts,
             format!(
-                "Спецатака: {} — раз в {} хода",
-                hero.skill.name, hero.skill.cooldown
+                "Умения: {} · {} (раз в {} хода) · {}",
+                hero.basic.name, hero.skill.name, hero.skill.cooldown, hero.ultimate.name
             ),
-            format!("Ульта: {}", hero.ultimate.name),
-        ] {
-            panel.spawn(text(fonts, line, false, 13.0, PARCHMENT));
+            false,
+            13.0,
+            PARCHMENT,
+        ));
+        if owned {
+            let (line, color) = match &merge_info {
+                Ok(text) => (text.clone(), BETTER),
+                Err(reason) => (reason.clone(), MUTED),
+            };
+            panel.spawn(text(fonts, line, false, 13.0, color));
         }
 
         panel
@@ -571,7 +779,8 @@ fn details(
             })
             .with_children(|buttons| {
                 if owned {
-                    level_button(buttons, fonts, cost, at_cap, affordable, crew.level_cap);
+                    level_button(buttons, fonts, cost, at_cap, affordable, cap);
+                    merge_button(buttons, fonts, merge_to);
                     team_button(buttons, fonts, &hero.id, in_team);
                 } else {
                     to_tavern_button(buttons, fonts);
@@ -645,7 +854,7 @@ fn level_up(
         return;
     };
     let level = roster.level(&id);
-    if level >= crew.level_cap {
+    if level >= crew.level_cap(roster.stars(&id)) {
         toast.show("Потолок уровня — дальше растить звёздами");
         return;
     }
@@ -669,6 +878,109 @@ fn level_up(
     toast.show(&format!("{name}: уровень {}", level + 1));
     sfx.write(Sfx("levelup"));
     dirty.0 = true;
+}
+
+/// Звёзды героя картинками (в шрифте нет символа звезды).
+fn stars_row(parent: &mut ChildSpawnerCommands, assets: &AssetServer, stars: u32, size: f32) {
+    parent
+        .spawn((
+            Node {
+                column_gap: px(1),
+                ..default()
+            },
+            Pickable::IGNORE,
+        ))
+        .with_children(|row| {
+            for i in 1..=6 {
+                let icon = if i <= stars {
+                    "ui/star.png"
+                } else {
+                    "ui/star_empty.png"
+                };
+                row.spawn((
+                    Node {
+                        width: px(size),
+                        height: px(size),
+                        ..default()
+                    },
+                    ImageNode::new(assets.load(icon)),
+                    Pickable::IGNORE,
+                ));
+            }
+        });
+}
+
+fn merge_line(plan: &MergePlan, data: &GameData, hero: &HeroDef) -> String {
+    let mut parts = vec![format!("копии {} ×{}", hero.name, plan.own)];
+    for (id, n) in &plan.fodder {
+        let name = data.hero(id).map_or(id.as_str(), |h| h.name.as_str());
+        parts.push(format!("копии {name} ×{n}"));
+    }
+    format!("Слияние до {} звёзд: уйдут {}", plan.to, parts.join(", "))
+}
+
+fn merge_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, to: Option<u32>) {
+    let ready = to.is_some();
+    let mut button = buttons.spawn((
+        Node {
+            width: px(120),
+            height: px(64),
+            flex_direction: FlexDirection::Column,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: UiRect::all(px(2)),
+            border_radius: BorderRadius::all(px(12)),
+            ..default()
+        },
+        BackgroundColor(if ready { STAR_FILL } else { DISABLED }),
+        BorderColor::all(if ready { GOLD } else { MUTED }),
+    ));
+    button.with_children(|b| {
+        b.spawn(text(fonts, "Слияние", true, 15.0, Color::WHITE));
+        b.spawn(text(
+            fonts,
+            to.map_or("звезда".to_string(), |t| format!("до {t} звёзд")),
+            false,
+            12.0,
+            PARCHMENT,
+        ));
+    });
+    pressable(&mut button);
+    button.observe(merge_hero);
+}
+
+/// Слить копии в звезду героя из карточки.
+#[allow(clippy::too_many_arguments)]
+fn merge_hero(
+    _: On<PointerClick>,
+    crew: Res<CrewData>,
+    selected: Res<Selected>,
+    screen: Res<BattleScreen>,
+    mut roster: ResMut<Roster>,
+    mut toast: ResMut<Toast>,
+    mut dirty: ResMut<CrewDirty>,
+    mut sfx: MessageWriter<Sfx>,
+) {
+    let Some(id) = selected.0.clone() else {
+        return;
+    };
+    match roster.merge_plan(&screen.data, &crew, &id) {
+        Err(reason) => toast.show(&reason),
+        Ok(plan) => {
+            roster.merge(&id, &plan);
+            let name = screen
+                .data
+                .hero(&id)
+                .map_or(id.as_str(), |h| h.name.as_str());
+            toast.show(&format!(
+                "{name}: {} звёзд! Потолок уровня {}",
+                plan.to,
+                crew.level_cap(plan.to)
+            ));
+            sfx.write(Sfx("ssr"));
+            dirty.0 = true;
+        }
+    }
 }
 
 /// Героя ещё нет — кнопка ведёт в Таверну.
@@ -707,7 +1019,7 @@ fn team_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, id: &str, in_t
     let id = id.to_string();
     let mut button = buttons.spawn((
         Node {
-            width: px(170),
+            width: px(120),
             height: px(64),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
@@ -721,7 +1033,7 @@ fn team_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, id: &str, in_t
     button.with_child(text(
         fonts,
         if in_team {
-            "Убрать из отряда"
+            "Из отряда"
         } else {
             "В отряд"
         },
@@ -761,18 +1073,79 @@ mod tests {
         CrewData::bundled()
     }
 
+    fn data() -> GameData {
+        GameData::bundled().expect("данные корректны")
+    }
+
+    #[test]
+    fn merge_needs_copies() {
+        let (data, crew) = (data(), crew());
+        let mut roster = Roster::new(&crew);
+        assert!(roster.merge_plan(&data, &crew, "ren").is_err());
+        roster.recruit("ren"); // копия
+        let plan = roster.merge_plan(&data, &crew, "ren").expect("до 2★ хватает одной копии");
+        roster.merge("ren", &plan);
+        assert_eq!(roster.stars("ren"), 2);
+        assert_eq!(roster.copies("ren"), 0);
+    }
+
+    #[test]
+    fn fodder_comes_from_same_element_first() {
+        let (data, crew) = (data(), crew());
+        let mut roster = Roster::new(&crew);
+        // Мэй и Сора — ветер. Мэй до 2★, потом до 3★: 1 своя копия + 2 корма.
+        roster.recruit("mei");
+        let p = roster.merge_plan(&data, &crew, "mei").unwrap();
+        roster.merge("mei", &p);
+        roster.recruit("sora");
+        roster.recruit("sora");
+        roster.recruit("sora"); // у Соры 2 копии
+        roster.recruit("mei");
+        let plan = roster.merge_plan(&data, &crew, "mei").unwrap();
+        assert_eq!(plan.own, 1);
+        assert_eq!(plan.fodder, vec![("sora".to_string(), 2)]);
+        roster.merge("mei", &plan);
+        assert_eq!(roster.stars("mei"), 3);
+        assert_eq!(roster.copies("sora"), 0);
+    }
+
+    #[test]
+    fn spare_own_copies_replace_fodder() {
+        let (data, crew) = (data(), crew());
+        let mut roster = Roster::new(&crew);
+        roster.recruit("borg");
+        let p = roster.merge_plan(&data, &crew, "borg").unwrap();
+        roster.merge("borg", &p);
+        // У стали других героев нет: 3★ — 1 копия + 2 своих вместо корма.
+        for _ in 0..3 {
+            roster.recruit("borg");
+        }
+        let plan = roster.merge_plan(&data, &crew, "borg").unwrap();
+        assert_eq!(plan.own, 3);
+        assert!(plan.fodder.is_empty());
+    }
+
+    #[test]
+    fn stars_make_hero_stronger() {
+        let (data, crew) = (data(), crew());
+        let ren = data.hero("ren").unwrap();
+        let one = crew.hero_unit(ren, 10, 1);
+        let three = crew.hero_unit(ren, 10, 3);
+        assert!(three.stats.atk > one.stats.atk && three.stats.max_hp > one.stats.max_hp);
+    }
+
     #[test]
     fn first_level_costs_base() {
         let crew = crew();
         let cost = crew.level_cost(1);
-        assert_eq!(cost.journals, crew.journals_base.round() as u32);
+        assert_eq!(cost.journals, crew.journal_steps[0].1.round() as u32);
         assert_eq!(cost.silver, crew.silver_per_level);
     }
 
     #[test]
     fn each_level_costs_more() {
         let crew = crew();
-        for level in 1..crew.level_cap {
+        for level in 1..crew.level_cap(crew.max_stars()) {
             let (a, b) = (crew.level_cost(level), crew.level_cost(level + 1));
             assert!(
                 b.journals > a.journals && b.silver > a.silver,

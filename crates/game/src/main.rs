@@ -56,7 +56,8 @@ fn main() {
     let data = GameData::bundled().expect("данные из data/ корректны");
     let crew = crew::CrewData::bundled();
     let roster = crew::Roster::new(&crew);
-    let team = roster.team_levels();
+    let team = roster.team_members();
+    let rules = crew.clone();
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(window),
@@ -85,6 +86,7 @@ fn main() {
         Presentation::bundled(),
         battlefield::FieldConfig::bundled(),
         team,
+        rules,
     ))
     .init_resource::<fx::BandFx>()
     .init_resource::<fx::ScreenFx>()

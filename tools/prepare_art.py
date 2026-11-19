@@ -16,6 +16,7 @@ SRC = Path("assets")
 OUT = Path("crates/game/assets/menu")
 BATTLE = Path("crates/game/assets/battle")
 MAP = Path("crates/game/assets/map")
+UI = Path("crates/game/assets/ui")
 # Серый фон листов (около 202,202,202) и допуск.
 GREY = 203
 TOL = 16
@@ -94,6 +95,22 @@ def background(name: str, out: Path):
     im.resize((1080, 1920), Image.LANCZOS).save(out, quality=88)
 
 
+def star(path: Path, fill, edge, size=64):
+    """Пятиконечная звезда для интерфейса (в шрифте нет символа звезды)."""
+    import math
+    big = size * 4
+    im = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    cx = cy = big / 2
+    pts = []
+    for i in range(10):
+        r = big * (0.46 if i % 2 == 0 else 0.2)
+        a = math.pi / 2 + i * math.pi / 5
+        pts.append((cx + r * math.cos(a), cy - r * math.sin(a)))
+    d.polygon(pts, fill=fill, outline=edge, width=big // 16)
+    im.resize((size, size), Image.LANCZOS).save(path)
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     background("first_island.jpg", OUT / "island.jpg")
@@ -112,6 +129,9 @@ def main():
         x, y = i % 3 * cw, i // 3 * ch
         tile = cut_background(sheet.crop((x, y, x + cw, y + ch)))
         fit(main_band(tile), 256).save(OUT / f"module_{name}.png")
+    UI.mkdir(parents=True, exist_ok=True)
+    star(UI / "star.png", (242, 193, 78, 255), (120, 80, 20, 255))
+    star(UI / "star_empty.png", (60, 50, 40, 200), (140, 120, 90, 255))
     print("готово:", OUT)
 
 

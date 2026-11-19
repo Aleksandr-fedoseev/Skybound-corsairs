@@ -1,8 +1,80 @@
 {
-  "start_team": ["ren", "kaya", "borg", "mei"],
+  "start_team": [
+    "ren",
+    "kaya",
+    "borg",
+    "mei"
+  ],
   "team_size": 4,
-  "level_cap": 20,
-  "journals_base": 50,
-  "journals_growth": 1.4,
-  "silver_per_level": 30
+  "journal_steps": [
+    [
+      1,
+      50
+    ],
+    [
+      10,
+      1000
+    ],
+    [
+      30,
+      12000
+    ],
+    [
+      50,
+      60000
+    ],
+    [
+      60,
+      150000
+    ]
+  ],
+  "silver_per_level": 30,
+  "stars": [
+    {
+      "star": 1,
+      "level_cap": 20,
+      "copies": 0,
+      "fodder": 0,
+      "stat_bonus": 0.0
+    },
+    {
+      "star": 2,
+      "level_cap": 30,
+      "copies": 1,
+      "fodder": 0,
+      "stat_bonus": 0.1
+    },
+    {
+      "star": 3,
+      "level_cap": 40,
+      "copies": 1,
+      "fodder": 2,
+      "stat_bonus": 0.2
+    },
+    {
+      "star": 4,
+      "level_cap": 50,
+      "copies": 2,
+      "fodder": 2,
+      "stat_bonus": 0.3
+    },
+    {
+      "star": 5,
+      "level_cap": 60,
+      "copies": 2,
+      "fodder": 3,
+      "stat_bonus": 0.4
+    },
+    {
+      "star": 6,
+      "level_cap": 60,
+      "copies": 3,
+      "fodder": 3,
+      "stat_bonus": 0.55
+    }
+  ],
+  "ult_boost_from_star": 3,
+  "ult_boost": 1.2,
+  "skill_cut_from_star": 5,
+  "skill_min_cooldown": 2
 }
