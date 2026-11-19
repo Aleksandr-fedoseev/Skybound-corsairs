@@ -245,6 +245,37 @@ fn new_battle(data: &GameData, stage: usize, level: u32, seed: u64) -> Battle {
     Battle::new(team, enemies, SHIP, seed)
 }
 
+/// Выход в поход: бой на следующем непройденном этапе.
+pub fn enter(mut screen: ResMut<BattleScreen>, progress: Res<crate::menu::Progress>) {
+    screen.stage = progress.next_stage(screen.data.stages.len());
+    screen.paused = false;
+    screen.restart_with_new_seed();
+}
+
+/// Возврат на корабль: убрать поле, интерфейс боя и эффекты, вернуть камеру на место.
+#[allow(clippy::type_complexity)]
+pub fn leave(
+    mut commands: Commands,
+    roots: Query<
+        Entity,
+        Or<(
+            With<crate::view::ScreenRoot>,
+            With<crate::battlefield::FieldRoot>,
+            With<crate::fx::Floating>,
+        )>,
+    >,
+    mut camera: Query<&mut Transform, With<Camera2d>>,
+) {
+    for root in &roots {
+        commands.entity(root).despawn();
+    }
+    for mut transform in &mut camera {
+        transform.translation = Vec3::ZERO;
+    }
+    commands.insert_resource(crate::fx::BandFx::default());
+    commands.insert_resource(crate::fx::ScreenFx::default());
+}
+
 /// Проигрывает события по одному; когда очередь пуста — просит у боя следующий ход.
 pub fn play_events(
     time: Res<Time>,

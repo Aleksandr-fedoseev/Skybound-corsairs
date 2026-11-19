@@ -29,10 +29,14 @@ VERIFIED: yes
 RUN: cargo run -p game
 TEST: cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings
 BUILD: cargo build --release -p game --no-default-features
-CAPTURE: mkdir -p .studioigor/captures/hello && SKYBOUND_SCREENSHOT=.studioigor/captures/hello/battle.png cargo run -p game
+CAPTURE: mkdir -p .studioigor/captures/menu && SKYBOUND_SCREENSHOT=.studioigor/captures/menu/menu.png cargo run -p game
+CAPTURE (бой): SKYBOUND_SCREEN=battle SKYBOUND_SCREENSHOT=.studioigor/captures/menu/battle.png cargo run -p game
 EDITOR: none — у Bevy нет редактора, код в репозитории
 
 ## Pitfalls
+- Игра стартует в главном меню; сразу в бой — `SKYBOUND_SCREEN=battle`. В меню клавиша H (dev) — следующий уровень Корпуса.
+- Арт из assets/ (исходники) готовит `python3 tools/prepare_art.py` → crates/game/assets/menu/; JPEG в Bevy включён фичей `jpeg` в корневом Cargo.toml.
+- `cargo` не в PATH шелла агента: перед командами `. ~/.cargo/env`.
 - niri (тайловый Wayland) растягивал окно — теперь окно всегда 540×960 и неизменяемого размера (main.rs).
 - Игру запускать через cargo run: бинарник, запущенный напрямую, ищет assets/ рядом с exe и рисует экран без текста.
 - MCP-сервер не в PATH ассистента — регистрировать по абсолютному пути ~/.cargo/bin/bevy_brp_mcp.

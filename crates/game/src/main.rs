@@ -1,4 +1,4 @@
-//! Skybound Corsairs — прототип экрана боя «Живая палуба».
+//! Skybound Corsairs: главное меню на палубе «Ласточки» и бой «Живая палуба».
 //!
 //! Бой идёт сам (логика в battle-core), экран проигрывает его события анимациями моделей.
 //! Игрок вмешивается ультами: кнопки героев внизу. Модели пока — силуэты-заглушки.
@@ -7,6 +7,7 @@ mod battle_screen;
 mod battlefield;
 mod dev;
 mod fx;
+mod menu;
 mod view;
 
 use bevy::prelude::*;
@@ -16,6 +17,16 @@ use battle_screen::{BattleScreen, Presentation, Shown};
 use bevy::window::WindowResizeConstraints;
 
 const WIDTH: f32 = 540.0;
+/// `SKYBOUND_SCREEN=battle` — сразу в бой (для кадров боя и тестовой сцены).
+const SCREEN_VAR: &str = "SKYBOUND_SCREEN";
+
+/// Экран игры: меню корабля или бой.
+#[derive(States, Default, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Screen {
+    #[default]
+    Menu,
+    Battle,
+}
 const HEIGHT: f32 = 960.0;
 
 fn main() {
@@ -40,6 +51,12 @@ fn main() {
             ..default()
         }))
         .add_plugins(dev::plugin)
+        .insert_state(match std::env::var(SCREEN_VAR).as_deref() {
+            Ok("battle") => Screen::Battle,
+            _ => Screen::Menu,
+        })
+        .init_resource::<view::Fonts>()
+        .add_plugins(menu::plugin)
         .add_message::<Shown>()
         .insert_resource(BattleScreen::new(
             data,
@@ -49,6 +66,8 @@ fn main() {
         .init_resource::<fx::BandFx>()
         .init_resource::<fx::ScreenFx>()
         .add_systems(Startup, view::setup)
+        .add_systems(OnEnter(Screen::Battle), battle_screen::enter)
+        .add_systems(OnExit(Screen::Battle), battle_screen::leave)
         .add_systems(
             Update,
             (
@@ -71,7 +90,8 @@ fn main() {
                     fx::animate_screen,
                 ),
             )
-                .chain(),
+                .chain()
+                .run_if(in_state(Screen::Battle)),
         )
         .run();
 }

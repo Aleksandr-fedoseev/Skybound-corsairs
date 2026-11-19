@@ -5,6 +5,7 @@
 use battle_core::{BROADSIDE_MAX, ENERGY_MAX, Element, Outcome, Side, UnitId};
 use bevy::prelude::*;
 
+use crate::Screen;
 use crate::battle_screen::BattleScreen;
 use crate::battlefield;
 
@@ -118,18 +119,28 @@ pub struct ResultOverlay;
 #[derive(Component)]
 pub struct ResultText;
 
+/// Строка под итогом боя: добыча и что открылось (заполняет `menu.rs`).
+#[derive(Component)]
+pub struct ResultNote;
+
 /// Строка тестовой сцены (только с фичей dev).
 #[cfg(feature = "dev")]
 #[derive(Component)]
 pub struct DevText;
 
-pub fn setup(mut commands: Commands, assets: Res<AssetServer>) {
+impl FromWorld for Fonts {
+    fn from_world(world: &mut World) -> Self {
+        let assets = world.resource::<AssetServer>();
+        Self {
+            regular: assets.load("fonts/NotoSans-Regular.ttf"),
+            bold: assets.load("fonts/NotoSans-Bold.ttf"),
+        }
+    }
+}
+
+pub fn setup(mut commands: Commands) {
     commands.insert_resource(ClearColor(SKY));
     commands.spawn(Camera2d);
-    commands.insert_resource(Fonts {
-        regular: assets.load("fonts/NotoSans-Regular.ttf"),
-        bold: assets.load("fonts/NotoSans-Bold.ttf"),
-    });
 }
 
 /// Собрать экран заново: новый бой с другим составом или другая раскладка поля.
@@ -248,15 +259,52 @@ fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts) {
                 TextColor(ACCENT),
             ));
             o.spawn((
-                Text::new("Тап — новый бой"),
-                fonts.text(false, 18.0),
+                ResultNote,
+                Text::new(""),
+                fonts.text(false, 17.0),
                 TextColor(Color::WHITE),
+                TextLayout::justify(Justify::Center),
             ));
-        })
-        .observe(|_: On<PointerClick>, mut screen: ResMut<BattleScreen>| {
-            if screen.shown_outcome.is_some() {
-                screen.restart_with_new_seed();
-            }
+            o.spawn(Node {
+                margin: UiRect::top(px(16)),
+                column_gap: px(14),
+                ..default()
+            })
+            .with_children(|row| {
+                let button = |fill: Color| {
+                    (
+                        Node {
+                            width: px(170),
+                            height: px(56),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border_radius: BorderRadius::all(px(12)),
+                            ..default()
+                        },
+                        BackgroundColor(fill),
+                    )
+                };
+                row.spawn(button(BUTTON))
+                    .with_child((
+                        Text::new("Ещё раз"),
+                        fonts.text(true, 20.0),
+                        TextColor(Color::WHITE),
+                    ))
+                    .observe(|_: On<PointerClick>, mut screen: ResMut<BattleScreen>| {
+                        if screen.shown_outcome.is_some() {
+                            screen.restart_with_new_seed();
+                        }
+                    });
+                row.spawn(button(BUTTON_ON))
+                    .with_child((
+                        Text::new("На корабль"),
+                        fonts.text(true, 20.0),
+                        TextColor(Color::WHITE),
+                    ))
+                    .observe(|_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
+                        next.set(Screen::Menu);
+                    });
+            });
         });
 }
 
