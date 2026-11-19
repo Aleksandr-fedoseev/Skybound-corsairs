@@ -149,6 +149,7 @@ pub fn rebuild(
     mut commands: Commands,
     mut screen: ResMut<BattleScreen>,
     fonts: Res<Fonts>,
+    assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     roots: Query<Entity, Or<(With<ScreenRoot>, With<battlefield::FieldRoot>)>>,
@@ -160,7 +161,14 @@ pub fn rebuild(
     for root in &roots {
         commands.entity(root).despawn();
     }
-    battlefield::spawn_field(&mut commands, &mut meshes, &mut materials, &screen, &fonts);
+    battlefield::spawn_field(
+        &mut commands,
+        &assets,
+        &mut meshes,
+        &mut materials,
+        &screen,
+        &fonts,
+    );
     spawn_hud(&mut commands, &screen, &fonts);
 }
 

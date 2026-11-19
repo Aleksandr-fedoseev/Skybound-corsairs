@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Готовит арт из assets/ для клиента: crates/game/assets/menu/.
+"""Готовит арт из assets/ для клиента: crates/game/assets/menu/ и battle/.
 
 Корабль и модули нарисованы на ровном сером фоне — фон вырезается заливкой от краёв,
 подписи под модулями отбрасываются. Фоны обрезаются до 9:16 и уменьшаются до 1080×1920.
@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 SRC = Path("assets")
 OUT = Path("crates/game/assets/menu")
+BATTLE = Path("crates/game/assets/battle")
 # Серый фон листов (около 202,202,202) и допуск.
 GREY = 203
 TOL = 16
@@ -78,7 +79,7 @@ def fit(im: Image.Image, width: int) -> Image.Image:
     return im.resize((width, round(im.height * width / im.width)), Image.LANCZOS)
 
 
-def background(name: str, out: str):
+def background(name: str, out: Path):
     im = Image.open(SRC / name).convert("RGB")
     target_h = round(im.width * 16 / 9)
     if target_h <= im.height:
@@ -88,12 +89,14 @@ def background(name: str, out: str):
         target_w = round(im.height * 9 / 16)
         left = (im.width - target_w) // 2
         im = im.crop((left, 0, left + target_w, im.height))
-    im.resize((1080, 1920), Image.LANCZOS).save(OUT / out, quality=88)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    im.resize((1080, 1920), Image.LANCZOS).save(out, quality=88)
 
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    background("first_island.jpg", "island.jpg")
+    background("first_island.jpg", OUT / "island.jpg")
+    background("battle_deck.jpg", BATTLE / "deck.jpg")
 
     for level in (1, 3, 5):
         sheet = Image.open(SRC / f"ship_lvl{level}.jpg")

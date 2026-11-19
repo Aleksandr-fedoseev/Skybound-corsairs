@@ -20,7 +20,6 @@ const ALLY_DECK: Color = Color::srgb(0.47, 0.32, 0.19);
 const ENEMY_DECK: Color = Color::srgb(0.36, 0.22, 0.20);
 const RAIL: Color = Color::srgb(0.30, 0.19, 0.11);
 /// Непрозрачные: полупрозрачные меши рисуются после непрозрачных и легли бы поверх палуб.
-const CLOUD: Color = Color::srgb(0.90, 0.95, 1.0);
 const SHADOW: Color = Color::srgba(0.0, 0.0, 0.0, 0.25);
 const SKIN: Color = Color::srgb(0.98, 0.85, 0.72);
 const LEGS: Color = Color::srgb(0.20, 0.22, 0.30);
@@ -33,6 +32,7 @@ const ENERGY: Color = Color::srgb(0.35, 0.65, 1.0);
 const GOLD: Color = Color::srgb(1.0, 0.85, 0.35);
 const BAR_WIDTH: f32 = 72.0;
 /// Слои по глубине: фон, затемнение, модели (чем ниже на экране, тем ближе), цифры.
+const Z_BACKGROUND: f32 = 0.0;
 const Z_DECK: f32 = 1.0;
 const Z_DIM: f32 = 2.0;
 const Z_MODELS: f32 = 10.0;
@@ -44,6 +44,13 @@ pub struct Deck {
     pub size: [f32; 2],
     pub angle: f32,
     pub ally: bool,
+    /// Непрозрачность плашки: 0 — не рисовать (герои стоят на палубе с фона).
+    #[serde(default = "opaque")]
+    pub alpha: f32,
+}
+
+fn opaque() -> f32 {
+    1.0
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -60,6 +67,8 @@ pub struct Layout {
 /// Раскладки поля боя из `data/battlefield.json`.
 #[derive(Clone, Debug, Deserialize)]
 pub struct FieldConfig {
+    /// Фон боя во весь экран (путь в assets/).
+    pub background: String,
     pub default: String,
     /// Во сколько раз крупнее модель (боссы).
     pub unit_scale: HashMap<String, f32>,
@@ -160,6 +169,7 @@ pub fn current_layout(screen: &BattleScreen) -> &Layout {
 /// Собрать поле боя: фон, палубы, модели на слотах.
 pub fn spawn_field(
     commands: &mut Commands,
+    assets: &AssetServer,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<ColorMaterial>,
     screen: &BattleScreen,
@@ -176,27 +186,26 @@ pub fn spawn_field(
         commands.entity(root).add_child(id);
     };
 
-    // Облака на фоне.
-    for (x, y, w) in [
-        (-170.0, 330.0, 130.0),
-        (120.0, 360.0, 170.0),
-        (200.0, -40.0, 120.0),
-        (-220.0, 40.0, 100.0),
-    ] {
-        child(
-            commands,
-            (
-                Mesh2d(meshes.add(Ellipse::new(w / 2.0, w / 5.0))),
-                MeshMaterial2d(materials.add(CLOUD)),
-                Transform::from_xyz(x, y, 0.5),
-            ),
-        );
-    }
+    // Фон: палуба «Ласточки» над морем облаков, во весь экран.
+    let background = commands
+        .spawn((
+            Sprite {
+                image: assets.load(screen.field.background.clone()),
+                custom_size: Some(Vec2::new(crate::WIDTH, crate::HEIGHT)),
+                ..default()
+            },
+            Transform::from_xyz(0.0, 0.0, Z_BACKGROUND),
+        ))
+        .id();
+    commands.entity(root).add_child(background);
     // Палубы кораблей с бортом.
     for deck in &layout.decks {
         let angle = deck.angle.to_radians();
         let [w, h] = deck.size;
-        let color = if deck.ally { ALLY_DECK } else { ENEMY_DECK };
+        if deck.alpha <= 0.0 {
+            continue;
+        }
+        let color = if deck.ally { ALLY_DECK } else { ENEMY_DECK }.with_alpha(deck.alpha);
         let at = Vec3::new(deck.center[0], deck.center[1], Z_DECK);
         child(
             commands,
@@ -211,7 +220,7 @@ pub fn spawn_field(
             commands,
             (
                 Mesh2d(meshes.add(Rectangle::new(w, 8.0))),
-                MeshMaterial2d(materials.add(RAIL)),
+                MeshMaterial2d(materials.add(RAIL.with_alpha(deck.alpha))),
                 Transform::from_translation(at + rail).with_rotation(Quat::from_rotation_z(angle)),
             ),
         );
