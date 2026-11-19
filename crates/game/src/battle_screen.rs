@@ -13,8 +13,6 @@ use game_data::GameData;
 use crate::battlefield::FieldConfig;
 use serde::Deserialize;
 
-/// Пока стартовый состав задан здесь; со временем его будет выбирать игрок.
-pub const STARTER_TEAM: [&str; 4] = ["ren", "kaya", "borg", "mei"];
 const SHIP: Ship = Ship {
     broadside_power: 120,
 };
@@ -90,7 +88,10 @@ pub struct BattleScreen {
     pub field: FieldConfig,
     pub layout: String,
     pub stage: usize,
-    pub level: u32,
+    /// Отряд: герои и их уровни (собирается на экране «Экипаж»).
+    pub team: Vec<(String, u32)>,
+    /// Прибавка к уровню всех героев в тестовой сцене (клавиши [ и ]).
+    pub gym_bonus: u32,
     pub seed: u64,
     pub battle: Battle,
     /// Здоровье, которое сейчас видит игрок.
@@ -111,16 +112,22 @@ pub struct BattleScreen {
 }
 
 impl BattleScreen {
-    pub fn new(data: GameData, look: Presentation, field: FieldConfig) -> Self {
+    pub fn new(
+        data: GameData,
+        look: Presentation,
+        field: FieldConfig,
+        team: Vec<(String, u32)>,
+    ) -> Self {
         let seed = random_seed();
-        let battle = new_battle(&data, 0, 1, seed);
+        let battle = new_battle(&data, 0, &team, 0, seed);
         let mut screen = Self {
             data,
             look,
             layout: field.default.clone(),
             field,
             stage: 0,
-            level: 1,
+            team,
+            gym_bonus: 0,
             seed,
             battle,
             shown_hp: Vec::new(),
@@ -148,7 +155,13 @@ impl BattleScreen {
 
     /// Начать бой заново с текущими этапом, уровнем и seed.
     pub fn restart(&mut self) {
-        self.battle = new_battle(&self.data, self.stage, self.level, self.seed);
+        self.battle = new_battle(
+            &self.data,
+            self.stage,
+            &self.team,
+            self.gym_bonus,
+            self.seed,
+        );
         self.reset_view();
     }
 
@@ -230,13 +243,19 @@ pub fn random_seed() -> u64 {
         .unwrap_or(0)
 }
 
-fn new_battle(data: &GameData, stage: usize, level: u32, seed: u64) -> Battle {
-    let team = STARTER_TEAM
+fn new_battle(
+    data: &GameData,
+    stage: usize,
+    team: &[(String, u32)],
+    bonus: u32,
+    seed: u64,
+) -> Battle {
+    let team = team
         .iter()
-        .map(|id| {
+        .map(|(id, level)| {
             data.hero(id)
                 .expect("герой есть в data/heroes.json")
-                .to_unit(level)
+                .to_unit(level + bonus)
         })
         .collect();
     let enemies = data
@@ -250,7 +269,9 @@ pub fn enter(
     mut screen: ResMut<BattleScreen>,
     progress: Res<crate::menu::Progress>,
     voyage: Res<crate::menu::Voyage>,
+    roster: Res<crate::crew::Roster>,
 ) {
+    screen.team = roster.team_levels();
     let next = progress.next_stage(screen.data.stages.len());
     screen.stage = voyage.stage.unwrap_or(next);
     screen.paused = false;

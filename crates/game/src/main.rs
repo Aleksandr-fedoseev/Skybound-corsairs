@@ -5,6 +5,7 @@
 
 mod battle_screen;
 mod battlefield;
+mod crew;
 mod dev;
 mod fx;
 mod map;
@@ -27,6 +28,7 @@ pub enum Screen {
     #[default]
     Menu,
     Map,
+    Crew,
     Battle,
 }
 const HEIGHT: f32 = 960.0;
@@ -47,6 +49,9 @@ fn main() {
         ..default()
     };
     let data = GameData::bundled().expect("данные из data/ корректны");
+    let crew = crew::CrewData::bundled();
+    let roster = crew::Roster::new(&data, &crew);
+    let team = roster.team_levels();
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(window),
@@ -58,12 +63,15 @@ fn main() {
             _ => Screen::Menu,
         })
         .init_resource::<view::Fonts>()
-        .add_plugins((menu::plugin, map::plugin))
+        .add_plugins((menu::plugin, map::plugin, crew::plugin))
         .add_message::<Shown>()
+        .insert_resource(crew)
+        .insert_resource(roster)
         .insert_resource(BattleScreen::new(
             data,
             Presentation::bundled(),
             battlefield::FieldConfig::bundled(),
+            team,
         ))
         .init_resource::<fx::BandFx>()
         .init_resource::<fx::ScreenFx>()

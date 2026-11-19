@@ -79,11 +79,11 @@ fn gym_keys(
         screen.rebuild = true;
     }
     if keys.just_pressed(KeyCode::BracketRight) {
-        screen.level += 1;
+        screen.gym_bonus += 1;
         screen.restart();
     }
-    if keys.just_pressed(KeyCode::BracketLeft) && screen.level > 1 {
-        screen.level -= 1;
+    if keys.just_pressed(KeyCode::BracketLeft) && screen.gym_bonus > 0 {
+        screen.gym_bonus -= 1;
         screen.restart();
     }
     if keys.just_pressed(KeyCode::KeyL) {
@@ -124,10 +124,10 @@ fn gym_text(
 ) {
     for mut text in &mut texts {
         text.0 = format!(
-            "GYM этап {} (1–{}) · ур. {} ([ ]) · seed {} · V {} · R/N · L{}",
+            "GYM этап {} (1–{}) · ур. +{} ([ ]) · seed {} · V {} · R/N · L{}",
             screen.stage_id(),
             screen.data.stages.len(),
-            screen.level,
+            screen.gym_bonus,
             screen.seed % 100_000,
             screen.field.layouts[&screen.layout].name,
             screen

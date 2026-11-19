@@ -1,0 +1,8 @@
+{
+  "start_team": ["ren", "kaya", "borg", "mei"],
+  "team_size": 4,
+  "level_cap": 20,
+  "journals_base": 50,
+  "journals_growth": 1.4,
+  "silver_per_level": 30
+}

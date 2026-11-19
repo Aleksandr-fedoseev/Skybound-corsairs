@@ -470,8 +470,8 @@ fn refresh_card(
                     "Новый этап"
                 };
                 format!(
-                    "{state} · награда +{} серебра, +{} досок",
-                    reward.silver, reward.planks
+                    "{state} · награда +{} серебра, +{} досок, +{} журналов",
+                    reward.silver, reward.planks, reward.journals
                 )
             }
         };

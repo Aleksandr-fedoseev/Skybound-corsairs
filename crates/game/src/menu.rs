@@ -52,6 +52,8 @@ pub struct Start {
     pub planks: u32,
     pub ether: u32,
     pub doubloons: u32,
+    /// Судовые журналы — опыт для уровней героев.
+    pub journals: u32,
     /// Эфир, который Ветроловы накопили, пока игрока не было.
     pub ether_waiting: f32,
 }
@@ -60,6 +62,7 @@ pub struct Start {
 pub struct Reward {
     pub silver: u32,
     pub planks: u32,
+    pub journals: u32,
 }
 
 #[derive(Deserialize, Clone)]
@@ -104,6 +107,7 @@ pub struct Profile {
     pub planks: u32,
     pub ether: u32,
     pub doubloons: u32,
+    pub journals: u32,
     /// Эфир, который накопили Ветроловы и который ещё не собран.
     pub ether_pending: f32,
 }
@@ -118,6 +122,7 @@ impl Profile {
             planks: start.planks,
             ether: start.ether,
             doubloons: start.doubloons,
+            journals: start.journals,
             ether_pending: start.ether_waiting,
         }
     }
@@ -211,7 +216,11 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(
             Update,
-            refresh_toast.run_if(in_state(Screen::Menu).or_else(in_state(Screen::Map))),
+            refresh_toast.run_if(
+                in_state(Screen::Menu)
+                    .or_else(in_state(Screen::Map))
+                    .or_else(in_state(Screen::Crew)),
+            ),
         )
         .add_systems(Update, count_victory.run_if(in_state(Screen::Battle)));
     #[cfg(feature = "dev")]
@@ -840,11 +849,7 @@ pub(crate) fn bottom_nav(
     // Вкладка ведёт на экран или пока только показывает подсказку.
     let tabs: [(&str, &str, Result<Screen, &'static str>); 5] = [
         ("Корабль", "menu/ship_lvl1.png", Ok(Screen::Menu)),
-        (
-            "Экипаж",
-            "menu/module_training_deck.png",
-            Err("Экран экипажа появится позже"),
-        ),
+        ("Экипаж", "menu/module_training_deck.png", Ok(Screen::Crew)),
         ("Карта", "menu/module_navigation.png", Ok(Screen::Map)),
         (
             "Таверна",
@@ -1009,6 +1014,7 @@ fn count_victory(
             let reward = &data.victory_reward;
             profile.silver = (profile.silver + reward.silver).min(profile.hold_capacity);
             profile.planks += reward.planks;
+            profile.journals += reward.journals;
             let first = screen.stage == progress.cleared;
             if first {
                 progress.cleared += 1;
@@ -1020,8 +1026,8 @@ fn count_victory(
                 _ => String::new(),
             };
             format!(
-                "+{} серебра · +{} досок{opened}",
-                reward.silver, reward.planks
+                "+{} серебра · +{} досок · +{} журналов{opened}",
+                reward.silver, reward.planks, reward.journals
             )
         }
         Outcome::Defeat => "Усильте отряд или смените тактику".to_string(),

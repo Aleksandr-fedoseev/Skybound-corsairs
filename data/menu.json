@@ -8,10 +8,11 @@
     "planks": 120,
     "ether": 0,
     "doubloons": 300,
+    "journals": 100,
     "ether_waiting": 24
   },
   "ether_per_minute": 6.0,
-  "victory_reward": { "silver": 120, "planks": 25 },
+  "victory_reward": { "silver": 120, "planks": 25, "journals": 100 },
   "ship_art": [
     { "from_hull": 1, "image": "menu/ship_lvl1.png" },
     { "from_hull": 3, "image": "menu/ship_lvl3.png" },
