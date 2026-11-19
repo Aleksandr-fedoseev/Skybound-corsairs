@@ -38,6 +38,8 @@ pub struct MenuData {
     pub start: Start,
     pub ether_per_minute: f32,
     pub victory_reward: Reward,
+    /// Дублоны за первое прохождение этапа.
+    pub first_clear_doubloons: u32,
     /// Картинка корабля по уровню Корпуса: берётся последняя, у которой `from_hull` ≤ уровня.
     pub ship_art: Vec<ShipArt>,
     pub compartments: Vec<Compartment>,
@@ -78,6 +80,9 @@ pub struct Compartment {
     #[serde(default)]
     pub short: Option<String>,
     pub icon: String,
+    /// Экран, который открывает тап по отсеку (`"tavern"`); без него — подсказка.
+    #[serde(default)]
+    pub opens: Option<String>,
     /// С какого уровня Корпуса открывается.
     pub hull: u32,
 }
@@ -219,7 +224,8 @@ pub fn plugin(app: &mut App) {
             refresh_toast.run_if(
                 in_state(Screen::Menu)
                     .or_else(in_state(Screen::Map))
-                    .or_else(in_state(Screen::Crew)),
+                    .or_else(in_state(Screen::Crew))
+                    .or_else(in_state(Screen::Tavern)),
             ),
         )
         .add_systems(Update, count_victory.run_if(in_state(Screen::Battle)));
@@ -771,10 +777,21 @@ fn compartments(
                     compartment.name, compartment.hull
                 )
             };
+            let opens = match compartment.opens.as_deref() {
+                Some("tavern") if open => Some(Screen::Tavern),
+                _ => None,
+            };
             pressable(&mut tile);
-            tile.observe(move |_: On<PointerClick>, mut toast: ResMut<Toast>| {
-                toast.show(&message);
-            });
+            tile.observe(
+                move |_: On<PointerClick>,
+                      mut toast: ResMut<Toast>,
+                      mut next: ResMut<NextState<Screen>>| {
+                    match opens {
+                        Some(screen) => next.set(screen),
+                        None => toast.show(&message),
+                    }
+                },
+            );
         }
     });
 }
@@ -851,11 +868,7 @@ pub(crate) fn bottom_nav(
         ("Корабль", "menu/ship_lvl1.png", Ok(Screen::Menu)),
         ("Экипаж", "menu/module_training_deck.png", Ok(Screen::Crew)),
         ("Карта", "menu/module_navigation.png", Ok(Screen::Map)),
-        (
-            "Таверна",
-            "menu/module_tavern.png",
-            Err("Таверна появится позже"),
-        ),
+        ("Таверна", "menu/module_tavern.png", Ok(Screen::Tavern)),
         (
             "Активности",
             "menu/module_lookout.png",
@@ -1018,6 +1031,7 @@ fn count_victory(
             let first = screen.stage == progress.cleared;
             if first {
                 progress.cleared += 1;
+                profile.doubloons += data.first_clear_doubloons;
             }
             let stages = &screen.data.stages;
             let opened = match stages.get(progress.cleared) {
@@ -1025,8 +1039,13 @@ fn count_victory(
                 None if first => "\nГлава 1 пройдена!".to_string(),
                 _ => String::new(),
             };
+            let doubloons = if first {
+                format!(" · +{} дублонов", data.first_clear_doubloons)
+            } else {
+                String::new()
+            };
             format!(
-                "+{} серебра · +{} досок · +{} журналов{opened}",
+                "+{} серебра · +{} досок · +{} журналов{doubloons}{opened}",
                 reward.silver, reward.planks, reward.journals
             )
         }

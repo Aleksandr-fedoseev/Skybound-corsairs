@@ -10,6 +10,7 @@ mod dev;
 mod fx;
 mod map;
 mod menu;
+mod tavern;
 mod view;
 
 use bevy::prelude::*;
@@ -29,6 +30,7 @@ pub enum Screen {
     Menu,
     Map,
     Crew,
+    Tavern,
     Battle,
 }
 const HEIGHT: f32 = 960.0;
@@ -50,7 +52,7 @@ fn main() {
     };
     let data = GameData::bundled().expect("данные из data/ корректны");
     let crew = crew::CrewData::bundled();
-    let roster = crew::Roster::new(&data, &crew);
+    let roster = crew::Roster::new(&crew);
     let team = roster.team_levels();
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -63,7 +65,7 @@ fn main() {
             _ => Screen::Menu,
         })
         .init_resource::<view::Fonts>()
-        .add_plugins((menu::plugin, map::plugin, crew::plugin))
+        .add_plugins((menu::plugin, map::plugin, crew::plugin, tavern::plugin))
         .add_message::<Shown>()
         .insert_resource(crew)
         .insert_resource(roster)

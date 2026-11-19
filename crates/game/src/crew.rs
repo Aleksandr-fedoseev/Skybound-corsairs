@@ -61,23 +61,70 @@ impl CrewData {
     }
 }
 
-/// Герои на борту и отряд. Пока все герои из данных уже в команде; найм в Таверне — позже.
+/// Нанятый герой: уровень и лишние копии (пойдут на звёзды через слияние).
+#[derive(Clone, Copy)]
+struct Owned {
+    level: u32,
+    copies: u32,
+}
+
+/// Герои на борту и отряд. Стартовый отряд уже в команде, остальных нанимают в Таверне.
 #[derive(Resource)]
 pub struct Roster {
-    levels: HashMap<String, u32>,
+    heroes: HashMap<String, Owned>,
     pub team: Vec<String>,
 }
 
 impl Roster {
-    pub fn new(data: &GameData, crew: &CrewData) -> Self {
+    pub fn new(crew: &CrewData) -> Self {
         Self {
-            levels: data.heroes.iter().map(|h| (h.id.clone(), 1)).collect(),
+            heroes: crew
+                .start_team
+                .iter()
+                .map(|id| {
+                    (
+                        id.clone(),
+                        Owned {
+                            level: 1,
+                            copies: 0,
+                        },
+                    )
+                })
+                .collect(),
             team: crew.start_team.clone(),
         }
     }
 
+    pub fn owns(&self, id: &str) -> bool {
+        self.heroes.contains_key(id)
+    }
+
     pub fn level(&self, id: &str) -> u32 {
-        self.levels.get(id).copied().unwrap_or(1)
+        self.heroes.get(id).map_or(1, |h| h.level)
+    }
+
+    pub fn copies(&self, id: &str) -> u32 {
+        self.heroes.get(id).map_or(0, |h| h.copies)
+    }
+
+    /// Герой из Таверны: новый — в команду, уже нанятый — копией. `true`, если новый.
+    pub fn recruit(&mut self, id: &str) -> bool {
+        match self.heroes.get_mut(id) {
+            Some(hero) => {
+                hero.copies += 1;
+                false
+            }
+            None => {
+                self.heroes.insert(
+                    id.to_string(),
+                    Owned {
+                        level: 1,
+                        copies: 0,
+                    },
+                );
+                true
+            }
+        }
     }
 
     pub fn team_levels(&self) -> Vec<(String, u32)> {
@@ -304,6 +351,7 @@ fn hero_card(
     selected: bool,
 ) {
     let in_team = roster.team.contains(&hero.id);
+    let owned = roster.owns(&hero.id);
     let id = hero.id.clone();
     let mut card = grid.spawn((
         Node {
@@ -331,7 +379,11 @@ fn hero_card(
                 border_radius: BorderRadius::MAX,
                 ..default()
             },
-            BackgroundColor(element_color(hero.element)),
+            BackgroundColor(if owned {
+                element_color(hero.element)
+            } else {
+                element_color(hero.element).with_alpha(0.3)
+            }),
             BorderColor::all(rarity_color(hero.rarity)),
             Pickable::IGNORE,
         ))
@@ -350,11 +402,15 @@ fn hero_card(
         c.spawn(text(fonts, hero.name.clone(), true, 16.0, PARCHMENT));
         c.spawn(text(
             fonts,
-            format!(
-                "ур. {} · {}",
-                roster.level(&hero.id),
-                rarity_label(hero.rarity)
-            ),
+            if owned {
+                format!(
+                    "ур. {} · {}",
+                    roster.level(&hero.id),
+                    rarity_label(hero.rarity)
+                )
+            } else {
+                format!("в Таверне · {}", rarity_label(hero.rarity))
+            },
             false,
             13.0,
             rarity_color(hero.rarity),
@@ -405,6 +461,8 @@ fn details(
     let cost = crew.level_cost(level);
     let affordable = profile.journals >= cost.journals && profile.silver >= cost.silver;
     let in_team = roster.team.contains(&hero.id);
+    let owned = roster.owns(&hero.id);
+    let copies = roster.copies(&hero.id);
 
     root.spawn((
         Node {
@@ -436,11 +494,15 @@ fn details(
         panel.spawn(text(
             fonts,
             format!(
-                "{} · {} · стихия: {} · уровень {level} из {}",
+                "{} · {} · стихия: {} · {}",
                 rarity_label(hero.rarity),
                 role_label(hero.role),
                 element_label(hero.element),
-                crew.level_cap
+                if owned {
+                    format!("уровень {level} из {} · копий {copies}", crew.level_cap)
+                } else {
+                    "ещё не в команде".to_string()
+                }
             ),
             false,
             13.0,
@@ -476,7 +538,7 @@ fn details(
                                 text(fonts, name, false, 14.0, MUTED),
                             ));
                             row.spawn(text(fonts, a.to_string(), true, 14.0, PARCHMENT));
-                            if !at_cap && b > a {
+                            if owned && !at_cap && b > a {
                                 row.spawn(text(
                                     fonts,
                                     format!("» {b}  (+{})", b - a),
@@ -507,8 +569,12 @@ fn details(
                 ..default()
             })
             .with_children(|buttons| {
-                level_button(buttons, fonts, cost, at_cap, affordable, crew.level_cap);
-                team_button(buttons, fonts, &hero.id, in_team);
+                if owned {
+                    level_button(buttons, fonts, cost, at_cap, affordable, crew.level_cap);
+                    team_button(buttons, fonts, &hero.id, in_team);
+                } else {
+                    to_tavern_button(buttons, fonts);
+                }
             });
     });
 }
@@ -591,13 +657,47 @@ fn level_up(
     }
     profile.journals -= cost.journals;
     profile.silver -= cost.silver;
-    roster.levels.insert(id.clone(), level + 1);
+    if let Some(hero) = roster.heroes.get_mut(&id) {
+        hero.level += 1;
+    }
     let name = screen
         .data
         .hero(&id)
         .map_or(id.as_str(), |h| h.name.as_str());
     toast.show(&format!("{name}: уровень {}", level + 1));
     dirty.0 = true;
+}
+
+/// Героя ещё нет — кнопка ведёт в Таверну.
+fn to_tavern_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts) {
+    let mut button = buttons.spawn((
+        Node {
+            flex_grow: 1.0,
+            height: px(64),
+            flex_direction: FlexDirection::Column,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: UiRect::all(px(2)),
+            border_radius: BorderRadius::all(px(12)),
+            ..default()
+        },
+        BackgroundColor(GO),
+        BorderColor::all(GO_EDGE),
+    ));
+    button.with_children(|b| {
+        b.spawn(text(fonts, "Нанять в Таверне", true, 18.0, Color::WHITE));
+        b.spawn(text(
+            fonts,
+            "герой выпадает при найме",
+            false,
+            12.0,
+            PARCHMENT,
+        ));
+    });
+    pressable(&mut button);
+    button.observe(|_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
+        next.set(Screen::Tavern);
+    });
 }
 
 fn team_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, id: &str, in_team: bool) {

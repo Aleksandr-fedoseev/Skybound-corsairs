@@ -13,6 +13,7 @@
   },
   "ether_per_minute": 6.0,
   "victory_reward": { "silver": 120, "planks": 25, "journals": 100 },
+  "first_clear_doubloons": 100,
   "ship_art": [
     { "from_hull": 1, "image": "menu/ship_lvl1.png" },
     { "from_hull": 3, "image": "menu/ship_lvl3.png" },
@@ -22,7 +23,7 @@
     { "name": "Пушечная палуба", "icon": "menu/module_cannon_deck.png", "hull": 1 },
     { "name": "Трюм", "icon": "menu/module_hold.png", "hull": 1 },
     { "name": "Ветроловы", "icon": "menu/module_windcatchers.png", "hull": 1 },
-    { "name": "Таверна", "icon": "menu/module_tavern.png", "hull": 1 },
+    { "name": "Таверна", "icon": "menu/module_tavern.png", "hull": 1, "opens": "tavern" },
     { "name": "Тренировочная палуба", "short": "Тренировка", "icon": "menu/module_training_deck.png", "hull": 2 },
     { "name": "Штурманская рубка", "short": "Рубка", "icon": "menu/module_navigation.png", "hull": 2 },
     { "name": "Шлюпки", "icon": "menu/module_boats.png", "hull": 4 },
