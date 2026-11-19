@@ -92,6 +92,9 @@ pub struct Profile {
     /// Носовые фигуры — заменяют корм при слиянии.
     #[serde(default)]
     pub figureheads: u32,
+    /// Детали старого мира — создание и усиление снаряжения.
+    #[serde(default)]
+    pub details: u32,
     /// Эфир, который накопили Ветроловы и который ещё не собран.
     pub ether_pending: f32,
 }
@@ -107,6 +110,7 @@ impl Profile {
             journals: start.journals,
             charts: 0,
             figureheads: 0,
+            details: 0,
             ether_pending: start.ether_waiting,
         }
     }
@@ -203,6 +207,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Toast>()
         .init_resource::<Voyage>()
         .init_resource::<MenuRebuild>()
+        .init_resource::<TilePage>()
         .add_systems(OnEnter(Screen::Menu), spawn_menu)
         .add_systems(
             Update,
@@ -239,6 +244,9 @@ struct MenuView<'w> {
     contract_data: Res<'w, ContractData>,
     contracts: Res<'w, Contracts>,
     board_open: Res<'w, BoardOpen>,
+    gear_data: Res<'w, crate::gear::GearData>,
+    gear: Res<'w, crate::gear::Gear>,
+    page: Res<'w, TilePage>,
 }
 
 fn spawn_menu(mut commands: Commands, view: MenuView) {
@@ -446,13 +454,27 @@ fn build(commands: &mut Commands, view: &MenuView) {
                 },
             );
 
-            compartments(root, assets, fonts, ship_data, ship);
+            compartments(root, assets, fonts, ship_data, ship, view.page.0);
             voyage(root, fonts, next, done);
             bottom_nav(root, assets, fonts, Screen::Menu);
             if view.board_open.0 {
                 crate::contracts::board(root, fonts, &view.contract_data, &view.contracts);
             } else if let Some(id) = &view.open.0 {
-                crate::ship::panel(root, fonts, ship_data, ship, profile, id);
+                let workshop = (id == "workshop")
+                    .then(|| ship.workshop_rarity(ship_data))
+                    .flatten();
+                crate::ship::panel(root, fonts, ship_data, ship, profile, id, |p| {
+                    if let Some(max) = workshop {
+                        crate::gear::workshop_section(
+                            p,
+                            fonts,
+                            &view.gear_data,
+                            &view.gear,
+                            max,
+                            profile,
+                        );
+                    }
+                });
             }
             spawn_toast(root, fonts);
         });
@@ -702,12 +724,26 @@ fn compartments(
     fonts: &Fonts,
     data: &ShipData,
     ship: &Ship,
+    page: usize,
 ) {
-    // Сначала открытые отсеки, потом ближайшие закрытые.
+    // Сначала открытые и полезные отсеки, потом открытые «на будущее», потом закрытые.
     let hull = ship.hull();
-    let mut shown: Vec<&Compartment> = data.compartments.iter().collect();
-    shown.sort_by_key(|c| (c.unlock_hull > hull, c.unlock_hull));
-    shown.truncate(COMPARTMENTS_SHOWN);
+    let mut all: Vec<&Compartment> = data.compartments.iter().collect();
+    all.sort_by_key(|c| (c.unlock_hull > hull, c.effect.is_none(), c.unlock_hull));
+    // Не влезают все — пять плиток на страницу и шестая «Ещё».
+    let per_page = if all.len() > COMPARTMENTS_SHOWN {
+        COMPARTMENTS_SHOWN - 1
+    } else {
+        COMPARTMENTS_SHOWN
+    };
+    let pages = all.len().div_ceil(per_page);
+    let page = page % pages.max(1);
+    let shown: Vec<&Compartment> = all
+        .iter()
+        .skip(page * per_page)
+        .take(per_page)
+        .copied()
+        .collect();
 
     root.spawn((
         Node {
@@ -790,8 +826,40 @@ fn compartments(
                 },
             );
         }
+        if pages > 1 {
+            let mut more = row.spawn(Node {
+                width: px(82),
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            });
+            more.with_children(|t| {
+                t.spawn(text(fonts, "Ещё", true, 16.0, GOLD));
+                t.spawn(text(
+                    fonts,
+                    format!("{}/{pages}", page + 1),
+                    false,
+                    12.0,
+                    MUTED,
+                ));
+            });
+            pressable(&mut more);
+            more.observe(
+                move |_: On<PointerClick>,
+                      mut p: ResMut<TilePage>,
+                      mut rebuild: ResMut<MenuRebuild>| {
+                    p.0 = (page + 1) % pages;
+                    rebuild.0 = true;
+                },
+            );
+        }
     });
 }
+
+/// Страница в ряду отсеков.
+#[derive(Resource, Default)]
+pub(crate) struct TilePage(pub usize);
 
 fn voyage(root: &mut ChildSpawnerCommands, fonts: &Fonts, next: &game_data::StageDef, done: bool) {
     root.spawn((
@@ -1063,6 +1131,7 @@ fn count_victory(
                 p.charts += r.charts;
                 p.doubloons += r.doubloons;
                 p.figureheads += r.figureheads;
+                p.details += r.details;
                 format!("Этаж {floor} пройден! {}", r.line())
             } else {
                 "Этаж уже пройден — награда выдаётся один раз".to_string()

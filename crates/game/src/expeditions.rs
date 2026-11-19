@@ -44,6 +44,7 @@ pub struct Loot {
     pub ether: u32,
     pub charts: u32,
     pub figureheads: u32,
+    pub details: u32,
 }
 
 impl Loot {
@@ -54,6 +55,7 @@ impl Loot {
             (self.silver, "серебра"),
             (self.ether, "эфира"),
             (self.charts, "лоции"),
+            (self.details, "деталей"),
             (self.figureheads, "носовая фигура"),
         ] {
             if n > 0 {
@@ -292,6 +294,7 @@ fn act(
         p.ether = (p.ether + loot.ether).min(cap.ether);
         p.charts += loot.charts;
         p.figureheads += loot.figureheads;
+        p.details += loot.details;
         toast.show(&format!("Экспедиция вернулась: {}", loot.line()));
         sfx.write(Sfx("coin"));
     } else {

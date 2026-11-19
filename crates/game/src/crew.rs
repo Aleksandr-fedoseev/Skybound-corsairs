@@ -15,6 +15,7 @@ use crate::audio::Sfx;
 use crate::battle_screen::BattleScreen;
 use crate::cabins::{CabinData, Cabins};
 use crate::contracts::Deed;
+use crate::gear::{Gear, GearData};
 use crate::menu::{
     BRASS, GO, GO_EDGE, GOLD, MUTED, PARCHMENT, Profile, Toast, WOOD, bottom_nav, pressable,
     spawn_toast, text,
@@ -235,6 +236,8 @@ pub struct Member {
     pub skills: [u32; 3],
     /// Прибавка к атаке от соседа по каюте в отряде.
     pub atk_bonus: f32,
+    /// Прибавка от надетого снаряжения.
+    pub gear: battle_core::Stats,
 }
 
 /// Герои на борту и отряд. Стартовый отряд уже в команде, остальных нанимают в Таверне.
@@ -330,6 +333,12 @@ impl Roster {
                 stars: self.stars(id),
                 skills: self.skills(id),
                 atk_bonus: 0.0,
+                gear: battle_core::Stats {
+                    max_hp: 0,
+                    atk: 0,
+                    def: 0,
+                    spd: 0,
+                },
             })
             .collect()
     }
@@ -418,6 +427,7 @@ struct CrewRoot;
 pub fn plugin(app: &mut App) {
     app.init_resource::<Selected>()
         .init_resource::<CrewDirty>()
+        .init_resource::<CrewTab>()
         .add_systems(OnEnter(Screen::Crew), spawn_crew)
         .add_systems(Update, rebuild_crew.run_if(in_state(Screen::Crew)));
 }
@@ -494,6 +504,55 @@ struct CabinView<'w> {
     data: Res<'w, CabinData>,
     ship: Res<'w, crate::ship::Ship>,
     ship_data: Res<'w, crate::ship::ShipData>,
+    gear: Res<'w, Gear>,
+    gear_data: Res<'w, GearData>,
+    tab: Res<'w, CrewTab>,
+}
+
+/// Вкладка карточки героя.
+#[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
+enum CrewTab {
+    #[default]
+    Hero,
+    Gear,
+}
+
+/// Надетый предмет: id, описание, цена усиления (серебро, детали), достиг ли предела.
+type WornItem = (u32, String, (u32, u32), bool);
+
+/// Снаряжение героя для вкладки.
+struct GearInfo {
+    tab: CrewTab,
+    /// По слотам: имя слота и надетый предмет.
+    slots: Vec<(String, Option<WornItem>)>,
+    details: u32,
+    stock: usize,
+}
+
+fn gear_info(view: &CabinView, profile: &Profile, hero: &str) -> GearInfo {
+    let worn = view.gear.worn_by(hero);
+    let data = &view.gear_data;
+    GearInfo {
+        tab: *view.tab,
+        slots: data
+            .slots
+            .iter()
+            .enumerate()
+            .map(|(i, slot)| {
+                let item = worn[i].and_then(|id| view.gear.item(id)).map(|item| {
+                    (
+                        item.id,
+                        data.describe(item),
+                        data.enhance_cost(item),
+                        item.level >= data.enhance.max,
+                    )
+                });
+                (slot.name.clone(), item)
+            })
+            .collect(),
+        details: profile.details,
+        stock: view.gear.items.len(),
+    }
 }
 
 /// Что показать в разделе «Каюта» у героя.
@@ -632,9 +691,10 @@ fn build(
                         .map(|p| merge_line(p, data, hero))
                         .map_err(|e| e.clone()),
                 );
+                let gear = gear_info(cabin, profile, &hero.id);
                 let cabin = cabin_info(cabin, roster, data, &hero.id);
                 details(
-                    root, assets, fonts, crew, roster, profile, hero, merge, cabin,
+                    root, assets, fonts, crew, roster, profile, hero, merge, cabin, gear,
                 );
             }
             bottom_nav(root, assets, fonts, Screen::Crew);
@@ -804,6 +864,7 @@ fn details(
     hero: &HeroDef,
     merge: (Option<u32>, Result<String, String>),
     cabin: CabinInfo,
+    gear: GearInfo,
 ) {
     let (merge_to, merge_info) = merge;
     let level = roster.level(&hero.id);
@@ -847,6 +908,13 @@ fn details(
                     stars_row(row, assets, roster.stars(&hero.id), 16.0);
                 }
             });
+        if owned {
+            tabs_row(panel, fonts, gear.tab);
+        }
+        if owned && gear.tab == CrewTab::Gear {
+            gear_tab(panel, fonts, gear);
+            return;
+        }
         panel.spawn(text(
             fonts,
             format!(
@@ -935,6 +1003,186 @@ fn details(
             cabin_row(panel, fonts, cabin);
         }
     });
+}
+
+fn tabs_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts, tab: CrewTab) {
+    panel
+        .spawn(Node {
+            column_gap: px(6),
+            ..default()
+        })
+        .with_children(|row| {
+            for (label, t) in [("Герой", CrewTab::Hero), ("Снаряжение", CrewTab::Gear)]
+            {
+                let active = t == tab;
+                let mut button = row.spawn((
+                    Node {
+                        padding: UiRect::axes(px(14), px(5)),
+                        border: UiRect::all(px(1)),
+                        border_radius: BorderRadius::all(px(8)),
+                        ..default()
+                    },
+                    BackgroundColor(if active {
+                        STAR_FILL
+                    } else {
+                        Color::srgba(1.0, 1.0, 1.0, 0.05)
+                    }),
+                    BorderColor::all(if active { GOLD } else { MUTED }),
+                ));
+                button.with_child(text(fonts, label, true, 13.0, PARCHMENT));
+                pressable(&mut button);
+                button.observe(
+                    move |_: On<PointerClick>,
+                          mut tab: ResMut<CrewTab>,
+                          mut dirty: ResMut<CrewDirty>| {
+                        *tab = t;
+                        dirty.0 = true;
+                    },
+                );
+            }
+        });
+}
+
+/// Вкладка «Снаряжение»: четыре слота, усиление, «Надеть лучшее» и «Снять всё».
+fn gear_tab(panel: &mut ChildSpawnerCommands, fonts: &Fonts, info: GearInfo) {
+    panel.spawn(text(
+        fonts,
+        format!(
+            "Деталей {} · предметов на складе {} · создать — в Мастерской на корабле",
+            info.details, info.stock
+        ),
+        false,
+        12.0,
+        MUTED,
+    ));
+    for (name, item) in info.slots {
+        panel
+            .spawn((
+                Node {
+                    padding: UiRect::axes(px(10), px(6)),
+                    column_gap: px(8),
+                    align_items: AlignItems::Center,
+                    border_radius: BorderRadius::all(px(8)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.05)),
+            ))
+            .with_children(|row| {
+                row.spawn(Node {
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                })
+                .with_children(|c| {
+                    c.spawn(text(fonts, name, true, 13.0, PARCHMENT));
+                    let line = item
+                        .as_ref()
+                        .map_or("пусто".to_string(), |(_, d, _, _)| d.clone());
+                    c.spawn(text(
+                        fonts,
+                        line,
+                        false,
+                        12.0,
+                        if item.is_some() { BETTER } else { MUTED },
+                    ));
+                });
+                if let Some((id, _, (silver, details), maxed)) = item {
+                    let label = if maxed {
+                        "предел".to_string()
+                    } else {
+                        format!("+1: {silver} сер., {details} дет.")
+                    };
+                    gear_hero_button(row, fonts, &label, !maxed, HeroGear::Enhance(id));
+                }
+            });
+    }
+    panel
+        .spawn(Node {
+            margin: UiRect::top(px(4)),
+            column_gap: px(8),
+            ..default()
+        })
+        .with_children(|row| {
+            gear_hero_button(row, fonts, "Надеть лучшее", true, HeroGear::Best);
+            gear_hero_button(row, fonts, "Снять всё", true, HeroGear::Clear);
+        });
+}
+
+#[derive(Clone, Copy)]
+enum HeroGear {
+    Best,
+    Clear,
+    Enhance(u32),
+}
+
+fn gear_hero_button(
+    row: &mut ChildSpawnerCommands,
+    fonts: &Fonts,
+    label: &str,
+    active: bool,
+    act: HeroGear,
+) {
+    let mut button = row.spawn((
+        Node {
+            padding: UiRect::axes(px(12), px(8)),
+            border: UiRect::all(px(1)),
+            border_radius: BorderRadius::all(px(8)),
+            ..default()
+        },
+        BackgroundColor(if active { GO } else { DISABLED }),
+        BorderColor::all(if active { GO_EDGE } else { MUTED }),
+    ));
+    button.with_child(text(fonts, label, true, 12.0, Color::WHITE));
+    if active {
+        pressable(&mut button);
+        button.observe(move |_: On<PointerClick>, mut commands: Commands| {
+            commands.run_system_cached_with(hero_gear_act, act);
+        });
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn hero_gear_act(
+    In(act): In<HeroGear>,
+    selected: Res<Selected>,
+    data: Res<GearData>,
+    mut gear: ResMut<Gear>,
+    mut profile: ResMut<Profile>,
+    mut toast: ResMut<Toast>,
+    mut dirty: ResMut<CrewDirty>,
+    mut sfx: MessageWriter<Sfx>,
+) {
+    let Some(hero) = selected.0.clone() else {
+        return;
+    };
+    match act {
+        HeroGear::Best => {
+            gear.equip_best(&hero, &data);
+            if gear.worn_by(&hero).iter().all(|s| s.is_none()) {
+                toast.show("Надеть нечего — создайте снаряжение в Мастерской");
+            } else {
+                sfx.write(Sfx("done"));
+            }
+        }
+        HeroGear::Clear => gear.unequip_all(&hero),
+        HeroGear::Enhance(id) => {
+            let Some(item) = gear.item(id) else {
+                return;
+            };
+            let (silver, details) = data.enhance_cost(item);
+            if profile.silver < silver || profile.details < details {
+                toast.show(&format!("Нужно {silver} серебра и {details} деталей"));
+                return;
+            }
+            if gear.enhance(id, &data) {
+                profile.silver -= silver;
+                profile.details -= details;
+                sfx.write(Sfx("hammer"));
+            }
+        }
+    }
+    dirty.0 = true;
 }
 
 /// Раздел «Каюта»: сосед, близость и бонус, или кого поселить рядом.

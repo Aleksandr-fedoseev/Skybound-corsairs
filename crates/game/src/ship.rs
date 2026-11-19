@@ -100,6 +100,10 @@ pub enum Effect {
     Cabins {
         values: Vec<u32>,
     },
+    /// Высшая редкость, которую создаёт Мастерская (1 — обычная).
+    Workshop {
+        values: Vec<u32>,
+    },
 }
 
 /// Значение по уровню: на уровне 0 (не построен) — ноль, выше таблицы — последнее.
@@ -243,6 +247,15 @@ impl Ship {
             Effect::Boats { values } => Some(values),
             _ => None,
         })
+    }
+
+    /// Высшая редкость в Мастерской (индекс), `None` — Мастерская не построена.
+    pub fn workshop_rarity(&self, data: &ShipData) -> Option<usize> {
+        let v = self.value(data, |e| match e {
+            Effect::Workshop { values } => Some(values),
+            _ => None,
+        });
+        (v > 0).then(|| v as usize - 1)
     }
 
     pub fn cabins(&self, data: &ShipData) -> u32 {
@@ -415,6 +428,13 @@ fn effect_line(effect: &Effect, level: u32) -> String {
             format!("Шлюпок для экспедиций: +{}", at(values, level))
         }
         Effect::Cabins { values } => format!("Кают для соседей: {}", at(values, level)),
+        Effect::Workshop { values } => {
+            let name = ["обычное", "редкое", "эпическое"]
+                .get(at(values, level).saturating_sub(1) as usize)
+                .copied()
+                .unwrap_or("обычное");
+            format!("Создаёт снаряжение до редкости: {name}")
+        }
     }
 }
 
@@ -426,6 +446,7 @@ pub fn panel(
     ship: &Ship,
     profile: &Profile,
     id: &str,
+    extra: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
     let Some(compartment) = data.compartment(id) else {
         return;
@@ -614,6 +635,7 @@ pub fn panel(
                 );
             }
         });
+        extra(p);
     });
 }
 

@@ -14,6 +14,7 @@ mod crew;
 mod dev;
 mod expeditions;
 mod fx;
+mod gear;
 mod map;
 mod menu;
 mod save;
@@ -90,6 +91,7 @@ fn main() {
         abyss::plugin,
         expeditions::plugin,
         cabins::plugin,
+        gear::plugin,
     ))
     .add_message::<Shown>()
     .insert_resource(crew)

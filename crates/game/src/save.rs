@@ -16,6 +16,7 @@ use crate::contracts::Contracts;
 use crate::convoys::{ConvoyData, Convoys};
 use crate::crew::Roster;
 use crate::expeditions::Expeditions;
+use crate::gear::Gear;
 use crate::menu::{Profile, Progress, Toast};
 use crate::ship::{Ship, ShipData};
 use crate::tavern::TavernState;
@@ -44,6 +45,8 @@ pub struct SaveData {
     pub expeditions: Expeditions,
     #[serde(default)]
     pub cabins: Cabins,
+    #[serde(default)]
+    pub gear: Gear,
 }
 
 pub fn now() -> u64 {
@@ -154,7 +157,8 @@ pub fn apply(app: &mut App, mut save: SaveData) {
         .insert_resource(save.contracts)
         .insert_resource(save.abyss)
         .insert_resource(save.expeditions)
-        .insert_resource(save.cabins);
+        .insert_resource(save.cabins)
+        .insert_resource(save.gear);
     if !report.is_empty() {
         app.world_mut().resource_mut::<Toast>().show_long(&report);
     }
@@ -177,6 +181,7 @@ struct State<'w> {
     abyss: Res<'w, Abyss>,
     expeditions: Res<'w, Expeditions>,
     cabins: Res<'w, Cabins>,
+    gear: Res<'w, Gear>,
 }
 
 impl State<'_> {
@@ -194,6 +199,7 @@ impl State<'_> {
             abyss: self.abyss.clone(),
             expeditions: self.expeditions.clone(),
             cabins: self.cabins.clone(),
+            gear: self.gear.clone(),
         }
     }
 }
@@ -238,6 +244,7 @@ mod tests {
             abyss: Abyss::default(),
             expeditions: Expeditions::default(),
             cabins: Cabins::default(),
+            gear: Gear::default(),
         }
     }
 

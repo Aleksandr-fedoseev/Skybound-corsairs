@@ -41,6 +41,7 @@ pub struct AbyssData {
     pub charts: u32,
     pub boss_doubloons: u32,
     pub boss_figureheads: u32,
+    pub details_per_floor: u32,
 }
 
 /// Что даёт этаж при первом прохождении.
@@ -51,6 +52,7 @@ pub struct FloorReward {
     pub charts: u32,
     pub doubloons: u32,
     pub figureheads: u32,
+    pub details: u32,
 }
 
 impl AbyssData {
@@ -91,6 +93,7 @@ impl AbyssData {
             },
             doubloons: if boss { self.boss_doubloons } else { 0 },
             figureheads: if boss { self.boss_figureheads } else { 0 },
+            details: self.details_per_floor,
         }
     }
 
@@ -117,6 +120,9 @@ impl FloorReward {
             format!("+{} серебра", self.silver),
             format!("+{} журналов", self.journals),
         ];
+        if self.details > 0 {
+            parts.push(format!("+{} деталей", self.details));
+        }
         if self.charts > 0 {
             parts.push(format!("+{} лоции", self.charts));
         }

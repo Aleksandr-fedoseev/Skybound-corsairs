@@ -52,6 +52,10 @@
       "effect": { "kind": "boats", "values": [1, 1, 2, 2, 3, 3, 3] }
     },
     {
+      "id": "workshop", "name": "Мастерская", "icon": "menu/module_navigation.png", "unlock_hull": 3, "start_level": 0,
+      "effect": { "kind": "workshop", "values": [1, 1, 2, 2, 3, 3, 3] }
+    },
+    {
       "id": "cabins", "name": "Каюты", "icon": "menu/module_infirmary.png", "unlock_hull": 4, "start_level": 0,
       "effect": { "kind": "cabins", "values": [1, 2, 3, 4, 5, 5, 5] }
     },
