@@ -17,6 +17,7 @@ use crate::menu::{
     BRASS, GO, GO_EDGE, GOLD, MUTED, PARCHMENT, Profile, Toast, WOOD, bottom_nav, pressable,
     spawn_toast, text,
 };
+use crate::ship::{Ship, ShipData};
 use crate::view::{Fonts, element_color};
 
 const FREE: Color = Color::srgb(0.30, 0.62, 0.38);
@@ -107,8 +108,8 @@ pub fn pull(
 struct TavernState {
     pity: Pity,
     rng: Rng,
-    /// День (по UTC), когда был взят бесплатный найм.
-    free_used_on: Option<u64>,
+    /// День (по UTC) и сколько бесплатных наймов в этот день уже взято.
+    free_used: (u64, u32),
 }
 
 impl Default for TavernState {
@@ -116,7 +117,7 @@ impl Default for TavernState {
         Self {
             pity: Pity::default(),
             rng: Rng::new(random_seed()),
-            free_used_on: None,
+            free_used: (0, 0),
         }
     }
 }
@@ -128,8 +129,24 @@ fn today() -> u64 {
 }
 
 impl TavernState {
-    fn free_ready(&self) -> bool {
-        self.free_used_on != Some(today())
+    /// Сколько бесплатных наймов осталось сегодня при лимите `per_day`.
+    fn free_left(&self, per_day: u32) -> u32 {
+        let (day, used) = self.free_used;
+        if day == today() {
+            per_day.saturating_sub(used)
+        } else {
+            per_day
+        }
+    }
+
+    fn use_free(&mut self) {
+        let day = today();
+        let used = if self.free_used.0 == day {
+            self.free_used.1
+        } else {
+            0
+        };
+        self.free_used = (day, used + 1);
     }
 }
 
@@ -203,6 +220,8 @@ fn spawn_tavern(
     fonts: Res<Fonts>,
     cfg: Res<TavernData>,
     state: Res<TavernState>,
+    ship: Res<Ship>,
+    ship_data: Res<ShipData>,
     profile: Res<Profile>,
     roster: Res<Roster>,
     screen: Res<BattleScreen>,
@@ -213,6 +232,7 @@ fn spawn_tavern(
         &fonts,
         &cfg,
         &state,
+        ship.free_hires(&ship_data),
         &profile,
         &roster,
         &screen.data,
@@ -228,6 +248,8 @@ fn rebuild_tavern(
     fonts: Res<Fonts>,
     cfg: Res<TavernData>,
     state: Res<TavernState>,
+    ship: Res<Ship>,
+    ship_data: Res<ShipData>,
     profile: Res<Profile>,
     roster: Res<Roster>,
     screen: Res<BattleScreen>,
@@ -246,6 +268,7 @@ fn rebuild_tavern(
         &fonts,
         &cfg,
         &state,
+        ship.free_hires(&ship_data),
         &profile,
         &roster,
         &screen.data,
@@ -262,6 +285,7 @@ fn build(
     fonts: &Fonts,
     cfg: &TavernData,
     state: &TavernState,
+    free_per_day: u32,
     profile: &Profile,
     roster: &Roster,
     data: &GameData,
@@ -293,7 +317,7 @@ fn build(
             ));
             pool_row(root, fonts, cfg, roster, data);
             odds(root, fonts, cfg, state);
-            hire_buttons(root, fonts, cfg, state, profile);
+            hire_buttons(root, fonts, cfg, state.free_left(free_per_day), profile);
             bottom_nav(root, assets, fonts, Screen::Tavern);
             spawn_toast(root, fonts);
         });
@@ -481,7 +505,7 @@ fn hire_buttons(
     root: &mut ChildSpawnerCommands,
     fonts: &Fonts,
     cfg: &TavernData,
-    state: &TavernState,
+    free_left: u32,
     profile: &Profile,
 ) {
     root.spawn(Node {
@@ -494,7 +518,7 @@ fn hire_buttons(
         ..default()
     })
     .with_children(|col| {
-        let free = state.free_ready();
+        let free = free_left > 0;
         hire_button(
             col,
             fonts,
@@ -504,7 +528,7 @@ fn hire_buttons(
             } else {
                 "Бесплатный найм — завтра"
             },
-            "раз в день".to_string(),
+            format!("осталось сегодня: {free_left} · больше — с уровнем Таверны"),
             if free { FREE } else { DISABLED },
         );
         col.spawn(Node {
@@ -573,6 +597,8 @@ fn hire_heroes(
     cfg: Res<TavernData>,
     screen: Res<BattleScreen>,
     mut state: ResMut<TavernState>,
+    ship: Res<Ship>,
+    ship_data: Res<ShipData>,
     mut profile: ResMut<Profile>,
     mut roster: ResMut<Roster>,
     mut results: ResMut<Results>,
@@ -581,11 +607,11 @@ fn hire_heroes(
 ) {
     let count = match hire {
         Hire::Free => {
-            if !state.free_ready() {
-                toast.show("Бесплатный найм уже был сегодня — заходите завтра");
+            if state.free_left(ship.free_hires(&ship_data)) == 0 {
+                toast.show("Бесплатные наймы на сегодня кончились — заходите завтра");
                 return;
             }
-            state.free_used_on = Some(today());
+            state.use_free();
             1
         }
         Hire::Single | Hire::Ten => {

@@ -13,9 +13,8 @@ use game_data::GameData;
 use crate::battlefield::FieldConfig;
 use serde::Deserialize;
 
-const SHIP: Ship = Ship {
-    broadside_power: 120,
-};
+/// Залп до первых данных о корабле (Пушечная палуба ур. 1).
+const BASE_BROADSIDE: u32 = 120;
 /// Не больше стольких событий за кадр, чтобы на x3 бой не «проскакивал».
 const MAX_EVENTS_PER_FRAME: usize = 8;
 
@@ -92,6 +91,8 @@ pub struct BattleScreen {
     pub team: Vec<(String, u32)>,
     /// Прибавка к уровню всех героев в тестовой сцене (клавиши [ и ]).
     pub gym_bonus: u32,
+    /// Сила залпа: от уровня Пушечной палубы.
+    pub broadside_power: u32,
     pub seed: u64,
     pub battle: Battle,
     /// Здоровье, которое сейчас видит игрок.
@@ -119,7 +120,7 @@ impl BattleScreen {
         team: Vec<(String, u32)>,
     ) -> Self {
         let seed = random_seed();
-        let battle = new_battle(&data, 0, &team, 0, seed);
+        let battle = new_battle(&data, 0, &team, 0, BASE_BROADSIDE, seed);
         let mut screen = Self {
             data,
             look,
@@ -128,6 +129,7 @@ impl BattleScreen {
             stage: 0,
             team,
             gym_bonus: 0,
+            broadside_power: BASE_BROADSIDE,
             seed,
             battle,
             shown_hp: Vec::new(),
@@ -160,6 +162,7 @@ impl BattleScreen {
             self.stage,
             &self.team,
             self.gym_bonus,
+            self.broadside_power,
             self.seed,
         );
         self.reset_view();
@@ -248,6 +251,7 @@ fn new_battle(
     stage: usize,
     team: &[(String, u32)],
     bonus: u32,
+    broadside_power: u32,
     seed: u64,
 ) -> Battle {
     let team = team
@@ -261,7 +265,7 @@ fn new_battle(
     let enemies = data
         .stage_enemies(&data.stages[stage].id)
         .expect("этап есть в data/stages.json");
-    Battle::new(team, enemies, SHIP, seed)
+    Battle::new(team, enemies, Ship { broadside_power }, seed)
 }
 
 /// Выход в поход: этап с карты или следующий непройденный.
@@ -270,8 +274,11 @@ pub fn enter(
     progress: Res<crate::menu::Progress>,
     voyage: Res<crate::menu::Voyage>,
     roster: Res<crate::crew::Roster>,
+    ship: Res<crate::ship::Ship>,
+    ship_data: Res<crate::ship::ShipData>,
 ) {
     screen.team = roster.team_levels();
+    screen.broadside_power = ship.broadside(&ship_data);
     let next = progress.next_stage(screen.data.stages.len());
     screen.stage = voyage.stage.unwrap_or(next);
     screen.paused = false;

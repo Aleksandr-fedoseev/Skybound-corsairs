@@ -2,32 +2,17 @@
   "ship_name": "Ласточка",
   "start": {
     "captain_level": 1,
-    "hull_level": 1,
     "silver": 500,
-    "hold_capacity": 2000,
     "planks": 120,
     "ether": 0,
     "doubloons": 300,
     "journals": 100,
     "ether_waiting": 24
   },
-  "ether_per_minute": 6.0,
-  "victory_reward": { "silver": 120, "planks": 25, "journals": 100 },
-  "first_clear_doubloons": 100,
-  "ship_art": [
-    { "from_hull": 1, "image": "menu/ship_lvl1.png" },
-    { "from_hull": 3, "image": "menu/ship_lvl3.png" },
-    { "from_hull": 5, "image": "menu/ship_lvl5.png" }
-  ],
-  "compartments": [
-    { "name": "Пушечная палуба", "icon": "menu/module_cannon_deck.png", "hull": 1 },
-    { "name": "Трюм", "icon": "menu/module_hold.png", "hull": 1 },
-    { "name": "Ветроловы", "icon": "menu/module_windcatchers.png", "hull": 1 },
-    { "name": "Таверна", "icon": "menu/module_tavern.png", "hull": 1, "opens": "tavern" },
-    { "name": "Тренировочная палуба", "short": "Тренировка", "icon": "menu/module_training_deck.png", "hull": 2 },
-    { "name": "Штурманская рубка", "short": "Рубка", "icon": "menu/module_navigation.png", "hull": 2 },
-    { "name": "Шлюпки", "icon": "menu/module_boats.png", "hull": 4 },
-    { "name": "Лазарет", "icon": "menu/module_infirmary.png", "hull": 6 },
-    { "name": "Подзорная башня", "icon": "menu/module_lookout.png", "hull": 7 }
-  ]
+  "victory_reward": {
+    "silver": 120,
+    "planks": 40,
+    "journals": 100
+  },
+  "first_clear_doubloons": 100
 }

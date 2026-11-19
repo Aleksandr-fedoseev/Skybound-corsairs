@@ -10,6 +10,7 @@ mod dev;
 mod fx;
 mod map;
 mod menu;
+mod ship;
 mod tavern;
 mod view;
 
@@ -65,7 +66,13 @@ fn main() {
             _ => Screen::Menu,
         })
         .init_resource::<view::Fonts>()
-        .add_plugins((menu::plugin, map::plugin, crew::plugin, tavern::plugin))
+        .add_plugins((
+            menu::plugin,
+            map::plugin,
+            crew::plugin,
+            tavern::plugin,
+            ship::plugin,
+        ))
         .add_message::<Shown>()
         .insert_resource(crew)
         .insert_resource(roster)

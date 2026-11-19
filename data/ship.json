@@ -1,0 +1,54 @@
+{
+  "max_level": 7,
+  "speedup_doubloons_per_minute": 5,
+  "hull_cost_factor": 1.5,
+  "levels": [
+    { "level": 1, "seconds": 60, "silver": 150, "planks": 40, "ether": 0 },
+    { "level": 2, "seconds": 60, "silver": 200, "planks": 40, "ether": 0 },
+    { "level": 3, "seconds": 180, "silver": 400, "planks": 90, "ether": 0 },
+    { "level": 4, "seconds": 900, "silver": 800, "planks": 180, "ether": 40 },
+    { "level": 5, "seconds": 2700, "silver": 1500, "planks": 320, "ether": 90 },
+    { "level": 6, "seconds": 7200, "silver": 2800, "planks": 560, "ether": 180 },
+    { "level": 7, "seconds": 21600, "silver": 5000, "planks": 1000, "ether": 350 }
+  ],
+  "ship_art": [
+    { "from_hull": 1, "image": "menu/ship_lvl1.png" },
+    { "from_hull": 3, "image": "menu/ship_lvl3.png" },
+    { "from_hull": 5, "image": "menu/ship_lvl5.png" }
+  ],
+  "compartments": [
+    {
+      "id": "hull", "name": "Корпус", "icon": "menu/ship_lvl1.png", "unlock_hull": 1, "start_level": 1,
+      "effect": { "kind": "hull" }
+    },
+    {
+      "id": "cannon_deck", "name": "Пушечная палуба", "short": "Пушки", "icon": "menu/module_cannon_deck.png", "unlock_hull": 1, "start_level": 1,
+      "effect": { "kind": "broadside", "values": [120, 150, 185, 225, 270, 320, 380] }
+    },
+    {
+      "id": "hold", "name": "Трюм", "icon": "menu/module_hold.png", "unlock_hull": 1, "start_level": 1,
+      "effect": {
+        "kind": "hold",
+        "silver": [2000, 3500, 6000, 10000, 16000, 25000, 40000],
+        "planks": [600, 1000, 1700, 2800, 4500, 7000, 11000],
+        "ether": [300, 500, 900, 1500, 2500, 4000, 6500]
+      }
+    },
+    {
+      "id": "windcatchers", "name": "Ветроловы", "icon": "menu/module_windcatchers.png", "unlock_hull": 1, "start_level": 1,
+      "effect": { "kind": "ether_per_minute", "values": [6, 9, 13, 18, 24, 31, 40] }
+    },
+    {
+      "id": "tavern", "name": "Таверна", "icon": "menu/module_tavern.png", "unlock_hull": 1, "start_level": 1, "opens": "tavern",
+      "effect": { "kind": "free_hires", "values": [1, 1, 2, 2, 2, 3, 3] }
+    },
+    {
+      "id": "training_deck", "name": "Тренировочная палуба", "short": "Тренировка", "icon": "menu/module_training_deck.png", "unlock_hull": 2, "start_level": 0,
+      "effect": { "kind": "journals_per_minute", "values": [2, 3, 4, 6, 8, 10, 13] }
+    },
+    { "id": "navigation", "name": "Штурманская рубка", "short": "Рубка", "icon": "menu/module_navigation.png", "unlock_hull": 2, "start_level": 0 },
+    { "id": "boats", "name": "Шлюпки", "icon": "menu/module_boats.png", "unlock_hull": 4, "start_level": 0 },
+    { "id": "infirmary", "name": "Лазарет", "icon": "menu/module_infirmary.png", "unlock_hull": 6, "start_level": 0 },
+    { "id": "lookout", "name": "Подзорная башня", "icon": "menu/module_lookout.png", "unlock_hull": 7, "start_level": 0 }
+  ]
+}

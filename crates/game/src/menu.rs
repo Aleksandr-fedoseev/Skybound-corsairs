@@ -7,8 +7,11 @@ use battle_core::Outcome;
 use bevy::prelude::*;
 use serde::Deserialize;
 
+use bevy::ecs::system::SystemParam;
+
 use crate::Screen;
 use crate::battle_screen::BattleScreen;
+use crate::ship::{Compartment, OpenCompartment, Ship, ShipData};
 use crate::view::{Fonts, ResultNote};
 
 pub(crate) const WOOD: Color = Color::srgba(0.11, 0.075, 0.05, 0.90);
@@ -36,21 +39,15 @@ const PRESSED_SCALE: f32 = 0.94;
 pub struct MenuData {
     pub ship_name: String,
     pub start: Start,
-    pub ether_per_minute: f32,
     pub victory_reward: Reward,
     /// Дублоны за первое прохождение этапа.
     pub first_clear_doubloons: u32,
-    /// Картинка корабля по уровню Корпуса: берётся последняя, у которой `from_hull` ≤ уровня.
-    pub ship_art: Vec<ShipArt>,
-    pub compartments: Vec<Compartment>,
 }
 
 #[derive(Deserialize, Clone)]
 pub struct Start {
     pub captain_level: u32,
-    pub hull_level: u32,
     pub silver: u32,
-    pub hold_capacity: u32,
     pub planks: u32,
     pub ether: u32,
     pub doubloons: u32,
@@ -67,38 +64,10 @@ pub struct Reward {
     pub journals: u32,
 }
 
-#[derive(Deserialize, Clone)]
-pub struct ShipArt {
-    pub from_hull: u32,
-    pub image: String,
-}
-
-#[derive(Deserialize, Clone)]
-pub struct Compartment {
-    pub name: String,
-    /// Подпись под иконкой, если полное имя не влезает.
-    #[serde(default)]
-    pub short: Option<String>,
-    pub icon: String,
-    /// Экран, который открывает тап по отсеку (`"tavern"`); без него — подсказка.
-    #[serde(default)]
-    pub opens: Option<String>,
-    /// С какого уровня Корпуса открывается.
-    pub hull: u32,
-}
-
 impl MenuData {
     pub fn bundled() -> Self {
         serde_json::from_str(include_str!("../../../data/menu.json"))
             .expect("data/menu.json корректен")
-    }
-
-    fn ship_image(&self, hull: u32) -> &str {
-        self.ship_art
-            .iter()
-            .rfind(|art| art.from_hull <= hull)
-            .or(self.ship_art.first())
-            .map_or("", |art| art.image.as_str())
     }
 }
 
@@ -106,9 +75,7 @@ impl MenuData {
 #[derive(Resource)]
 pub struct Profile {
     pub captain_level: u32,
-    pub hull_level: u32,
     pub silver: u32,
-    pub hold_capacity: u32,
     pub planks: u32,
     pub ether: u32,
     pub doubloons: u32,
@@ -121,9 +88,7 @@ impl Profile {
     fn new(start: &Start) -> Self {
         Self {
             captain_level: start.captain_level,
-            hull_level: start.hull_level,
             silver: start.silver,
-            hold_capacity: start.hold_capacity,
             planks: start.planks,
             ether: start.ether,
             doubloons: start.doubloons,
@@ -163,9 +128,9 @@ impl Toast {
     }
 }
 
-/// Меню надо собрать заново (например, сменился уровень Корпуса).
+/// Меню надо собрать заново (например, отсек достроился).
 #[derive(Resource, Default)]
-struct MenuRebuild(bool);
+pub(crate) struct MenuRebuild(pub bool);
 
 #[derive(Component)]
 struct MenuRoot;
@@ -213,7 +178,6 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Voyage>()
         .init_resource::<MenuRebuild>()
         .add_systems(OnEnter(Screen::Menu), spawn_menu)
-        .add_systems(Update, accumulate_ether)
         .add_systems(
             Update,
             (rebuild_menu, refresh_values, refresh_ether_bubble, bob_ship)
@@ -233,37 +197,29 @@ pub fn plugin(app: &mut App) {
     app.add_systems(Update, dev_hull_key.run_if(in_state(Screen::Menu)));
 }
 
-fn spawn_menu(
-    mut commands: Commands,
-    assets: Res<AssetServer>,
-    fonts: Res<Fonts>,
-    data: Res<MenuData>,
-    profile: Res<Profile>,
-    progress: Res<Progress>,
-    screen: Res<BattleScreen>,
-) {
-    build(
-        &mut commands,
-        &assets,
-        &fonts,
-        &data,
-        &profile,
-        &progress,
-        &screen,
-    );
+/// Всё, из чего собирается экран корабля.
+#[derive(SystemParam)]
+struct MenuView<'w> {
+    assets: Res<'w, AssetServer>,
+    fonts: Res<'w, Fonts>,
+    data: Res<'w, MenuData>,
+    profile: Res<'w, Profile>,
+    progress: Res<'w, Progress>,
+    screen: Res<'w, BattleScreen>,
+    ship_data: Res<'w, ShipData>,
+    ship: Res<'w, Ship>,
+    open: Res<'w, OpenCompartment>,
 }
 
-#[allow(clippy::too_many_arguments)]
+fn spawn_menu(mut commands: Commands, view: MenuView) {
+    build(&mut commands, &view);
+}
+
 fn rebuild_menu(
     mut commands: Commands,
     mut rebuild: ResMut<MenuRebuild>,
     roots: Query<Entity, With<MenuRoot>>,
-    assets: Res<AssetServer>,
-    fonts: Res<Fonts>,
-    data: Res<MenuData>,
-    profile: Res<Profile>,
-    progress: Res<Progress>,
-    screen: Res<BattleScreen>,
+    view: MenuView,
 ) {
     if !rebuild.0 {
         return;
@@ -272,15 +228,7 @@ fn rebuild_menu(
     for root in &roots {
         commands.entity(root).despawn();
     }
-    build(
-        &mut commands,
-        &assets,
-        &fonts,
-        &data,
-        &profile,
-        &progress,
-        &screen,
-    );
+    build(&mut commands, &view);
 }
 
 pub(crate) fn text(
@@ -341,16 +289,16 @@ pub(crate) fn stage_title(id: &str) -> String {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn build(
-    commands: &mut Commands,
-    assets: &AssetServer,
-    fonts: &Fonts,
-    data: &MenuData,
-    profile: &Profile,
-    progress: &Progress,
-    screen: &BattleScreen,
-) {
+fn build(commands: &mut Commands, view: &MenuView) {
+    let (assets, fonts, data, profile, progress, screen) = (
+        &*view.assets,
+        &*view.fonts,
+        &*view.data,
+        &*view.profile,
+        &*view.progress,
+        &*view.screen,
+    );
+    let (ship_data, ship) = (&*view.ship_data, &*view.ship);
     let stages = &screen.data.stages;
     let next = &stages[progress.next_stage(stages.len())];
     let done = progress.all_cleared(stages.len());
@@ -396,7 +344,7 @@ fn build(
                 ));
                 title.spawn(text(
                     fonts,
-                    format!("Корпус · ур. {}", profile.hull_level),
+                    format!("Корпус · ур. {}", ship.hull()),
                     false,
                     13.0,
                     PARCHMENT,
@@ -413,7 +361,7 @@ fn build(
                     width: px(380),
                     ..default()
                 },
-                ImageNode::new(assets.load(data.ship_image(profile.hull_level).to_string())),
+                ImageNode::new(assets.load(ship_data.ship_image(ship.hull()).to_string())),
                 Pickable::IGNORE,
             ));
 
@@ -438,8 +386,19 @@ fn build(
             bubble.with_child(text(fonts, "", true, 14.0, Color::WHITE));
             pressable(&mut bubble);
             bubble.observe(
-                |_: On<PointerClick>, mut profile: ResMut<Profile>, mut toast: ResMut<Toast>| {
-                    let got = profile.ether_pending.floor() as u32;
+                |_: On<PointerClick>,
+                 mut profile: ResMut<Profile>,
+                 mut toast: ResMut<Toast>,
+                 ship: Res<Ship>,
+                 ship_data: Res<ShipData>| {
+                    let room = ship
+                        .capacity(&ship_data)
+                        .ether
+                        .saturating_sub(profile.ether);
+                    let got = (profile.ether_pending.floor() as u32).min(room);
+                    if got == 0 && profile.ether_pending >= 1.0 {
+                        toast.show("Трюм полон: эфир некуда класть — улучшите Трюм");
+                    }
                     if got > 0 {
                         profile.ether += got;
                         profile.ether_pending -= got as f32;
@@ -448,9 +407,12 @@ fn build(
                 },
             );
 
-            compartments(root, assets, fonts, data, profile);
+            compartments(root, assets, fonts, ship_data, ship);
             voyage(root, fonts, next, done);
             bottom_nav(root, assets, fonts, Screen::Menu);
+            if let Some(id) = &view.open.0 {
+                crate::ship::panel(root, fonts, ship_data, ship, profile, id);
+            }
             spawn_toast(root, fonts);
         });
 }
@@ -689,12 +651,13 @@ fn compartments(
     root: &mut ChildSpawnerCommands,
     assets: &AssetServer,
     fonts: &Fonts,
-    data: &MenuData,
-    profile: &Profile,
+    data: &ShipData,
+    ship: &Ship,
 ) {
     // Сначала открытые отсеки, потом ближайшие закрытые.
+    let hull = ship.hull();
     let mut shown: Vec<&Compartment> = data.compartments.iter().collect();
-    shown.sort_by_key(|c| (c.hull > profile.hull_level, c.hull));
+    shown.sort_by_key(|c| (c.unlock_hull > hull, c.unlock_hull));
     shown.truncate(COMPARTMENTS_SHOWN);
 
     root.spawn((
@@ -704,7 +667,7 @@ fn compartments(
             left: px(10),
             width: px(520),
             height: px(96),
-            padding: UiRect::axes(px(6), px(6)),
+            padding: UiRect::axes(px(6), px(4)),
             justify_content: JustifyContent::SpaceBetween,
             border: UiRect::all(px(1)),
             border_radius: BorderRadius::all(px(14)),
@@ -715,7 +678,9 @@ fn compartments(
     ))
     .with_children(|row| {
         for compartment in shown {
-            let open = compartment.hull <= profile.hull_level;
+            let open = compartment.unlock_hull <= hull;
+            let level = ship.level(&compartment.id);
+            let building = ship.build.as_ref().is_some_and(|b| b.id == compartment.id);
             let mut tile = row.spawn(Node {
                 width: px(82),
                 flex_direction: FlexDirection::Column,
@@ -725,12 +690,12 @@ fn compartments(
             tile.with_children(|t| {
                 t.spawn((
                     Node {
-                        width: px(70),
-                        height: px(54),
+                        width: px(66),
+                        height: px(50),
                         ..default()
                     },
                     ImageNode {
-                        color: if open {
+                        color: if open && level > 0 {
                             Color::WHITE
                         } else {
                             Color::srgba(0.35, 0.35, 0.38, 0.9)
@@ -752,44 +717,25 @@ fn compartments(
                     ),
                     TextLayout::justify(Justify::Center),
                 ));
-                if !open {
-                    t.spawn((
-                        Node {
-                            position_type: PositionType::Absolute,
-                            top: px(16),
-                            ..default()
-                        },
-                        text(
-                            fonts,
-                            format!("Корпус {}", compartment.hull),
-                            true,
-                            12.0,
-                            GOLD,
-                        ),
-                    ));
-                }
+                let (status, color) = if building {
+                    ("строится".to_string(), GOLD)
+                } else if !open {
+                    (format!("Корпус {}", compartment.unlock_hull), GOLD)
+                } else if level == 0 {
+                    ("построить".to_string(), GOLD)
+                } else {
+                    (format!("ур. {level}"), MUTED)
+                };
+                t.spawn(text(fonts, status, building || level == 0, 12.0, color));
             });
-            let message = if open {
-                format!("{} — экран отсека появится позже", compartment.name)
-            } else {
-                format!(
-                    "{} откроется на Корпусе {}",
-                    compartment.name, compartment.hull
-                )
-            };
-            let opens = match compartment.opens.as_deref() {
-                Some("tavern") if open => Some(Screen::Tavern),
-                _ => None,
-            };
+            let id = compartment.id.clone();
             pressable(&mut tile);
             tile.observe(
                 move |_: On<PointerClick>,
-                      mut toast: ResMut<Toast>,
-                      mut next: ResMut<NextState<Screen>>| {
-                    match opens {
-                        Some(screen) => next.set(screen),
-                        None => toast.show(&message),
-                    }
+                      mut opened: ResMut<OpenCompartment>,
+                      mut rebuild: ResMut<MenuRebuild>| {
+                    opened.0 = Some(id.clone());
+                    rebuild.0 = true;
                 },
             );
         }
@@ -940,15 +886,16 @@ pub(crate) fn bottom_nav(
     });
 }
 
-/// Ветроловы копят эфир всегда, даже во время боя.
-fn accumulate_ether(time: Res<Time>, data: Res<MenuData>, mut profile: ResMut<Profile>) {
-    profile.ether_pending += time.delta_secs() * data.ether_per_minute / 60.0;
-}
-
-fn refresh_values(profile: Res<Profile>, mut texts: Query<(&Value, &mut Text)>) {
+fn refresh_values(
+    profile: Res<Profile>,
+    ship: Res<Ship>,
+    ship_data: Res<ShipData>,
+    mut texts: Query<(&Value, &mut Text)>,
+) {
+    let cap = ship.capacity(&ship_data);
     for (value, mut text) in &mut texts {
         let shown = match value {
-            Value::Silver => format!("{} / {}", profile.silver, profile.hold_capacity),
+            Value::Silver => format!("{} / {}", profile.silver, cap.silver),
             Value::Planks => profile.planks.to_string(),
             Value::Ether => profile.ether.to_string(),
             Value::Doubloons => profile.doubloons.to_string(),
@@ -1010,11 +957,14 @@ fn bob_ship(time: Res<Time>, mut ships: Query<&mut UiTransform, With<ShipSprite>
 }
 
 /// Победа открывает следующий этап и приносит добычу.
+#[allow(clippy::too_many_arguments)]
 fn count_victory(
     screen: Res<BattleScreen>,
     data: Res<MenuData>,
     mut progress: ResMut<Progress>,
     mut profile: ResMut<Profile>,
+    ship: Res<Ship>,
+    ship_data: Res<ShipData>,
     mut counted: Local<Option<(usize, u64)>>,
     mut notes: Query<&mut Text, With<ResultNote>>,
 ) {
@@ -1029,8 +979,9 @@ fn count_victory(
     let note = match outcome {
         Outcome::Victory => {
             let reward = &data.victory_reward;
-            profile.silver = (profile.silver + reward.silver).min(profile.hold_capacity);
-            profile.planks += reward.planks;
+            let cap = ship.capacity(&ship_data);
+            profile.silver = (profile.silver + reward.silver).min(cap.silver);
+            profile.planks = (profile.planks + reward.planks).min(cap.planks);
             profile.journals += reward.journals;
             let first = screen.stage == progress.cleared;
             if first {
@@ -1064,11 +1015,11 @@ fn count_victory(
 #[cfg(feature = "dev")]
 fn dev_hull_key(
     keys: Res<ButtonInput<KeyCode>>,
-    mut profile: ResMut<Profile>,
+    mut ship: ResMut<Ship>,
     mut rebuild: ResMut<MenuRebuild>,
 ) {
     if keys.just_pressed(KeyCode::KeyH) {
-        profile.hull_level = profile.hull_level % 7 + 1;
+        ship.dev_next_hull();
         rebuild.0 = true;
     }
 }
