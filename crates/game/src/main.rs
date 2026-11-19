@@ -13,6 +13,7 @@ mod map;
 mod menu;
 mod save;
 mod ship;
+mod story;
 mod tavern;
 mod view;
 
@@ -77,6 +78,7 @@ fn main() {
         ship::plugin,
         audio::plugin,
         save::plugin,
+        story::plugin,
     ))
     .add_message::<Shown>()
     .insert_resource(crew)

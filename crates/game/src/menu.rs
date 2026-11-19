@@ -13,6 +13,7 @@ use crate::Screen;
 use crate::audio::Sfx;
 use crate::battle_screen::BattleScreen;
 use crate::ship::{Compartment, OpenCompartment, Ship, ShipData};
+use crate::story::{StoryQueue, VoyageRequest};
 use crate::view::{Fonts, ResultNote};
 
 pub(crate) const WOOD: Color = Color::srgba(0.11, 0.075, 0.05, 0.90);
@@ -104,6 +105,9 @@ impl Profile {
 #[derive(Resource, Default, Clone, Serialize, Deserialize)]
 pub struct Progress {
     pub cleared: usize,
+    /// Просмотренные сцены сюжета.
+    #[serde(default)]
+    pub seen: Vec<String>,
 }
 
 impl Progress {
@@ -813,9 +817,9 @@ fn voyage(root: &mut ChildSpawnerCommands, fonts: &Fonts, next: &game_data::Stag
         go.observe(
             |_: On<PointerClick>,
              mut voyage: ResMut<Voyage>,
-             mut next: ResMut<NextState<Screen>>| {
+             mut requests: MessageWriter<VoyageRequest>| {
                 *voyage = Voyage::default();
-                next.set(Screen::Battle);
+                requests.write(VoyageRequest);
             },
         );
     });
@@ -981,6 +985,7 @@ fn count_victory(
     ship: Res<Ship>,
     ship_data: Res<ShipData>,
     mut counted: Local<Option<(usize, u64)>>,
+    mut story: ResMut<StoryQueue>,
     mut notes: Query<&mut Text, With<ResultNote>>,
 ) {
     let Some(outcome) = screen.shown_outcome else {
@@ -1000,6 +1005,7 @@ fn count_victory(
             profile.journals += reward.journals;
             let first = screen.stage == progress.cleared;
             if first {
+                story.0.push(screen.data.stages[screen.stage].id.clone());
                 progress.cleared += 1;
                 profile.doubloons += data.first_clear_doubloons;
             }

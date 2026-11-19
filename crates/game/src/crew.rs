@@ -1083,7 +1083,9 @@ mod tests {
         let mut roster = Roster::new(&crew);
         assert!(roster.merge_plan(&data, &crew, "ren").is_err());
         roster.recruit("ren"); // копия
-        let plan = roster.merge_plan(&data, &crew, "ren").expect("до 2★ хватает одной копии");
+        let plan = roster
+            .merge_plan(&data, &crew, "ren")
+            .expect("до 2★ хватает одной копии");
         roster.merge("ren", &plan);
         assert_eq!(roster.stars("ren"), 2);
         assert_eq!(roster.copies("ren"), 0);

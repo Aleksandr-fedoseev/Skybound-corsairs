@@ -13,6 +13,7 @@ use crate::menu::{
     BRASS, DARK_WOOD, GO, GO_EDGE, GOLD, MUTED, MenuData, PARCHMENT, Progress, Toast, Voyage, WOOD,
     bottom_nav, pressable, spawn_toast, text,
 };
+use crate::story::VoyageRequest;
 use crate::view::Fonts;
 
 const CLEARED: Color = Color::srgb(0.30, 0.62, 0.38);
@@ -400,13 +401,13 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
             |_: On<PointerClick>,
              selected: Res<Selected>,
              mut voyage: ResMut<Voyage>,
-             mut next: ResMut<NextState<Screen>>| {
+             mut requests: MessageWriter<VoyageRequest>| {
                 if let Some(stage) = selected.0 {
                     *voyage = Voyage {
                         stage: Some(stage),
                         from: Screen::Map,
                     };
-                    next.set(Screen::Battle);
+                    requests.write(VoyageRequest);
                 }
             },
         );

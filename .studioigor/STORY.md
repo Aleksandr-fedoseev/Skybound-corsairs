@@ -39,5 +39,5 @@
 ## Cutscenes
 | id | scene | length | status (idea/storyboard/blockout/final) |
 |---|---|---|---|
-| C01 | Бунт на барже | 20–30 с, картинки + текст | idea |
+| C01 | Бунт на барже | 20–30 с, картинки + текст | диалог в игре (data/story.json) |
 | C02 | Появление Грозового левиафана | 10–15 с | idea |

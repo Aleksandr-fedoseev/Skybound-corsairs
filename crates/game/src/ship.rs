@@ -420,7 +420,7 @@ pub fn panel(
             border_radius: BorderRadius::all(px(14)),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.11, 0.075, 0.05, 0.97)),
+        BackgroundColor(Color::srgb(0.11, 0.075, 0.05)),
         BorderColor::all(BRASS),
         GlobalZIndex(10),
     ))

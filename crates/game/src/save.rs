@@ -191,7 +191,10 @@ mod tests {
             version: VERSION,
             saved_at: 1000,
             profile: Profile::new(&menu.start),
-            progress: Progress { cleared: 2 },
+            progress: Progress {
+                cleared: 2,
+                seen: Vec::new(),
+            },
             roster: Roster::new(&CrewData::bundled()),
             ship: Ship::new(&ship),
             tavern: TavernState::default(),
