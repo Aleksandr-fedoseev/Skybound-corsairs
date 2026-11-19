@@ -39,6 +39,15 @@ def mask_of(img):
             ImageDraw.floodfill(work, (x, y), 128)
             arr = np.asarray(work)
     outside = arr == 128
+    # Замкнутые куски фона (внутри вихря, между рукой и телом): крупные области чисто белого.
+    # Порог строже, чем у фона у края, и только крупные пятна — светлая одежда не страдает.
+    pure = (rgb.min(axis=2) > 246) & (rgb.max(axis=2) - rgb.min(axis=2) < 8)
+    k = max(9, (w // 60) | 1)
+    islands = np.asarray(
+        Image.fromarray(pure.astype(np.uint8) * 255, "L")
+        .filter(ImageFilter.MinFilter(k)).filter(ImageFilter.MaxFilter(k))
+    ) > 0
+    outside |= islands
     alpha = Image.fromarray((~outside).astype(np.uint8) * 255, "L")
     # Убрать пыль, смягчить край на пиксель.
     alpha = alpha.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))
