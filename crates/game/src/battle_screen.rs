@@ -297,7 +297,7 @@ fn new_battle(
         .iter()
         .map(|m| {
             let hero = data.hero(&m.id).expect("герой есть в data/heroes.json");
-            crew.hero_unit(hero, m.level + bonus, m.stars)
+            crew.hero_unit(hero, m.level + bonus, m.stars, m.skills)
         })
         .collect();
     let enemies = match custom {
