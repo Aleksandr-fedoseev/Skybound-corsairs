@@ -825,7 +825,11 @@ fn voyage(root: &mut ChildSpawnerCommands, fonts: &Fonts, next: &game_data::Stag
                 let caption = if done {
                     "Глава 1 пройдена · перепройти босса".to_string()
                 } else {
-                    stage_title(&next.id)
+                    format!(
+                        "{} · рекомендуемый уровень {}",
+                        stage_title(&next.id),
+                        next.recommended_level
+                    )
                 };
                 info.spawn(text(fonts, caption, false, 12.0, MUTED));
                 info.spawn(text(fonts, next.name.clone(), true, 20.0, PARCHMENT));

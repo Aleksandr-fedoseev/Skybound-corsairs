@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 use crate::Screen;
 use crate::battle_screen::BattleScreen;
+use crate::crew::Roster;
 use crate::menu::{
     BRASS, DARK_WOOD, GO, GO_EDGE, GOLD, MUTED, MenuData, PARCHMENT, Progress, Toast, Voyage, WOOD,
     bottom_nav, pressable, spawn_toast, text,
@@ -15,6 +16,8 @@ use crate::menu::{
 use crate::view::Fonts;
 
 const CLEARED: Color = Color::srgb(0.30, 0.62, 0.38);
+const READY: Color = Color::srgb(0.55, 0.88, 0.55);
+const WEAK: Color = Color::srgb(1.0, 0.55, 0.45);
 const LOCKED: Color = Color::srgb(0.36, 0.38, 0.43);
 const NODE: f32 = 54.0;
 const BOSS_NODE: f32 = 66.0;
@@ -77,6 +80,7 @@ struct Card;
 enum CardText {
     Title,
     Enemies,
+    Level,
     Status,
 }
 
@@ -373,6 +377,7 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
         .with_children(|info| {
             info.spawn((CardText::Title, text(fonts, "", true, 18.0, PARCHMENT)));
             info.spawn((CardText::Enemies, text(fonts, "", false, 13.0, PARCHMENT)));
+            info.spawn((CardText::Level, text(fonts, "", true, 13.0, PARCHMENT)));
             info.spawn((CardText::Status, text(fonts, "", false, 12.0, MUTED)));
         });
         let mut go = card.spawn((
@@ -408,12 +413,11 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
     });
 }
 
-/// Враги этапа одной строкой: «Имперский морпех ×2 · Имперский стрелок ×1 · ур. 1».
+/// Враги этапа одной строкой: «Имперский морпех ×2 · Имперский стрелок ×1».
 fn enemies_line(screen: &BattleScreen, stage: usize) -> String {
     let data = &screen.data;
-    let def = &data.stages[stage];
     let mut groups: Vec<(&str, usize)> = Vec::new();
-    for enemy in &def.enemies {
+    for enemy in &data.stages[stage].enemies {
         let name = data
             .enemy(&enemy.enemy)
             .map_or(enemy.enemy.as_str(), |e| e.name.as_str());
@@ -422,15 +426,8 @@ fn enemies_line(screen: &BattleScreen, stage: usize) -> String {
             None => groups.push((name, 1)),
         }
     }
-    let levels = def.enemies.iter().map(|e| e.level);
-    let (low, high) = (levels.clone().min().unwrap_or(1), levels.max().unwrap_or(1));
-    let level = if low == high {
-        format!("ур. {low}")
-    } else {
-        format!("ур. {low}–{high}")
-    };
     let names: Vec<String> = groups.iter().map(|(n, c)| format!("{n} ×{c}")).collect();
-    format!("{} · {level}", names.join(" · "))
+    names.join(" · ")
 }
 
 fn refresh_card(
@@ -438,8 +435,9 @@ fn refresh_card(
     screen: Res<BattleScreen>,
     progress: Res<Progress>,
     menu: Res<MenuData>,
+    roster: Res<Roster>,
     mut cards: Query<&mut Visibility, With<Card>>,
-    mut texts: Query<(&CardText, &mut Text)>,
+    mut texts: Query<(&CardText, &mut Text, &mut TextColor)>,
 ) {
     for mut vis in &mut cards {
         vis.set_if_neq(if selected.0.is_some() {
@@ -453,7 +451,11 @@ fn refresh_card(
     };
     let def = &screen.data.stages[stage];
     let reward = &menu.victory_reward;
-    for (kind, mut text) in &mut texts {
+    // Средний уровень отряда против рекомендуемого: ниже — этап, скорее всего, не пройти.
+    let team = roster.team_levels();
+    let team_level = team.iter().map(|(_, l)| l).sum::<u32>() / team.len().max(1) as u32;
+    let ready = team_level >= def.recommended_level;
+    for (kind, mut text, mut color) in &mut texts {
         let value = match kind {
             CardText::Title => {
                 if def.id.ends_with("boss") {
@@ -463,14 +465,21 @@ fn refresh_card(
                 }
             }
             CardText::Enemies => enemies_line(&screen, stage),
+            CardText::Level => {
+                color.0 = if ready { READY } else { WEAK };
+                format!(
+                    "Рекомендуемый уровень отряда: {} · у вас {team_level}",
+                    def.recommended_level
+                )
+            }
             CardText::Status => {
                 let state = if stage < progress.cleared {
-                    "Пройден, можно перепройти"
+                    "Пройден"
                 } else {
-                    "Новый этап"
+                    "Новый"
                 };
                 format!(
-                    "{state} · награда +{} серебра, +{} досок, +{} журналов",
+                    "{state} · +{} серебра · +{} досок · +{} журналов",
                     reward.silver, reward.planks, reward.journals
                 )
             }

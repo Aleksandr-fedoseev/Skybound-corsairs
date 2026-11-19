@@ -5,13 +5,13 @@
     "element": "steel",
     "base_stats": {
       "max_hp": 480,
-      "atk": 70,
+      "atk": 85,
       "def": 50,
       "spd": 95
     },
     "growth": {
       "max_hp": 45,
-      "atk": 5,
+      "atk": 9,
       "def": 3,
       "spd": 0
     },
@@ -32,13 +32,13 @@
     "element": "powder",
     "base_stats": {
       "max_hp": 380,
-      "atk": 90,
+      "atk": 105,
       "def": 35,
       "spd": 100
     },
     "growth": {
       "max_hp": 35,
-      "atk": 6,
+      "atk": 10,
       "def": 2,
       "spd": 0
     },
@@ -70,13 +70,13 @@
     "element": "lightning",
     "base_stats": {
       "max_hp": 400,
-      "atk": 85,
+      "atk": 100,
       "def": 40,
       "spd": 120
     },
     "growth": {
       "max_hp": 40,
-      "atk": 5,
+      "atk": 9,
       "def": 2,
       "spd": 0
     },
@@ -97,13 +97,13 @@
     "element": "lightning",
     "base_stats": {
       "max_hp": 2600,
-      "atk": 170,
+      "atk": 210,
       "def": 70,
       "spd": 160
     },
     "growth": {
       "max_hp": 200,
-      "atk": 10,
+      "atk": 16,
       "def": 4,
       "spd": 0
     },

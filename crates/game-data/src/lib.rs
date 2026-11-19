@@ -89,7 +89,14 @@ pub struct StageEnemy {
 pub struct StageDef {
     pub id: String,
     pub name: String,
+    /// Уровень отряда, с которым этап проходится уверенно (показывается игроку).
+    #[serde(default = "first_level")]
+    pub recommended_level: u32,
     pub enemies: Vec<StageEnemy>,
+}
+
+fn first_level() -> u32 {
+    1
 }
 
 fn scale(base: Stats, growth: Stats, level: u32) -> Stats {
