@@ -72,7 +72,9 @@ for r, c in enumerate(clips):
         sheet.paste(tile.convert("RGBA"), (i * fw, r * fh))
     meta[c] = {"row": r, "frames": len(frames[c])}
     if c in CLIP_FPS:
-        meta[c]["fps"] = CLIP_FPS[c]
+        # Частота из рендера (meta.json), иначе — запасная из CLIP_FPS.
+        m = src / c / "meta.json"
+        meta[c]["fps"] = round(json.loads(m.read_text())["fps"], 1) if m.exists() else CLIP_FPS[c]
     if c == "idle":
         meta[c]["pingpong"] = True   # отрезок длинного ожидания: туда и обратно, без шва
 

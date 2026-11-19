@@ -139,7 +139,13 @@ def cmd_anim(name, ids):
         if str(action) in anims:
             print(f"{name}: anim {action} уже заказан ({anims[str(action)]})")
             continue
-        tid = request("POST", "v1/animations", {"rig_task_id": t["rig"], "action_id": int(action)})["result"]
+        # m:<id задачи> — движение из Text-to-Motion вместо клипа библиотеки.
+        body = {"rig_task_id": t["rig"]}
+        if str(action).startswith("m:"):
+            body["motion_task_id"] = str(action)[2:]
+        else:
+            body["action_id"] = int(action)
+        tid = request("POST", "v1/animations", body)["result"]
         anims[str(action)] = tid
         save(name, t)   # сразу: задача уже оплачена, номер нельзя потерять
         print(f"{name}: anim {action} {tid}")
@@ -153,7 +159,8 @@ def all_tasks(t):
         if kind in t:
             yield kind, kind, t[kind]
     for action, tid in t.get("anim", {}).items():
-        yield "anim", f"anim_{action}", tid
+        label = "anim_motion_" + action[2:10] if action.startswith("m:") else f"anim_{action}"
+        yield "anim", label, tid
 
 
 def cmd_status(name, wait=False):

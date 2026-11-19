@@ -61,7 +61,8 @@ POSES = {
 }
 # Лёгкое покачивание стойки по кадрам: кость → (амплитуда по X, по Y), фаза — доля клипа.
 SWAY = {"Hips": (0.025, 0.0), "Spine01": (-0.02, 0.015), "Head": (0.0, 0.02)}
-PROP_LENGTH = 0.36   # длина оружия, м (при росте модели ~1,6 м — стилизованно крупное)
+PROP_LENGTH = 0.36   # длина пистоля, м (при росте модели ~1,6 м — стилизованно крупный)
+BLADE_LENGTH = 0.95  # длина сабли, м
 SRC = os.path.join(ROOT, "art", "meshy", NAME)
 
 
@@ -150,9 +151,15 @@ def import_clip(action_id):
 AXES = {"x": Vector((1, 0, 0)), "y": Vector((0, 1, 0)), "z": Vector((0, 0, 1))}
 
 
-def attach_prop(arm, path, bone_name, grip_axis):
-    """Предмет в кулак: ствол — вдоль кости кисти (к пальцам), ручка — вдоль оси кости `grip_axis`
-    (x, -x, z, -z). Длинная ось предмета — ствол, ручка — там, где предмет уходит вниз."""
+def hand_axis(rot, name):
+    sign = -1.0 if name.startswith("-") else 1.0
+    return (rot @ AXES[name.lstrip("-")] * sign).normalized()
+
+
+def attach_prop(arm, path, bone_name, grip_axis, long_axis="y", kind="gun"):
+    """Предмет в кулак. Пистоль (kind=gun): ствол — вдоль оси кисти `long_axis` (по умолчанию y, к
+    пальцам), ручка — вдоль `grip_axis`. Клинок (kind=blade): клинок от рукояти к острию — вдоль
+    `long_axis`, лезвие — вдоль `grip_axis`; рукоять — конец с широкой гардой."""
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=os.path.join(ROOT, path))
     new = [o for o in bpy.data.objects if o not in before]
@@ -169,33 +176,45 @@ def attach_prop(arm, path, bone_name, grip_axis):
     dims = hi - lo
     order = sorted(range(3), key=lambda i: -dims[i])
     long_i, up_i = order[0], order[1]
-    # Ручка — нижняя пятая часть по высоте; её середина по длине — казённая часть.
-    low = [v for v in vs if v[up_i] < lo[up_i] + dims[up_i] * 0.2]
-    grip_at = sum(v[long_i] for v in low) / len(low)
-    mid = (lo[long_i] + hi[long_i]) / 2
-    barrel = Vector((0, 0, 0))
-    barrel[long_i] = -1.0 if grip_at > mid else 1.0
-    down = Vector((0, 0, 0))
-    down[up_i] = -1.0
-    side = barrel.cross(down)
-    # Точка хвата: на ручке, у верха (там кулак).
     grip = Vector((0, 0, 0))
-    grip[long_i] = grip_at
-    grip[up_i] = lo[up_i] + dims[up_i] * 0.55
     grip[order[2]] = (lo[order[2]] + hi[order[2]]) / 2
+    barrel = Vector((0, 0, 0))
+    down = Vector((0, 0, 0))
+    if kind == "blade":
+        # Рукоять — тот конец, где предмет шире (гарда).
+        def width(at_low):
+            band = [v[up_i] for v in vs if (v[long_i] < lo[long_i] + dims[long_i] * 0.15) == at_low
+                    and (at_low or v[long_i] > hi[long_i] - dims[long_i] * 0.15)]
+            return max(band) - min(band) if band else 0.0
+        hilt_low = width(True) >= width(False)
+        barrel[long_i] = 1.0 if hilt_low else -1.0
+        down[up_i] = 1.0
+        grip[long_i] = lo[long_i] + dims[long_i] * 0.06 if hilt_low else hi[long_i] - dims[long_i] * 0.06
+        grip[up_i] = (lo[up_i] + hi[up_i]) / 2
+    else:
+        # Ручка — нижняя пятая часть по высоте; её середина по длине — казённая часть.
+        low = [v for v in vs if v[up_i] < lo[up_i] + dims[up_i] * 0.2]
+        grip_at = sum(v[long_i] for v in low) / len(low)
+        mid = (lo[long_i] + hi[long_i]) / 2
+        barrel[long_i] = -1.0 if grip_at > mid else 1.0
+        down[up_i] = -1.0
+        # Точка хвата: на ручке, у верха (там кулак).
+        grip[long_i] = grip_at
+        grip[up_i] = lo[up_i] + dims[up_i] * 0.55
+    side = barrel.cross(down)
     src = Matrix((barrel, down, side)).transposed().to_4x4()
     src.translation = grip
 
     pb = arm.pose.bones[bone_name]
     bone_world = arm.matrix_world @ pb.matrix
     rot = bone_world.to_3x3().normalized()
-    y = (rot @ Vector((0, 1, 0))).normalized()
-    sign = -1.0 if grip_axis.startswith("-") else 1.0
-    g = (rot @ AXES[grip_axis.lstrip("-")] * sign).normalized()
+    y = hand_axis(rot, long_axis)
+    g = hand_axis(rot, grip_axis)
     g = (g - y * g.dot(y)).normalized()
     dst = Matrix((y, g, y.cross(g))).transposed().to_4x4()
-    dst.translation = bone_world.translation + y * 0.07
-    scale = PROP_LENGTH / dims[long_i]
+    # Кулак — чуть дальше запястья к пальцам.
+    dst.translation = bone_world.translation + hand_axis(rot, "y") * 0.07
+    scale = (BLADE_LENGTH if kind == "blade" else PROP_LENGTH) / dims[long_i]
     prop.matrix_world = dst @ Matrix.Scale(scale, 4) @ src.inverted()
     final = prop.matrix_world.copy()
     prop.parent = arm
@@ -316,8 +335,9 @@ def render_clip(clip, action_id, height):
     reset()
     arm, meshes, action = import_clip(action_id)
     sc = configure(bpy.context.scene)
-    for path, bone, axis in PROPS:
-        attach_prop(arm, path, bone, axis)
+    for spec in PROPS:
+        # файл:кость:ось_ручки[:ось_ствола[:blade]]
+        attach_prop(arm, *spec[:2], spec[2], *(spec[3:5]))
     flatten_materials()
     turn = setup_view(sc, arm, height)
     pelvis = hips(arm)
@@ -349,6 +369,9 @@ def render_clip(clip, action_id, height):
         sc.render.filepath = os.path.join(out, f"{i:04d}.png")
         bpy.ops.render.render(write_still=True)
     fps = sc.render.fps / max(1, (end - start) / max(1, count - 1))
+    # Настоящая частота кадров клипа — упаковщик возьмёт её для зацикленных клипов.
+    with open(os.path.join(out, "meta.json"), "w") as fh:
+        fh.write('{"fps": %.2f}\n' % fps)
     print(f"[render_sprites] {NAME} {clip}: {count} кадров из {start}–{end} (клип {action.frame_range[0]:.0f}–{action.frame_range[1]:.0f}), ~{fps:.1f} к/с", flush=True)
 
 
