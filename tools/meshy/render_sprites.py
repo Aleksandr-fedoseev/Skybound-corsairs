@@ -37,16 +37,30 @@ CLIPS = {k: v for k, v in OPTS if k not in ("turn", "prop", "frames", "pose")}
 # Позы рук поверх клипа: кость → направление (от начала к концу кости) в системе персонажа,
 # который смотрит на камеру: -X — его правая сторона, -Y — вперёд, +Z — вверх.
 POSES = {
-    # Пистоль в поднятой правой руке стволом вверх, левая опущена к бедру стволом вниз.
+    # Стойка с образца: почти анфас, вес на левой ноге (таз наклонён, бедро в сторону), правая
+    # нога согнута и заходит вперёд к центру; правый пистоль поднят стволом вверх (плечо вверх
+    # и наружу, предплечье вертикально у головы), левый у бедра стволом вниз и чуть вперёд.
     "pirate": [
-        ("RightArm", (-1.0, 0.0, 0.05)),
-        ("RightForeArm", (-0.05, -0.1, 1.0)),
-        ("RightHand", (0.0, -0.12, 1.0)),
-        ("LeftArm", (0.25, 0.05, -1.0)),
-        ("LeftForeArm", (0.25, -0.3, -1.0)),
-        ("LeftHand", (0.15, -0.3, -1.0)),
+        ("Hips", (-0.22, 0.0, 1.0)),
+        ("Spine02", (0.18, 0.0, 1.0)),
+        ("Spine01", (0.12, 0.07, 1.0)),
+        ("Spine", (0.03, 0.10, 1.0)),
+        ("LeftUpLeg", (0.14, 0.0, -1.0)),
+        ("LeftLeg", (0.02, 0.03, -1.0)),
+        ("RightUpLeg", (0.16, -0.20, -1.0)),
+        ("RightLeg", (0.03, 0.16, -1.0)),
+        ("RightShoulder", (-1.0, 0.0, 0.35)),
+        ("RightArm", (-0.70, 0.02, 0.72)),
+        ("RightForeArm", (0.0, -0.04, 1.0)),
+        ("RightHand", (0.03, -0.06, 1.0)),
+        ("LeftArm", (0.32, -0.04, -1.0)),
+        ("LeftForeArm", (0.22, -0.35, -1.0)),
+        ("LeftHand", (0.12, -0.38, -1.0)),
+        ("Head", (-0.12, -0.04, 1.0)),
     ],
 }
+# Лёгкое покачивание стойки по кадрам: кость → (амплитуда по X, по Y), фаза — доля клипа.
+SWAY = {"Hips": (0.025, 0.0), "Spine01": (-0.02, 0.015), "Head": (0.0, 0.02)}
 PROP_LENGTH = 0.36   # длина оружия, м (при росте модели ~1,6 м — стилизованно крупное)
 SRC = os.path.join(ROOT, "art", "meshy", NAME)
 
@@ -209,15 +223,20 @@ def free_bones(action, names):
             bag.fcurves.remove(fc)
 
 
-def apply_pose(arm, turn, preset):
-    """Довернуть кости рук в направления заготовки (после того как кадр клипа выставлен)."""
+def apply_pose(arm, turn, preset, phase=0.0):
+    """Довернуть кости в направления заготовки (после того как кадр клипа выставлен);
+    `phase` (0–1) — покачивание, чтобы стойка не застывала."""
     to_world = turn.matrix_world.to_3x3().normalized()
     to_arm = arm.matrix_world.to_3x3().inverted()
     for name, direction in POSES[preset]:
         pb = arm.pose.bones.get(name)
         if pb is None:
             continue
-        target = (to_arm @ (to_world @ Vector(direction))).normalized()
+        d = Vector(direction)
+        if name in SWAY:
+            ax, ay = SWAY[name]
+            d += Vector((ax, ay, 0.0)) * math.sin(2 * math.pi * phase)
+        target = (to_arm @ (to_world @ d)).normalized()
         m = pb.matrix.copy()
         y = m.to_3x3().col[1].normalized()
         rot = y.rotation_difference(target).to_matrix() @ m.to_3x3()
@@ -326,7 +345,7 @@ def render_clip(clip, action_id, height):
         turn.location = (x0 - x, 0, 0)
         bpy.context.view_layer.update()
         if clip in POSE_OF:
-            apply_pose(arm, turn, POSE_OF[clip])
+            apply_pose(arm, turn, POSE_OF[clip], i / max(1, len(frames)))
         sc.render.filepath = os.path.join(out, f"{i:04d}.png")
         bpy.ops.render.render(write_still=True)
     fps = sc.render.fps / max(1, (end - start) / max(1, count - 1))
