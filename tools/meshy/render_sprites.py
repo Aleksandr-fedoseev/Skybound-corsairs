@@ -30,7 +30,23 @@ OPTS = [a.split("=", 1) for a in args[1:]]
 TURN = math.radians(float(next((v for k, v in OPTS if k == "turn"), math.degrees(TURN))))
 PROPS = [v.split(":") for k, v in OPTS if k == "prop"]
 MAX_FRAMES = int(next((v for k, v in OPTS if k == "frames"), MAX_FRAMES))
-CLIPS = {k: v for k, v in OPTS if k not in ("turn", "prop", "frames")}
+# pose=<клип>:<заготовка> — поверх клипа держать руки в позе из POSES (например, idle:pirate).
+POSE_OF = dict(v.split(":") for k, v in OPTS if k == "pose")
+CLIPS = {k: v for k, v in OPTS if k not in ("turn", "prop", "frames", "pose")}
+
+# Позы рук поверх клипа: кость → направление (от начала к концу кости) в системе персонажа,
+# который смотрит на камеру: -X — его правая сторона, -Y — вперёд, +Z — вверх.
+POSES = {
+    # Пистоль в поднятой правой руке стволом вверх, левая опущена к бедру стволом вниз.
+    "pirate": [
+        ("RightArm", (-1.0, 0.0, 0.05)),
+        ("RightForeArm", (-0.05, -0.1, 1.0)),
+        ("RightHand", (0.0, -0.12, 1.0)),
+        ("LeftArm", (0.25, 0.05, -1.0)),
+        ("LeftForeArm", (0.25, -0.3, -1.0)),
+        ("LeftHand", (0.15, -0.3, -1.0)),
+    ],
+}
 PROP_LENGTH = 0.36   # длина оружия, м (при росте модели ~1,6 м — стилизованно крупное)
 SRC = os.path.join(ROOT, "art", "meshy", NAME)
 
@@ -175,6 +191,42 @@ def attach_prop(arm, path, bone_name, grip_axis):
     return prop
 
 
+def action_curves(action):
+    """Все кривые действия (в Blender 5 они лежат в слоях и полосах)."""
+    curves = list(getattr(action, "fcurves", None) or [])
+    for layer in getattr(action, "layers", []):
+        for strip in layer.strips:
+            for bag in strip.channelbags:
+                curves += [(bag, fc) for fc in bag.fcurves]
+    return curves
+
+
+def free_bones(action, names):
+    """Убрать из клипа кривые костей позы: иначе при рендере клип перетрёт заданный поворот."""
+    for item in action_curves(action):
+        bag, fc = item if isinstance(item, tuple) else (action, item)
+        if any(fc.data_path.startswith(f'pose.bones["{n}"]') for n in names):
+            bag.fcurves.remove(fc)
+
+
+def apply_pose(arm, turn, preset):
+    """Довернуть кости рук в направления заготовки (после того как кадр клипа выставлен)."""
+    to_world = turn.matrix_world.to_3x3().normalized()
+    to_arm = arm.matrix_world.to_3x3().inverted()
+    for name, direction in POSES[preset]:
+        pb = arm.pose.bones.get(name)
+        if pb is None:
+            continue
+        target = (to_arm @ (to_world @ Vector(direction))).normalized()
+        m = pb.matrix.copy()
+        y = m.to_3x3().col[1].normalized()
+        rot = y.rotation_difference(target).to_matrix() @ m.to_3x3()
+        new = rot.to_4x4()
+        new.translation = m.translation
+        pb.matrix = new
+        bpy.context.view_layer.update()
+
+
 def hips(arm):
     """Кость таза (или корневая кость, если таза нет)."""
     bones = arm.pose.bones
@@ -262,6 +314,8 @@ def render_clip(clip, action_id, height):
     os.makedirs(out, exist_ok=True)
     for old in os.listdir(out):
         os.remove(os.path.join(out, old))
+    if clip in POSE_OF and action:
+        free_bones(action, [name for name, _ in POSES[POSE_OF[clip]]])
     x0 = None
     for i, f in enumerate(frames):
         # Клип на месте: таз держим в одной точке по горизонтали экрана (X), глубина не видна.
@@ -271,6 +325,8 @@ def render_clip(clip, action_id, height):
         x0 = x if x0 is None else x0
         turn.location = (x0 - x, 0, 0)
         bpy.context.view_layer.update()
+        if clip in POSE_OF:
+            apply_pose(arm, turn, POSE_OF[clip])
         sc.render.filepath = os.path.join(out, f"{i:04d}.png")
         bpy.ops.render.render(write_still=True)
     fps = sc.render.fps / max(1, (end - start) / max(1, count - 1))

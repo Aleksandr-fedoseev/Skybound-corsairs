@@ -1,4 +1,4 @@
 {
-  "kaya": {"sheet": "units/kaya.png", "frame": [232, 256], "columns": 24, "rows": 5, "height": 1.865, "foot": 0.0283, "top": 0.7253, "clips": {"idle": {"row": 0, "frames": 24, "fps": 6, "pingpong": true}, "attack": {"row": 1, "frames": 16}, "hit": {"row": 2, "frames": 16}, "death": {"row": 3, "frames": 16}, "victory": {"row": 4, "frames": 16, "fps": 6}}},
+  "kaya": {"sheet": "units/kaya.png", "frame": [232, 256], "columns": 24, "rows": 5, "height": 1.65, "foot": 0.0303, "top": 0.8182, "clips": {"idle": {"row": 0, "frames": 24, "fps": 6, "pingpong": true}, "attack": {"row": 1, "frames": 16}, "hit": {"row": 2, "frames": 16}, "death": {"row": 3, "frames": 16}, "victory": {"row": 4, "frames": 16, "fps": 6}}},
   "mei": {"sheet": "units/mei.png", "frame": [216, 256], "columns": 24, "rows": 6, "height": 1.551, "foot": 0.0327, "top": 0.8388, "clips": {"idle": {"row": 0, "frames": 24, "fps": 6, "pingpong": true}, "attack": {"row": 1, "frames": 16}, "skill": {"row": 2, "frames": 16}, "hit": {"row": 3, "frames": 16}, "death": {"row": 4, "frames": 16}, "victory": {"row": 5, "frames": 16, "fps": 6}}}
 }
