@@ -322,3 +322,16 @@ fn auto_battle_is_deterministic_for_the_same_seed() {
     assert_eq!(outcome_a, outcome_b);
     assert_eq!(log_a, log_b);
 }
+
+#[test]
+fn energy_rate_speeds_up_ultimates() {
+    let mut hero = unit("hero", Element::Wind, 100_000, 10, 200);
+    hero.ultimate = Some(hit(3.0));
+    let energy_after = |rate: u32| {
+        let mut battle = Battle::new(vec![hero.clone()], vec![sandbag()], SHIP, 7);
+        battle.set_energy_rate(rate);
+        battle.act(Action::basic(None)).unwrap();
+        battle.unit(UnitId(0)).energy
+    };
+    assert_eq!(energy_after(2), energy_after(1) * 2);
+}

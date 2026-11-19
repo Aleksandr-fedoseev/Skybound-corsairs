@@ -10,8 +10,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::abyss::Abyss;
+use crate::cabins::Cabins;
+use crate::contracts::Contracts;
 use crate::convoys::{ConvoyData, Convoys};
 use crate::crew::Roster;
+use crate::events::{StormEvent, WeekEvents};
+use crate::expeditions::Expeditions;
+use crate::gear::Gear;
 use crate::menu::{Profile, Progress, Toast};
 use crate::ship::{Ship, ShipData};
 use crate::tavern::TavernState;
@@ -32,6 +38,20 @@ pub struct SaveData {
     pub tavern: TavernState,
     #[serde(default)]
     pub convoys: Convoys,
+    #[serde(default)]
+    pub contracts: Contracts,
+    #[serde(default)]
+    pub abyss: Abyss,
+    #[serde(default)]
+    pub expeditions: Expeditions,
+    #[serde(default)]
+    pub cabins: Cabins,
+    #[serde(default)]
+    pub gear: Gear,
+    #[serde(default)]
+    pub storm: StormEvent,
+    #[serde(default)]
+    pub week_events: WeekEvents,
 }
 
 pub fn now() -> u64 {
@@ -138,7 +158,14 @@ pub fn apply(app: &mut App, mut save: SaveData) {
         .insert_resource(save.roster)
         .insert_resource(save.ship)
         .insert_resource(save.tavern)
-        .insert_resource(save.convoys);
+        .insert_resource(save.convoys)
+        .insert_resource(save.contracts)
+        .insert_resource(save.abyss)
+        .insert_resource(save.expeditions)
+        .insert_resource(save.cabins)
+        .insert_resource(save.gear)
+        .insert_resource(save.storm)
+        .insert_resource(save.week_events);
     if !report.is_empty() {
         app.world_mut().resource_mut::<Toast>().show_long(&report);
     }
@@ -157,6 +184,13 @@ struct State<'w> {
     ship: Res<'w, Ship>,
     tavern: Res<'w, TavernState>,
     convoys: Res<'w, Convoys>,
+    contracts: Res<'w, Contracts>,
+    abyss: Res<'w, Abyss>,
+    expeditions: Res<'w, Expeditions>,
+    cabins: Res<'w, Cabins>,
+    gear: Res<'w, Gear>,
+    storm: Res<'w, StormEvent>,
+    week_events: Res<'w, WeekEvents>,
 }
 
 impl State<'_> {
@@ -170,6 +204,13 @@ impl State<'_> {
             ship: self.ship.clone(),
             tavern: self.tavern.clone(),
             convoys: self.convoys.clone(),
+            contracts: self.contracts.clone(),
+            abyss: self.abyss.clone(),
+            expeditions: self.expeditions.clone(),
+            cabins: self.cabins.clone(),
+            gear: self.gear.clone(),
+            storm: self.storm.clone(),
+            week_events: self.week_events.clone(),
         }
     }
 }
@@ -210,6 +251,13 @@ mod tests {
             ship: Ship::new(&ship),
             tavern: TavernState::default(),
             convoys: Convoys::default(),
+            contracts: Contracts::default(),
+            abyss: Abyss::default(),
+            expeditions: Expeditions::default(),
+            cabins: Cabins::default(),
+            gear: Gear::default(),
+            storm: StormEvent::default(),
+            week_events: WeekEvents::default(),
         }
     }
 

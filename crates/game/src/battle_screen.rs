@@ -23,11 +23,19 @@ pub struct CustomFight {
     pub silver: u32,
     pub planks: u32,
     pub journals: u32,
+    /// Особое правило: ульты копятся быстрее (1 — как обычно).
+    pub energy_rate: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FightKind {
     Convoy,
+    /// Этаж Бездны облаков.
+    Abyss(u32),
+    /// Буревая тварь ивента «Буря»: счёт — урон.
+    Storm,
+    /// Этап трассы «Небесной регаты».
+    Regatta(usize),
 }
 
 /// Залп до первых данных о корабле (Пушечная палуба ур. 1).
@@ -295,7 +303,13 @@ fn new_battle(
         .iter()
         .map(|m| {
             let hero = data.hero(&m.id).expect("герой есть в data/heroes.json");
-            crew.hero_unit(hero, m.level + bonus, m.stars)
+            let mut unit = crew.hero_unit(hero, m.level + bonus, m.stars, m.skills);
+            unit.stats.max_hp += m.gear.max_hp;
+            unit.stats.atk += m.gear.atk;
+            unit.stats.def += m.gear.def;
+            unit.stats.spd += m.gear.spd;
+            unit.stats.atk = (unit.stats.atk as f32 * (1.0 + m.atk_bonus)).round() as u32;
+            unit
         })
         .collect();
     let enemies = match custom {
@@ -312,10 +326,15 @@ fn new_battle(
             .stage_enemies(&data.stages[stage].id)
             .expect("этап есть в data/stages.json"),
     };
-    Battle::new(team, enemies, Ship { broadside_power }, seed)
+    let mut battle = Battle::new(team, enemies, Ship { broadside_power }, seed);
+    if let Some(fight) = custom {
+        battle.set_energy_rate(fight.energy_rate);
+    }
+    battle
 }
 
 /// Выход в поход: этап с карты или следующий непройденный.
+#[allow(clippy::too_many_arguments)]
 pub fn enter(
     mut screen: ResMut<BattleScreen>,
     progress: Res<crate::menu::Progress>,
@@ -323,8 +342,15 @@ pub fn enter(
     roster: Res<crate::crew::Roster>,
     ship: Res<crate::ship::Ship>,
     ship_data: Res<crate::ship::ShipData>,
+    cabins: (Res<crate::cabins::Cabins>, Res<crate::cabins::CabinData>),
+    gear: (Res<crate::gear::Gear>, Res<crate::gear::GearData>),
 ) {
     screen.team = roster.team_members();
+    let ids = roster.team.clone();
+    for m in &mut screen.team {
+        m.atk_bonus = cabins.0.atk_bonus(&m.id, &ids, &cabins.1);
+        m.gear = gear.0.bonus(&m.id, &gear.1);
+    }
     screen.broadside_power = ship.broadside(&ship_data);
     let next = progress.next_stage(screen.data.stages.len());
     screen.stage = voyage.stage.unwrap_or(next);

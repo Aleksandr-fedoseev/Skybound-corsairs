@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Screen;
 use crate::audio::Sfx;
+use crate::contracts::Deed;
 use crate::menu::{
     BRASS, GO, GO_EDGE, GOLD, MUTED, MenuRebuild, PARCHMENT, Profile, Toast, pressable, text,
 };
@@ -89,6 +90,18 @@ pub enum Effect {
         values: Vec<u32>,
     },
     JournalsPerMinute {
+        values: Vec<u32>,
+    },
+    /// Дополнительные шлюпки для экспедиций.
+    Boats {
+        values: Vec<u32>,
+    },
+    /// Сколько кают для «Соседей по каюте».
+    Cabins {
+        values: Vec<u32>,
+    },
+    /// Высшая редкость, которую создаёт Мастерская (1 — обычная).
+    Workshop {
         values: Vec<u32>,
     },
 }
@@ -224,6 +237,30 @@ impl Ship {
     pub fn journals_per_minute(&self, data: &ShipData) -> u32 {
         self.value(data, |e| match e {
             Effect::JournalsPerMinute { values } => Some(values),
+            _ => None,
+        })
+    }
+
+    /// Шлюпок сверх базовых (отсек «Шлюпки»).
+    pub fn extra_boats(&self, data: &ShipData) -> u32 {
+        self.value(data, |e| match e {
+            Effect::Boats { values } => Some(values),
+            _ => None,
+        })
+    }
+
+    /// Высшая редкость в Мастерской (индекс), `None` — Мастерская не построена.
+    pub fn workshop_rarity(&self, data: &ShipData) -> Option<usize> {
+        let v = self.value(data, |e| match e {
+            Effect::Workshop { values } => Some(values),
+            _ => None,
+        });
+        (v > 0).then(|| v as usize - 1)
+    }
+
+    pub fn cabins(&self, data: &ShipData) -> u32 {
+        self.value(data, |e| match e {
+            Effect::Cabins { values } => Some(values),
             _ => None,
         })
     }
@@ -387,6 +424,17 @@ fn effect_line(effect: &Effect, level: u32) -> String {
         Effect::JournalsPerMinute { values } => {
             format!("Судовые журналы: {} в минуту", at(values, level))
         }
+        Effect::Boats { values } => {
+            format!("Шлюпок для экспедиций: +{}", at(values, level))
+        }
+        Effect::Cabins { values } => format!("Кают для соседей: {}", at(values, level)),
+        Effect::Workshop { values } => {
+            let name = ["обычное", "редкое", "эпическое"]
+                .get(at(values, level).saturating_sub(1) as usize)
+                .copied()
+                .unwrap_or("обычное");
+            format!("Создаёт снаряжение до редкости: {name}")
+        }
     }
 }
 
@@ -398,6 +446,7 @@ pub fn panel(
     ship: &Ship,
     profile: &Profile,
     id: &str,
+    extra: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
     let Some(compartment) = data.compartment(id) else {
         return;
@@ -586,6 +635,7 @@ pub fn panel(
                 );
             }
         });
+        extra(p);
     });
 }
 
@@ -644,6 +694,7 @@ fn act(
     mut rebuild: ResMut<MenuRebuild>,
     mut next: ResMut<NextState<Screen>>,
     mut sfx: MessageWriter<Sfx>,
+    mut deeds: MessageWriter<Deed>,
 ) {
     match action {
         Action::Upgrade(id) => match ship.next_step(&data, &id) {
@@ -665,6 +716,7 @@ fn act(
                     left: cost.seconds,
                 });
                 sfx.write(Sfx("hammer"));
+                deeds.write(Deed("build"));
                 rebuild.0 = true;
             }
         },

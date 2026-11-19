@@ -3,13 +3,19 @@
 //! Бой идёт сам (логика в battle-core), экран проигрывает его события анимациями моделей.
 //! Игрок вмешивается ультами: кнопки героев внизу. Модели пока — силуэты-заглушки.
 
+mod abyss;
 mod audio;
 mod battle_screen;
 mod battlefield;
+mod cabins;
+mod contracts;
 mod convoys;
 mod crew;
 mod dev;
+mod events;
+mod expeditions;
 mod fx;
+mod gear;
 mod map;
 mod menu;
 mod save;
@@ -37,6 +43,7 @@ pub enum Screen {
     Map,
     Crew,
     Tavern,
+    Activities,
     Battle,
 }
 const HEIGHT: f32 = 960.0;
@@ -82,6 +89,12 @@ fn main() {
         save::plugin,
         story::plugin,
         convoys::plugin,
+        contracts::plugin,
+        abyss::plugin,
+        expeditions::plugin,
+        cabins::plugin,
+        gear::plugin,
+        events::plugin,
     ))
     .add_message::<Shown>()
     .insert_resource(crew)

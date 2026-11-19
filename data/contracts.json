@@ -1,0 +1,53 @@
+{
+  "daily": [
+    {
+      "id": "win3",
+      "text": "Выиграйте 3 боя",
+      "deed": "win",
+      "need": 3,
+      "reward": {
+        "doubloons": 30,
+        "charts": 1
+      }
+    },
+    {
+      "id": "convoy2",
+      "text": "Возьмите на абордаж 2 конвоя",
+      "deed": "convoy",
+      "need": 2,
+      "reward": {
+        "planks": 80
+      }
+    },
+    {
+      "id": "level3",
+      "text": "Повысьте уровень героям 3 раза",
+      "deed": "levelup",
+      "need": 3,
+      "reward": {
+        "journals": 150
+      }
+    },
+    {
+      "id": "ether1",
+      "text": "Соберите эфир у Ветроловов",
+      "deed": "ether",
+      "need": 1,
+      "reward": {
+        "silver": 150
+      }
+    },
+    {
+      "id": "build1",
+      "text": "Начните стройку на корабле",
+      "deed": "build",
+      "need": 1,
+      "reward": {
+        "doubloons": 20
+      }
+    }
+  ],
+  "all_done": {
+    "doubloons": 50
+  }
+}

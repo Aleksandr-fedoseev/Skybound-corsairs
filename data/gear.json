@@ -1,0 +1,17 @@
+{
+  "slots": [
+    { "id": "weapon", "name": "Оружие", "main": "atk", "base": 12, "per_level": 3 },
+    { "id": "coat", "name": "Камзол", "main": "hp", "base": 120, "per_level": 30 },
+    { "id": "boots", "name": "Сапоги", "main": "spd", "base": 4, "per_level": 1 },
+    { "id": "charm", "name": "Талисман", "main": "def", "base": 8, "per_level": 2 }
+  ],
+  "rarities": [
+    { "name": "Обычная", "extras": 1, "power": 1.0, "weight": 70 },
+    { "name": "Редкая", "extras": 2, "power": 1.3, "weight": 25 },
+    { "name": "Эпическая", "extras": 3, "power": 1.7, "weight": 5 }
+  ],
+  "extras": { "atk": 6, "hp": 60, "def": 4, "spd": 2 },
+  "craft": { "details": 20, "ether": 10, "silver": 150 },
+  "enhance": { "max": 15, "silver_per_level": 100, "details_per_level": 3, "extra_every": 3 },
+  "dismantle_details": [10, 25, 60]
+}

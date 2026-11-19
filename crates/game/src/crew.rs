@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 use crate::Screen;
 use crate::audio::Sfx;
 use crate::battle_screen::BattleScreen;
+use crate::cabins::{CabinData, Cabins};
+use crate::contracts::Deed;
+use crate::gear::{Gear, GearData};
 use crate::menu::{
     BRASS, GO, GO_EDGE, GOLD, MUTED, PARCHMENT, Profile, Toast, WOOD, bottom_nav, pressable,
     spawn_toast, text,
@@ -45,6 +48,19 @@ pub struct CrewData {
     /// С этой звезды перезарядка спецатаки на ход короче (но не меньше минимума).
     pub skill_cut_from_star: u32,
     pub skill_min_cooldown: u32,
+    pub skills: SkillRules,
+}
+
+/// Умения: атака, спецатака, ульта — уровни 1–10.
+#[derive(Deserialize, Clone)]
+pub struct SkillRules {
+    /// Прибавка силы за уровень: атака, спецатака, ульта.
+    pub bonus_per_level: [f32; 3],
+    /// На этих уровнях спецатака перезаряжается на ход быстрее.
+    pub cooldown_cut_at: Vec<u32>,
+    /// Лоций за переход с уровня N на N+1 (индекс N−1).
+    pub charts: Vec<u32>,
+    pub silver_per_level: u32,
 }
 
 #[derive(Deserialize, Clone, Copy)]
@@ -57,6 +73,8 @@ pub struct StarRule {
     pub fodder: u32,
     /// Прибавка ко всем характеристикам (0.2 = +20%).
     pub stat_bonus: f32,
+    /// Потолок уровня умений.
+    pub skill_cap: u32,
 }
 
 /// Что уйдёт на слияние: свои копии и копии других героев той же стихии.
@@ -97,9 +115,44 @@ impl CrewData {
         self.rule(stars).level_cap
     }
 
+    pub fn skill_cap(&self, stars: u32) -> u32 {
+        self.rule(stars).skill_cap
+    }
+
+    /// Цена умения с уровня `level` на следующий: лоции и серебро.
+    pub fn skill_cost(&self, level: u32) -> (u32, u32) {
+        let charts = self
+            .skills
+            .charts
+            .get(level.saturating_sub(1) as usize)
+            .or(self.skills.charts.last())
+            .copied()
+            .unwrap_or(1);
+        (charts, self.skills.silver_per_level * level)
+    }
+
     /// Боец для боя: уровень, затем звёзды — прибавка к характеристикам, ульта, перезарядка.
-    pub fn hero_unit(&self, hero: &HeroDef, level: u32, stars: u32) -> UnitDef {
+    pub fn hero_unit(&self, hero: &HeroDef, level: u32, stars: u32, skills: [u32; 3]) -> UnitDef {
         let mut unit = hero.to_unit(level);
+        let power =
+            |i: usize| 1.0 + self.skills.bonus_per_level[i] * skills[i].saturating_sub(1) as f32;
+        scale_ability(&mut unit.basic, power(0));
+        if let Some(skill) = &mut unit.skill {
+            scale_ability(skill, power(1));
+            let cuts = self
+                .skills
+                .cooldown_cut_at
+                .iter()
+                .filter(|l| skills[1] >= **l)
+                .count() as u32;
+            skill.cooldown = skill
+                .cooldown
+                .saturating_sub(cuts)
+                .max(self.skill_min_cooldown);
+        }
+        if let Some(ult) = &mut unit.ultimate {
+            scale_ability(ult, power(2));
+        }
         let k = 1.0 + self.rule(stars).stat_bonus;
         let boost = |v: u32| (v as f32 * k).round() as u32;
         unit.stats.max_hp = boost(unit.stats.max_hp);
@@ -143,13 +196,31 @@ impl CrewData {
     }
 }
 
-/// Нанятый герой: уровень, звёзды и лишние копии (идут на слияние).
+/// Сила урона и лечения умения растёт в `k` раз.
+fn scale_ability(ability: &mut battle_core::Ability, k: f32) {
+    for e in &mut ability.effects {
+        match &mut e.effect {
+            Effect::Damage { multiplier } => *multiplier *= k,
+            Effect::Heal { percent } => *percent *= k,
+            _ => {}
+        }
+    }
+}
+
+/// Нанятый герой: уровень, звёзды, умения и лишние копии (идут на слияние).
 #[derive(Clone, Copy, Serialize, Deserialize)]
 struct Owned {
     level: u32,
     copies: u32,
     #[serde(default = "first_star")]
     stars: u32,
+    /// Уровни умений: атака, спецатака, ульта.
+    #[serde(default = "first_skills")]
+    skills: [u32; 3],
+}
+
+fn first_skills() -> [u32; 3] {
+    [1, 1, 1]
 }
 
 fn first_star() -> u32 {
@@ -162,6 +233,11 @@ pub struct Member {
     pub id: String,
     pub level: u32,
     pub stars: u32,
+    pub skills: [u32; 3],
+    /// Прибавка к атаке от соседа по каюте в отряде.
+    pub atk_bonus: f32,
+    /// Прибавка от надетого снаряжения.
+    pub gear: battle_core::Stats,
 }
 
 /// Герои на борту и отряд. Стартовый отряд уже в команде, остальных нанимают в Таверне.
@@ -184,6 +260,7 @@ impl Roster {
                             level: 1,
                             copies: 0,
                             stars: 1,
+                            skills: [1, 1, 1],
                         },
                     )
                 })
@@ -218,6 +295,7 @@ impl Roster {
                         level: 1,
                         copies: 0,
                         stars: 1,
+                        skills: [1, 1, 1],
                     },
                 );
                 true
@@ -227,6 +305,16 @@ impl Roster {
 
     pub fn stars(&self, id: &str) -> u32 {
         self.heroes.get(id).map_or(1, |h| h.stars)
+    }
+
+    pub fn skills(&self, id: &str) -> [u32; 3] {
+        self.heroes.get(id).map_or([1, 1, 1], |h| h.skills)
+    }
+
+    fn raise_skill(&mut self, id: &str, i: usize) {
+        if let Some(h) = self.heroes.get_mut(id) {
+            h.skills[i] += 1;
+        }
     }
 
     pub fn team_levels(&self) -> Vec<(String, u32)> {
@@ -243,6 +331,14 @@ impl Roster {
                 id: id.clone(),
                 level: self.level(id),
                 stars: self.stars(id),
+                skills: self.skills(id),
+                atk_bonus: 0.0,
+                gear: battle_core::Stats {
+                    max_hp: 0,
+                    atk: 0,
+                    def: 0,
+                    spd: 0,
+                },
             })
             .collect()
     }
@@ -331,6 +427,7 @@ struct CrewRoot;
 pub fn plugin(app: &mut App) {
     app.init_resource::<Selected>()
         .init_resource::<CrewDirty>()
+        .init_resource::<CrewTab>()
         .add_systems(OnEnter(Screen::Crew), spawn_crew)
         .add_systems(Update, rebuild_crew.run_if(in_state(Screen::Crew)));
 }
@@ -382,6 +479,7 @@ fn spawn_crew(
     profile: Res<Profile>,
     screen: Res<BattleScreen>,
     mut selected: ResMut<Selected>,
+    cabin: CabinView,
 ) {
     if selected.0.is_none() {
         selected.0 = roster.team.first().cloned();
@@ -395,7 +493,112 @@ fn spawn_crew(
         &profile,
         &screen.data,
         selected.0.as_deref(),
+        &cabin,
     );
+}
+
+/// Всё про каюты для карточки героя.
+#[derive(bevy::ecs::system::SystemParam)]
+struct CabinView<'w> {
+    cabins: Res<'w, Cabins>,
+    data: Res<'w, CabinData>,
+    ship: Res<'w, crate::ship::Ship>,
+    ship_data: Res<'w, crate::ship::ShipData>,
+    gear: Res<'w, Gear>,
+    gear_data: Res<'w, GearData>,
+    tab: Res<'w, CrewTab>,
+}
+
+/// Вкладка карточки героя.
+#[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
+enum CrewTab {
+    #[default]
+    Hero,
+    Gear,
+}
+
+/// Надетый предмет: id, описание, цена усиления (серебро, детали), достиг ли предела.
+type WornItem = (u32, String, (u32, u32), bool);
+
+/// Снаряжение героя для вкладки.
+struct GearInfo {
+    tab: CrewTab,
+    /// По слотам: имя слота и надетый предмет.
+    slots: Vec<(String, Option<WornItem>)>,
+    details: u32,
+    stock: usize,
+}
+
+fn gear_info(view: &CabinView, profile: &Profile, hero: &str) -> GearInfo {
+    let worn = view.gear.worn_by(hero);
+    let data = &view.gear_data;
+    GearInfo {
+        tab: *view.tab,
+        slots: data
+            .slots
+            .iter()
+            .enumerate()
+            .map(|(i, slot)| {
+                let item = worn[i].and_then(|id| view.gear.item(id)).map(|item| {
+                    (
+                        item.id,
+                        data.describe(item),
+                        data.enhance_cost(item),
+                        item.level >= data.enhance.max,
+                    )
+                });
+                (slot.name.clone(), item)
+            })
+            .collect(),
+        details: profile.details,
+        stock: view.gear.items.len(),
+    }
+}
+
+/// Что показать в разделе «Каюта» у героя.
+enum CabinInfo {
+    Locked,
+    Paired {
+        partner: String,
+        level: u32,
+        max: u32,
+        bonus: u32,
+        talked: bool,
+    },
+    Free {
+        free: u32,
+        total: u32,
+        candidates: Vec<(String, String)>,
+    },
+}
+
+fn cabin_info(view: &CabinView, roster: &Roster, data: &GameData, hero: &str) -> CabinInfo {
+    let total = view.ship.cabins(&view.ship_data);
+    if total == 0 {
+        return CabinInfo::Locked;
+    }
+    let name = |id: &str| data.hero(id).map_or(id.to_string(), |h| h.name.clone());
+    match view.cabins.pair_of(hero) {
+        Some(p) => CabinInfo::Paired {
+            partner: name(p.partner(hero)),
+            level: view.data.level(p.points),
+            max: view.data.max_level,
+            bonus: (view.data.bonus(p.points) * 100.0).round() as u32,
+            talked: p.talked_on == crate::cabins::today(),
+        },
+        None => CabinInfo::Free {
+            free: total.saturating_sub(view.cabins.pairs.len() as u32),
+            total,
+            candidates: data
+                .heroes
+                .iter()
+                .filter(|h| {
+                    h.id != hero && roster.owns(&h.id) && view.cabins.pair_of(&h.id).is_none()
+                })
+                .map(|h| (h.id.clone(), h.name.clone()))
+                .collect(),
+        },
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -410,6 +613,7 @@ fn rebuild_crew(
     profile: Res<Profile>,
     screen: Res<BattleScreen>,
     selected: Res<Selected>,
+    cabin: CabinView,
 ) {
     if !dirty.0 {
         return;
@@ -427,6 +631,7 @@ fn rebuild_crew(
         &profile,
         &screen.data,
         selected.0.as_deref(),
+        &cabin,
     );
 }
 
@@ -440,6 +645,7 @@ fn build(
     profile: &Profile,
     data: &GameData,
     selected: Option<&str>,
+    cabin: &CabinView,
 ) {
     commands
         .spawn((
@@ -485,7 +691,11 @@ fn build(
                         .map(|p| merge_line(p, data, hero))
                         .map_err(|e| e.clone()),
                 );
-                details(root, assets, fonts, crew, roster, profile, hero, merge);
+                let gear = gear_info(cabin, profile, &hero.id);
+                let cabin = cabin_info(cabin, roster, data, &hero.id);
+                details(
+                    root, assets, fonts, crew, roster, profile, hero, merge, cabin, gear,
+                );
             }
             bottom_nav(root, assets, fonts, Screen::Crew);
             spawn_toast(root, fonts);
@@ -525,7 +735,10 @@ fn header(
         ));
         bar.spawn(text(
             fonts,
-            format!("журналы {} · серебро {}", profile.journals, profile.silver),
+            format!(
+                "журналы {} · лоции {} · серебро {}",
+                profile.journals, profile.charts, profile.silver
+            ),
             false,
             14.0,
             MUTED,
@@ -650,6 +863,8 @@ fn details(
     profile: &Profile,
     hero: &HeroDef,
     merge: (Option<u32>, Result<String, String>),
+    cabin: CabinInfo,
+    gear: GearInfo,
 ) {
     let (merge_to, merge_info) = merge;
     let level = roster.level(&hero.id);
@@ -693,6 +908,13 @@ fn details(
                     stars_row(row, assets, roster.stars(&hero.id), 16.0);
                 }
             });
+        if owned {
+            tabs_row(panel, fonts, gear.tab);
+        }
+        if owned && gear.tab == CrewTab::Gear {
+            gear_tab(panel, fonts, gear);
+            return;
+        }
         panel.spawn(text(
             fonts,
             format!(
@@ -753,16 +975,7 @@ fn details(
                 }
             });
 
-        panel.spawn(text(
-            fonts,
-            format!(
-                "Умения: {} · {} (раз в {} хода) · {}",
-                hero.basic.name, hero.skill.name, hero.skill.cooldown, hero.ultimate.name
-            ),
-            false,
-            13.0,
-            PARCHMENT,
-        ));
+        skills_row(panel, fonts, crew, roster, profile, hero, owned);
         if owned {
             let (line, color) = match &merge_info {
                 Ok(text) => (text.clone(), BETTER),
@@ -786,7 +999,319 @@ fn details(
                     to_tavern_button(buttons, fonts);
                 }
             });
+        if owned {
+            cabin_row(panel, fonts, cabin);
+        }
     });
+}
+
+fn tabs_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts, tab: CrewTab) {
+    panel
+        .spawn(Node {
+            column_gap: px(6),
+            ..default()
+        })
+        .with_children(|row| {
+            for (label, t) in [("Герой", CrewTab::Hero), ("Снаряжение", CrewTab::Gear)]
+            {
+                let active = t == tab;
+                let mut button = row.spawn((
+                    Node {
+                        padding: UiRect::axes(px(14), px(5)),
+                        border: UiRect::all(px(1)),
+                        border_radius: BorderRadius::all(px(8)),
+                        ..default()
+                    },
+                    BackgroundColor(if active {
+                        STAR_FILL
+                    } else {
+                        Color::srgba(1.0, 1.0, 1.0, 0.05)
+                    }),
+                    BorderColor::all(if active { GOLD } else { MUTED }),
+                ));
+                button.with_child(text(fonts, label, true, 13.0, PARCHMENT));
+                pressable(&mut button);
+                button.observe(
+                    move |_: On<PointerClick>,
+                          mut tab: ResMut<CrewTab>,
+                          mut dirty: ResMut<CrewDirty>| {
+                        *tab = t;
+                        dirty.0 = true;
+                    },
+                );
+            }
+        });
+}
+
+/// Вкладка «Снаряжение»: четыре слота, усиление, «Надеть лучшее» и «Снять всё».
+fn gear_tab(panel: &mut ChildSpawnerCommands, fonts: &Fonts, info: GearInfo) {
+    panel.spawn(text(
+        fonts,
+        format!(
+            "Деталей {} · предметов на складе {} · создать — в Мастерской на корабле",
+            info.details, info.stock
+        ),
+        false,
+        12.0,
+        MUTED,
+    ));
+    for (name, item) in info.slots {
+        panel
+            .spawn((
+                Node {
+                    padding: UiRect::axes(px(10), px(6)),
+                    column_gap: px(8),
+                    align_items: AlignItems::Center,
+                    border_radius: BorderRadius::all(px(8)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.05)),
+            ))
+            .with_children(|row| {
+                row.spawn(Node {
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                })
+                .with_children(|c| {
+                    c.spawn(text(fonts, name, true, 13.0, PARCHMENT));
+                    let line = item
+                        .as_ref()
+                        .map_or("пусто".to_string(), |(_, d, _, _)| d.clone());
+                    c.spawn(text(
+                        fonts,
+                        line,
+                        false,
+                        12.0,
+                        if item.is_some() { BETTER } else { MUTED },
+                    ));
+                });
+                if let Some((id, _, (silver, details), maxed)) = item {
+                    let label = if maxed {
+                        "предел".to_string()
+                    } else {
+                        format!("+1: {silver} сер., {details} дет.")
+                    };
+                    gear_hero_button(row, fonts, &label, !maxed, HeroGear::Enhance(id));
+                }
+            });
+    }
+    panel
+        .spawn(Node {
+            margin: UiRect::top(px(4)),
+            column_gap: px(8),
+            ..default()
+        })
+        .with_children(|row| {
+            gear_hero_button(row, fonts, "Надеть лучшее", true, HeroGear::Best);
+            gear_hero_button(row, fonts, "Снять всё", true, HeroGear::Clear);
+        });
+}
+
+#[derive(Clone, Copy)]
+enum HeroGear {
+    Best,
+    Clear,
+    Enhance(u32),
+}
+
+fn gear_hero_button(
+    row: &mut ChildSpawnerCommands,
+    fonts: &Fonts,
+    label: &str,
+    active: bool,
+    act: HeroGear,
+) {
+    let mut button = row.spawn((
+        Node {
+            padding: UiRect::axes(px(12), px(8)),
+            border: UiRect::all(px(1)),
+            border_radius: BorderRadius::all(px(8)),
+            ..default()
+        },
+        BackgroundColor(if active { GO } else { DISABLED }),
+        BorderColor::all(if active { GO_EDGE } else { MUTED }),
+    ));
+    button.with_child(text(fonts, label, true, 12.0, Color::WHITE));
+    if active {
+        pressable(&mut button);
+        button.observe(move |_: On<PointerClick>, mut commands: Commands| {
+            commands.run_system_cached_with(hero_gear_act, act);
+        });
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn hero_gear_act(
+    In(act): In<HeroGear>,
+    selected: Res<Selected>,
+    data: Res<GearData>,
+    mut gear: ResMut<Gear>,
+    mut profile: ResMut<Profile>,
+    mut toast: ResMut<Toast>,
+    mut dirty: ResMut<CrewDirty>,
+    mut sfx: MessageWriter<Sfx>,
+) {
+    let Some(hero) = selected.0.clone() else {
+        return;
+    };
+    match act {
+        HeroGear::Best => {
+            gear.equip_best(&hero, &data);
+            if gear.worn_by(&hero).iter().all(|s| s.is_none()) {
+                toast.show("Надеть нечего — создайте снаряжение в Мастерской");
+            } else {
+                sfx.write(Sfx("done"));
+            }
+        }
+        HeroGear::Clear => gear.unequip_all(&hero),
+        HeroGear::Enhance(id) => {
+            let Some(item) = gear.item(id) else {
+                return;
+            };
+            let (silver, details) = data.enhance_cost(item);
+            if profile.silver < silver || profile.details < details {
+                toast.show(&format!("Нужно {silver} серебра и {details} деталей"));
+                return;
+            }
+            if gear.enhance(id, &data) {
+                profile.silver -= silver;
+                profile.details -= details;
+                sfx.write(Sfx("hammer"));
+            }
+        }
+    }
+    dirty.0 = true;
+}
+
+/// Раздел «Каюта»: сосед, близость и бонус, или кого поселить рядом.
+fn cabin_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts, info: CabinInfo) {
+    panel
+        .spawn(Node {
+            margin: UiRect::top(px(4)),
+            column_gap: px(6),
+            row_gap: px(4),
+            flex_wrap: FlexWrap::Wrap,
+            align_items: AlignItems::Center,
+            ..default()
+        })
+        .with_children(|row| match info {
+            CabinInfo::Locked => {
+                row.spawn(text(
+                    fonts,
+                    "Каюты откроются на Корпусе 4: соседи в одном отряде сильнее",
+                    false,
+                    12.0,
+                    MUTED,
+                ));
+            }
+            CabinInfo::Paired {
+                partner,
+                level,
+                max,
+                bonus,
+                talked,
+            } => {
+                row.spawn(text(
+                    fonts,
+                    format!("Сосед по каюте: {partner} · близость {level}/{max} · +{bonus}% атаки вместе"),
+                    false,
+                    12.0,
+                    BETTER,
+                ));
+                cabin_button(row, fonts, if talked { "сегодня уже говорили" } else { "Поговорить" }, !talked, CabinAct::Talk);
+                cabin_button(row, fonts, "Выселить", true, CabinAct::Evict);
+            }
+            CabinInfo::Free {
+                free,
+                total,
+                candidates,
+            } => {
+                row.spawn(text(
+                    fonts,
+                    format!("Без каюты · свободно {free} из {total} · поселить с:"),
+                    false,
+                    12.0,
+                    MUTED,
+                ));
+                if free > 0 {
+                    for (id, name) in candidates {
+                        cabin_button(row, fonts, &name, true, CabinAct::Settle(id));
+                    }
+                }
+            }
+        });
+}
+
+#[derive(Clone)]
+enum CabinAct {
+    Talk,
+    Evict,
+    Settle(String),
+}
+
+fn cabin_button(
+    row: &mut ChildSpawnerCommands,
+    fonts: &Fonts,
+    label: &str,
+    active: bool,
+    act: CabinAct,
+) {
+    let mut button = row.spawn((
+        Node {
+            padding: UiRect::axes(px(10), px(5)),
+            border: UiRect::all(px(1)),
+            border_radius: BorderRadius::all(px(8)),
+            ..default()
+        },
+        BackgroundColor(if active {
+            Color::srgba(0.85, 0.51, 0.17, 0.85)
+        } else {
+            DISABLED
+        }),
+        BorderColor::all(if active { GO_EDGE } else { MUTED }),
+    ));
+    button.with_child(text(fonts, label, true, 12.0, Color::WHITE));
+    if active {
+        pressable(&mut button);
+        button.observe(move |_: On<PointerClick>, mut commands: Commands| {
+            commands.run_system_cached_with(cabin_act, act.clone());
+        });
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cabin_act(
+    In(act): In<CabinAct>,
+    selected: Res<Selected>,
+    data: Res<CabinData>,
+    ship: (Res<crate::ship::Ship>, Res<crate::ship::ShipData>),
+    mut cabins: ResMut<Cabins>,
+    mut toast: ResMut<Toast>,
+    mut dirty: ResMut<CrewDirty>,
+    mut sfx: MessageWriter<Sfx>,
+) {
+    let Some(hero) = selected.0.clone() else {
+        return;
+    };
+    match act {
+        CabinAct::Talk => {
+            if cabins.talk(&hero, &data, crate::cabins::today()) {
+                toast.show("Разговор по душам: соседи стали ближе");
+                sfx.write(Sfx("coin"));
+            }
+        }
+        CabinAct::Evict => cabins.evict(&hero),
+        CabinAct::Settle(partner) => match cabins.settle(&hero, &partner, ship.0.cabins(&ship.1)) {
+            Ok(()) => {
+                toast.show("Соседи заселились в каюту");
+                sfx.write(Sfx("done"));
+            }
+            Err(reason) => toast.show(&reason),
+        },
+    }
+    dirty.0 = true;
 }
 
 fn level_button(
@@ -849,6 +1374,7 @@ fn level_up(
     mut dirty: ResMut<CrewDirty>,
     screen: Res<BattleScreen>,
     mut sfx: MessageWriter<Sfx>,
+    mut deeds: MessageWriter<Deed>,
 ) {
     let Some(id) = selected.0.clone() else {
         return;
@@ -875,6 +1401,123 @@ fn level_up(
         .data
         .hero(&id)
         .map_or(id.as_str(), |h| h.name.as_str());
+    toast.show(&format!("{name}: уровень {}", level + 1));
+    sfx.write(Sfx("levelup"));
+    deeds.write(Deed("levelup"));
+    dirty.0 = true;
+}
+
+/// Три умения героя: уровень, потолок от звёзд, цена следующего уровня; тап — повысить.
+fn skills_row(
+    panel: &mut ChildSpawnerCommands,
+    fonts: &Fonts,
+    crew: &CrewData,
+    roster: &Roster,
+    profile: &Profile,
+    hero: &HeroDef,
+    owned: bool,
+) {
+    let levels = roster.skills(&hero.id);
+    let cap = crew.skill_cap(roster.stars(&hero.id));
+    let names = [&hero.basic.name, &hero.skill.name, &hero.ultimate.name];
+    let kinds = ["атака", "спецатака", "ульта"];
+    panel
+        .spawn(Node {
+            column_gap: px(8),
+            ..default()
+        })
+        .with_children(|row| {
+            for i in 0..3 {
+                let level = levels[i];
+                let (charts, silver) = crew.skill_cost(level);
+                let can =
+                    owned && level < cap && profile.charts >= charts && profile.silver >= silver;
+                let sub = if !owned {
+                    kinds[i].to_string()
+                } else if level >= cap {
+                    format!("ур. {level} · потолок")
+                } else {
+                    format!("ур. {level} · {charts} лоц., {silver} сер.")
+                };
+                let mut chip = row.spawn((
+                    Node {
+                        flex_grow: 1.0,
+                        flex_basis: px(0),
+                        padding: UiRect::axes(px(6), px(5)),
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(px(1)),
+                        border_radius: BorderRadius::all(px(10)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.05)),
+                    BorderColor::all(if can {
+                        GOLD
+                    } else {
+                        Color::srgba(1.0, 1.0, 1.0, 0.15)
+                    }),
+                ));
+                chip.with_children(|c| {
+                    c.spawn((
+                        text(fonts, names[i].clone(), true, 12.0, PARCHMENT),
+                        TextLayout::justify(Justify::Center),
+                    ));
+                    c.spawn(text(
+                        fonts,
+                        sub,
+                        false,
+                        11.0,
+                        if can { BETTER } else { MUTED },
+                    ));
+                });
+                if owned {
+                    pressable(&mut chip);
+                    chip.observe(move |_: On<PointerClick>, mut commands: Commands| {
+                        commands.run_system_cached_with(upgrade_skill, i);
+                    });
+                }
+            }
+        });
+}
+
+/// Повысить умение героя из карточки за лоции и серебро.
+#[allow(clippy::too_many_arguments)]
+fn upgrade_skill(
+    In(i): In<usize>,
+    crew: Res<CrewData>,
+    selected: Res<Selected>,
+    screen: Res<BattleScreen>,
+    mut roster: ResMut<Roster>,
+    mut profile: ResMut<Profile>,
+    mut toast: ResMut<Toast>,
+    mut dirty: ResMut<CrewDirty>,
+    mut sfx: MessageWriter<Sfx>,
+) {
+    let Some(id) = selected.0.clone() else {
+        return;
+    };
+    let level = roster.skills(&id)[i];
+    let cap = crew.skill_cap(roster.stars(&id));
+    if level >= cap {
+        toast.show("Потолок умений — поднимите звёзды героя");
+        return;
+    }
+    let (charts, silver) = crew.skill_cost(level);
+    if profile.charts < charts || profile.silver < silver {
+        toast.show(&format!(
+            "Нужно {charts} лоций и {silver} серебра. Лоции дают Бездна облаков и контракты"
+        ));
+        return;
+    }
+    profile.charts -= charts;
+    profile.silver -= silver;
+    roster.raise_skill(&id, i);
+    let hero = screen.data.hero(&id);
+    let name = hero.map_or("", |h| match i {
+        0 => h.basic.name.as_str(),
+        1 => h.skill.name.as_str(),
+        _ => h.ultimate.name.as_str(),
+    });
     toast.show(&format!("{name}: уровень {}", level + 1));
     sfx.write(Sfx("levelup"));
     dirty.0 = true;
@@ -1045,6 +1688,7 @@ fn team_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, id: &str, in_t
     button.observe(
         move |_: On<PointerClick>,
               crew: Res<CrewData>,
+              exps: Res<crate::expeditions::Expeditions>,
               mut roster: ResMut<Roster>,
               mut toast: ResMut<Toast>,
               mut dirty: ResMut<CrewDirty>| {
@@ -1055,6 +1699,8 @@ fn team_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, id: &str, in_t
                 } else {
                     toast.show("В отряде нужен хотя бы один герой");
                 }
+            } else if exps.is_away(&id) {
+                toast.show("Герой в экспедиции — вернётся, тогда возьмём в отряд");
             } else if roster.team.len() < crew.team_size {
                 roster.team.push(id.clone());
                 dirty.0 = true;
@@ -1131,9 +1777,24 @@ mod tests {
     fn stars_make_hero_stronger() {
         let (data, crew) = (data(), crew());
         let ren = data.hero("ren").unwrap();
-        let one = crew.hero_unit(ren, 10, 1);
-        let three = crew.hero_unit(ren, 10, 3);
+        let one = crew.hero_unit(ren, 10, 1, [1, 1, 1]);
+        let three = crew.hero_unit(ren, 10, 3, [1, 1, 1]);
         assert!(three.stats.atk > one.stats.atk && three.stats.max_hp > one.stats.max_hp);
+    }
+
+    #[test]
+    fn skills_raise_power_and_cut_cooldown() {
+        let (data, crew) = (data(), crew());
+        let ren = data.hero("ren").unwrap();
+        let base = crew.hero_unit(ren, 1, 1, [1, 1, 1]);
+        let up = crew.hero_unit(ren, 1, 1, [3, 5, 2]);
+        let dmg = |u: &UnitDef| match u.basic.effects[0].effect {
+            Effect::Damage { multiplier } => multiplier,
+            _ => 0.0,
+        };
+        assert!(dmg(&up) > dmg(&base));
+        let cd = |u: &UnitDef| u.skill.as_ref().unwrap().cooldown;
+        assert_eq!(cd(&up), cd(&base) - 1);
     }
 
     #[test]

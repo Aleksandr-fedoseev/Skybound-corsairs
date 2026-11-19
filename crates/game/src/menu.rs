@@ -10,9 +10,12 @@ use serde::{Deserialize, Serialize};
 use bevy::ecs::system::SystemParam;
 
 use crate::Screen;
+use crate::abyss::{Abyss, AbyssData};
 use crate::audio::Sfx;
 use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
+use crate::contracts::{BoardOpen, ContractData, Contracts, Deed};
 use crate::convoys::Convoys;
+use crate::events::{EventData, StormEvent, WeekEvents};
 use crate::ship::{Compartment, OpenCompartment, Ship, ShipData};
 use crate::story::{StoryQueue, VoyageRequest};
 use crate::view::{Fonts, ResultNote};
@@ -84,6 +87,18 @@ pub struct Profile {
     pub ether: u32,
     pub doubloons: u32,
     pub journals: u32,
+    /// Лоции — книги умений (из Бездны, контрактов, ивентов).
+    #[serde(default)]
+    pub charts: u32,
+    /// Носовые фигуры — заменяют корм при слиянии.
+    #[serde(default)]
+    pub figureheads: u32,
+    /// Детали старого мира — создание и усиление снаряжения.
+    #[serde(default)]
+    pub details: u32,
+    /// Буревые ядра — из ивентов; для отсеков 8–10 и легендарного снаряжения.
+    #[serde(default)]
+    pub storm_cores: u32,
     /// Эфир, который накопили Ветроловы и который ещё не собран.
     pub ether_pending: f32,
 }
@@ -97,6 +112,10 @@ impl Profile {
             ether: start.ether,
             doubloons: start.doubloons,
             journals: start.journals,
+            charts: 0,
+            figureheads: 0,
+            details: 0,
+            storm_cores: 0,
             ether_pending: start.ether_waiting,
         }
     }
@@ -193,6 +212,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Toast>()
         .init_resource::<Voyage>()
         .init_resource::<MenuRebuild>()
+        .init_resource::<TilePage>()
         .add_systems(OnEnter(Screen::Menu), spawn_menu)
         .add_systems(
             Update,
@@ -205,7 +225,8 @@ pub fn plugin(app: &mut App) {
                 in_state(Screen::Menu)
                     .or_else(in_state(Screen::Map))
                     .or_else(in_state(Screen::Crew))
-                    .or_else(in_state(Screen::Tavern)),
+                    .or_else(in_state(Screen::Tavern))
+                    .or_else(in_state(Screen::Activities)),
             ),
         )
         .add_systems(Update, count_victory.run_if(in_state(Screen::Battle)));
@@ -225,6 +246,12 @@ struct MenuView<'w> {
     ship_data: Res<'w, ShipData>,
     ship: Res<'w, Ship>,
     open: Res<'w, OpenCompartment>,
+    contract_data: Res<'w, ContractData>,
+    contracts: Res<'w, Contracts>,
+    board_open: Res<'w, BoardOpen>,
+    gear_data: Res<'w, crate::gear::GearData>,
+    gear: Res<'w, crate::gear::Gear>,
+    page: Res<'w, TilePage>,
 }
 
 fn spawn_menu(mut commands: Commands, view: MenuView) {
@@ -340,7 +367,7 @@ fn build(commands: &mut Commands, view: &MenuView) {
         ))
         .with_children(|root| {
             top_bar(root, fonts, profile);
-            side_buttons(root, fonts);
+            side_buttons(root, fonts, view.contracts.claimable(&view.contract_data));
 
             // Имя корабля над ним.
             root.spawn((
@@ -412,7 +439,8 @@ fn build(commands: &mut Commands, view: &MenuView) {
                  mut toast: ResMut<Toast>,
                  ship: Res<Ship>,
                  ship_data: Res<ShipData>,
-                 mut sfx: MessageWriter<Sfx>| {
+                 mut sfx: MessageWriter<Sfx>,
+                 mut deeds: MessageWriter<Deed>| {
                     let room = ship
                         .capacity(&ship_data)
                         .ether
@@ -425,16 +453,33 @@ fn build(commands: &mut Commands, view: &MenuView) {
                         profile.ether += got;
                         profile.ether_pending -= got as f32;
                         sfx.write(Sfx("coin"));
+                        deeds.write(Deed("ether"));
                         toast.show(&format!("Ветроловы: +{got} эфира"));
                     }
                 },
             );
 
-            compartments(root, assets, fonts, ship_data, ship);
+            compartments(root, assets, fonts, ship_data, ship, view.page.0);
             voyage(root, fonts, next, done);
             bottom_nav(root, assets, fonts, Screen::Menu);
-            if let Some(id) = &view.open.0 {
-                crate::ship::panel(root, fonts, ship_data, ship, profile, id);
+            if view.board_open.0 {
+                crate::contracts::board(root, fonts, &view.contract_data, &view.contracts);
+            } else if let Some(id) = &view.open.0 {
+                let workshop = (id == "workshop")
+                    .then(|| ship.workshop_rarity(ship_data))
+                    .flatten();
+                crate::ship::panel(root, fonts, ship_data, ship, profile, id, |p| {
+                    if let Some(max) = workshop {
+                        crate::gear::workshop_section(
+                            p,
+                            fonts,
+                            &view.gear_data,
+                            &view.gear,
+                            max,
+                            profile,
+                        );
+                    }
+                });
             }
             spawn_toast(root, fonts);
         });
@@ -598,7 +643,7 @@ fn resource_pill(
     });
 }
 
-fn side_buttons(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
+fn side_buttons(root: &mut ChildSpawnerCommands, fonts: &Fonts, contracts_ready: bool) {
     let column = |left: bool| Node {
         position_type: PositionType::Absolute,
         top: px(76),
@@ -617,13 +662,7 @@ fn side_buttons(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
             false,
             "Боевой пропуск появится позже",
         ),
-        (
-            "Контракты",
-            "задания",
-            BRASS,
-            true,
-            "Доска контрактов появится позже",
-        ),
+        ("Контракты", "задания", BRASS, contracts_ready, ""),
         ("Почта", "", BRASS, false, "Почта появится позже"),
     ];
     for (left, chunk) in [(true, &items[..2]), (false, &items[2..])] {
@@ -664,7 +703,26 @@ fn side_buttons(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
                         ));
                     }
                 });
-                later(&mut button, message);
+                if title == "Буря" {
+                    pressable(&mut button);
+                    button.observe(|_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
+                        next.set(Screen::Activities);
+                    });
+                } else if title == "Контракты" {
+                    pressable(&mut button);
+                    button.observe(
+                        |_: On<PointerClick>,
+                         mut open: ResMut<BoardOpen>,
+                         mut panel: ResMut<OpenCompartment>,
+                         mut rebuild: ResMut<MenuRebuild>| {
+                            open.0 = true;
+                            panel.0 = None;
+                            rebuild.0 = true;
+                        },
+                    );
+                } else {
+                    later(&mut button, message);
+                }
             }
         });
     }
@@ -676,12 +734,26 @@ fn compartments(
     fonts: &Fonts,
     data: &ShipData,
     ship: &Ship,
+    page: usize,
 ) {
-    // Сначала открытые отсеки, потом ближайшие закрытые.
+    // Сначала открытые и полезные отсеки, потом открытые «на будущее», потом закрытые.
     let hull = ship.hull();
-    let mut shown: Vec<&Compartment> = data.compartments.iter().collect();
-    shown.sort_by_key(|c| (c.unlock_hull > hull, c.unlock_hull));
-    shown.truncate(COMPARTMENTS_SHOWN);
+    let mut all: Vec<&Compartment> = data.compartments.iter().collect();
+    all.sort_by_key(|c| (c.unlock_hull > hull, c.effect.is_none(), c.unlock_hull));
+    // Не влезают все — пять плиток на страницу и шестая «Ещё».
+    let per_page = if all.len() > COMPARTMENTS_SHOWN {
+        COMPARTMENTS_SHOWN - 1
+    } else {
+        COMPARTMENTS_SHOWN
+    };
+    let pages = all.len().div_ceil(per_page);
+    let page = page % pages.max(1);
+    let shown: Vec<&Compartment> = all
+        .iter()
+        .skip(page * per_page)
+        .take(per_page)
+        .copied()
+        .collect();
 
     root.spawn((
         Node {
@@ -756,14 +828,48 @@ fn compartments(
             tile.observe(
                 move |_: On<PointerClick>,
                       mut opened: ResMut<OpenCompartment>,
+                      mut board: ResMut<BoardOpen>,
                       mut rebuild: ResMut<MenuRebuild>| {
+                    board.0 = false;
                     opened.0 = Some(id.clone());
+                    rebuild.0 = true;
+                },
+            );
+        }
+        if pages > 1 {
+            let mut more = row.spawn(Node {
+                width: px(82),
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            });
+            more.with_children(|t| {
+                t.spawn(text(fonts, "Ещё", true, 16.0, GOLD));
+                t.spawn(text(
+                    fonts,
+                    format!("{}/{pages}", page + 1),
+                    false,
+                    12.0,
+                    MUTED,
+                ));
+            });
+            pressable(&mut more);
+            more.observe(
+                move |_: On<PointerClick>,
+                      mut p: ResMut<TilePage>,
+                      mut rebuild: ResMut<MenuRebuild>| {
+                    p.0 = (page + 1) % pages;
                     rebuild.0 = true;
                 },
             );
         }
     });
 }
+
+/// Страница в ряду отсеков.
+#[derive(Resource, Default)]
+pub(crate) struct TilePage(pub usize);
 
 fn voyage(root: &mut ChildSpawnerCommands, fonts: &Fonts, next: &game_data::StageDef, done: bool) {
     root.spawn((
@@ -845,7 +951,7 @@ pub(crate) fn bottom_nav(
         (
             "Активности",
             "menu/module_lookout.png",
-            Err("Активности появятся позже"),
+            Ok(Screen::Activities),
         ),
     ];
     root.spawn((
@@ -1008,7 +1114,12 @@ fn count_victory(
     mut counted: Local<Option<(usize, u64)>>,
     mut story: ResMut<StoryQueue>,
     mut notes: Query<&mut Text, With<ResultNote>>,
+    mut deeds: MessageWriter<Deed>,
+    abyss: (Res<AbyssData>, ResMut<Abyss>),
+    events: (Res<EventData>, ResMut<StormEvent>, ResMut<WeekEvents>),
 ) {
+    let (abyss_data, mut abyss) = abyss;
+    let (event_data, mut storm, mut week_events) = events;
     let Some(outcome) = screen.shown_outcome else {
         return;
     };
@@ -1018,20 +1129,72 @@ fn count_victory(
     }
     *counted = Some(battle);
     let note = match (outcome, &screen.custom) {
+        // Буря: считается урон в любом исходе.
+        (_, Some(fight)) if fight.kind == FightKind::Storm => {
+            let damage: u32 = screen
+                .battle
+                .units()
+                .iter()
+                .filter(|u| u.side == battle_core::Side::Enemy)
+                .map(|u| u.def.stats.max_hp - u.hp)
+                .sum();
+            if outcome == Outcome::Victory {
+                deeds.write(Deed("win"));
+            }
+            storm.record(damage, &event_data.storm, &mut spoils.profile)
+        }
         (Outcome::Defeat, _) => "Усильте отряд или смените тактику".to_string(),
+        (Outcome::Victory, Some(fight)) if matches!(fight.kind, FightKind::Regatta(_)) => {
+            let FightKind::Regatta(leg) = fight.kind else {
+                unreachable!()
+            };
+            deeds.write(Deed("win"));
+            week_events.finish_leg(leg, &event_data.regatta, &mut spoils.profile)
+        }
+        (Outcome::Victory, Some(fight)) if matches!(fight.kind, FightKind::Abyss(_)) => {
+            let FightKind::Abyss(floor) = fight.kind else {
+                unreachable!()
+            };
+            deeds.write(Deed("win"));
+            if floor == abyss.best + 1 {
+                abyss.best = floor;
+                let r = abyss_data.reward(floor);
+                spoils.give(r.silver, 0, r.journals);
+                let p = &mut spoils.profile;
+                p.charts += r.charts;
+                p.doubloons += r.doubloons;
+                p.figureheads += r.figureheads;
+                p.details += r.details;
+                format!("Этаж {floor} пройден! {}", r.line())
+            } else {
+                "Этаж уже пройден — награда выдаётся один раз".to_string()
+            }
+        }
         (Outcome::Victory, Some(fight))
             if fight.kind == FightKind::Convoy && convoys.ready == 0 =>
         {
             "Конвоев в очереди нет — добычи нет. Новое судно скоро появится".to_string()
         }
         (Outcome::Victory, Some(fight)) => {
-            spoils.give(fight.silver, fight.planks, fight.journals);
+            // Попутный ветер по выходным: добыча с конвоя больше.
+            let k = if fight.kind == FightKind::Convoy {
+                event_data.convoy_multiplier()
+            } else {
+                1
+            };
+            let (silver, planks) = (fight.silver * k, fight.planks * k);
+            spoils.give(silver, planks, fight.journals);
+            deeds.write(Deed("win"));
             if fight.kind == FightKind::Convoy {
                 convoys.ready -= 1;
+                deeds.write(Deed("convoy"));
             }
-            let mut parts = vec![format!("+{} серебра", fight.silver)];
-            if fight.planks > 0 {
-                parts.push(format!("+{} досок", fight.planks));
+            let mut parts = vec![format!("+{silver} серебра")];
+            if planks > 0 {
+                parts.push(format!("+{planks} досок"));
+            }
+            if k > 1 {
+                parts.push(format!("попутный ветер ×{k}"));
             }
             if fight.journals > 0 {
                 parts.push(format!("+{} журналов", fight.journals));
@@ -1041,6 +1204,7 @@ fn count_victory(
         (Outcome::Victory, None) => {
             let reward = &data.victory_reward;
             spoils.give(reward.silver, reward.planks, reward.journals);
+            deeds.write(Deed("win"));
             let first = screen.stage == progress.cleared;
             if first {
                 story.0.push(screen.data.stages[screen.stage].id.clone());
