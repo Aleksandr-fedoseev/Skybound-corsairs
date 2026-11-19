@@ -9,10 +9,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::Screen;
 use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
+use crate::expeditions::{ExpeditionData, Expeditions};
 use crate::menu::{
     BRASS, GO, GO_EDGE, GOLD, MUTED, PARCHMENT, Voyage, WOOD, bottom_nav, later, pressable,
     spawn_toast, text,
 };
+use crate::save::now;
+use crate::ship::{Ship, ShipData};
 use crate::story::VoyageRequest;
 use crate::view::Fonts;
 
@@ -133,23 +136,89 @@ pub struct Abyss {
     pub best: u32,
 }
 
+/// Экран «Активности» надо собрать заново (экспедиция ушла, вернулась, тикнул таймер).
+#[derive(Resource, Default)]
+pub struct ActivitiesDirty(pub bool);
+
+#[derive(Component)]
+struct ActivitiesRoot;
+
 pub fn plugin(app: &mut App) {
     app.insert_resource(AbyssData::bundled())
         .init_resource::<Abyss>()
-        .add_systems(OnEnter(Screen::Activities), spawn_activities);
+        .init_resource::<ActivitiesDirty>()
+        .add_systems(OnEnter(Screen::Activities), spawn_activities)
+        .add_systems(
+            Update,
+            (tick_timers, rebuild_activities)
+                .chain()
+                .run_if(in_state(Screen::Activities)),
+        );
 }
 
-fn spawn_activities(
-    mut commands: Commands,
-    assets: Res<AssetServer>,
-    fonts: Res<Fonts>,
-    data: Res<AbyssData>,
-    abyss: Res<Abyss>,
-    screen: Res<BattleScreen>,
+/// Всё, из чего собирается экран.
+#[derive(bevy::ecs::system::SystemParam)]
+struct View<'w> {
+    assets: Res<'w, AssetServer>,
+    fonts: Res<'w, Fonts>,
+    data: Res<'w, AbyssData>,
+    abyss: Res<'w, Abyss>,
+    screen: Res<'w, BattleScreen>,
+    exp_data: Res<'w, ExpeditionData>,
+    exps: Res<'w, Expeditions>,
+    ship: Res<'w, Ship>,
+    ship_data: Res<'w, ShipData>,
+}
+
+fn spawn_activities(mut commands: Commands, view: View) {
+    build(&mut commands, &view);
+}
+
+/// Пока экспедиции в пути, раз в секунду обновляем время до возвращения.
+fn tick_timers(
+    time: Res<Time>,
+    exps: Res<Expeditions>,
+    mut acc: Local<f32>,
+    mut dirty: ResMut<ActivitiesDirty>,
 ) {
+    *acc += time.delta_secs();
+    if *acc >= 1.0 {
+        *acc = 0.0;
+        if !exps.running.is_empty() {
+            dirty.0 = true;
+        }
+    }
+}
+
+fn rebuild_activities(
+    mut commands: Commands,
+    mut dirty: ResMut<ActivitiesDirty>,
+    roots: Query<Entity, With<ActivitiesRoot>>,
+    view: View,
+) {
+    if !dirty.0 {
+        return;
+    }
+    dirty.0 = false;
+    for root in &roots {
+        commands.entity(root).despawn();
+    }
+    build(&mut commands, &view);
+}
+
+fn build(commands: &mut Commands, view: &View) {
+    let (assets, fonts, data, abyss, screen) = (
+        &*view.assets,
+        &*view.fonts,
+        &*view.data,
+        &*view.abyss,
+        &*view.screen,
+    );
     let floor = abyss.best + 1;
+    let boats = crate::expeditions::boats(&view.exp_data, &view.ship, &view.ship_data);
     commands
         .spawn((
+            ActivitiesRoot,
             DespawnOnExit(Screen::Activities),
             Node {
                 width: percent(100),
@@ -174,7 +243,7 @@ fn spawn_activities(
                 BackgroundColor(WOOD),
                 BorderColor::all(BRASS),
             ))
-            .with_child(text(&fonts, "Активности", true, 20.0, PARCHMENT));
+            .with_child(text(fonts, "Активности", true, 20.0, PARCHMENT));
 
             root.spawn(Node {
                 position_type: PositionType::Absolute,
@@ -186,13 +255,17 @@ fn spawn_activities(
                 ..default()
             })
             .with_children(|col| {
-                abyss_card(col, &fonts, &data, &screen, floor, abyss.best);
+                abyss_card(col, fonts, data, screen, floor, abyss.best);
+                crate::expeditions::section(
+                    col,
+                    fonts,
+                    &view.exp_data,
+                    &view.exps,
+                    boats,
+                    screen,
+                    now(),
+                );
                 for (title, sub, message) in [
-                    (
-                        "Экспедиции на шлюпках",
-                        "герои уходят за добычей на 2, 4 или 8 часов",
-                        "Экспедиции появятся в следующем обновлении",
-                    ),
                     (
                         "Руины старого мира",
                         "подземелье на 10 этажей с выбором пути",
@@ -204,11 +277,11 @@ fn spawn_activities(
                         "Арена откроется после запуска игры",
                     ),
                 ] {
-                    soon_card(col, &fonts, title, sub, message);
+                    soon_card(col, fonts, title, sub, message);
                 }
             });
-            bottom_nav(root, &assets, &fonts, Screen::Activities);
-            spawn_toast(root, &fonts);
+            bottom_nav(root, assets, fonts, Screen::Activities);
+            spawn_toast(root, fonts);
         });
 }
 

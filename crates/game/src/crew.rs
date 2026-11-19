@@ -1240,6 +1240,7 @@ fn team_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, id: &str, in_t
     button.observe(
         move |_: On<PointerClick>,
               crew: Res<CrewData>,
+              exps: Res<crate::expeditions::Expeditions>,
               mut roster: ResMut<Roster>,
               mut toast: ResMut<Toast>,
               mut dirty: ResMut<CrewDirty>| {
@@ -1250,6 +1251,8 @@ fn team_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, id: &str, in_t
                 } else {
                     toast.show("В отряде нужен хотя бы один герой");
                 }
+            } else if exps.is_away(&id) {
+                toast.show("Герой в экспедиции — вернётся, тогда возьмём в отряд");
             } else if roster.team.len() < crew.team_size {
                 roster.team.push(id.clone());
                 dirty.0 = true;

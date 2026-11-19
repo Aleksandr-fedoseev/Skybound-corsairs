@@ -1,0 +1,11 @@
+{
+  "base_boats": 1,
+  "missions": [
+    { "id": "logging", "name": "Лесозаготовка на Зелёном острове", "hours": 2, "heroes": 1,
+      "reward": { "planks": 100, "silver": 50 } },
+    { "id": "well", "name": "Облачный колодец: сбор эфира", "hours": 4, "heroes": 2,
+      "reward": { "ether": 60, "planks": 80 } },
+    { "id": "ruins", "name": "Разведка руин старого мира", "hours": 8, "heroes": 2,
+      "reward": { "planks": 150, "charts": 2, "figureheads": 1 } }
+  ]
+}

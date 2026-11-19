@@ -92,6 +92,10 @@ pub enum Effect {
     JournalsPerMinute {
         values: Vec<u32>,
     },
+    /// Дополнительные шлюпки для экспедиций.
+    Boats {
+        values: Vec<u32>,
+    },
 }
 
 /// Значение по уровню: на уровне 0 (не построен) — ноль, выше таблицы — последнее.
@@ -225,6 +229,14 @@ impl Ship {
     pub fn journals_per_minute(&self, data: &ShipData) -> u32 {
         self.value(data, |e| match e {
             Effect::JournalsPerMinute { values } => Some(values),
+            _ => None,
+        })
+    }
+
+    /// Шлюпок сверх базовых (отсек «Шлюпки»).
+    pub fn extra_boats(&self, data: &ShipData) -> u32 {
+        self.value(data, |e| match e {
+            Effect::Boats { values } => Some(values),
             _ => None,
         })
     }
@@ -387,6 +399,9 @@ fn effect_line(effect: &Effect, level: u32) -> String {
         }
         Effect::JournalsPerMinute { values } => {
             format!("Судовые журналы: {} в минуту", at(values, level))
+        }
+        Effect::Boats { values } => {
+            format!("Шлюпок для экспедиций: +{}", at(values, level))
         }
     }
 }

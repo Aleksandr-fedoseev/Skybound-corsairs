@@ -11,6 +11,7 @@ mod contracts;
 mod convoys;
 mod crew;
 mod dev;
+mod expeditions;
 mod fx;
 mod map;
 mod menu;
@@ -86,6 +87,7 @@ fn main() {
         convoys::plugin,
         contracts::plugin,
         abyss::plugin,
+        expeditions::plugin,
     ))
     .add_message::<Shown>()
     .insert_resource(crew)
