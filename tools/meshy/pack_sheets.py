@@ -17,7 +17,7 @@ from PIL import Image, ImageFilter
 ROOT = Path(__file__).resolve().parents[2]
 FRAME_H = 256          # высота кадра в листе: на экране боец ~150 px, запас под резкость
 CLIP_FPS = {"idle": 6, "victory": 6}   # зацикленные клипы; остальные растягиваются на время клипа игры
-ORDER = ["idle", "attack", "skill", "hit", "death", "victory"]
+ORDER = ["idle", "attack", "skill", "ult", "hit", "death", "victory"]
 
 ap = argparse.ArgumentParser()
 ap.add_argument("name")

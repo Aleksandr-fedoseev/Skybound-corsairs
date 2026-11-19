@@ -200,7 +200,14 @@ pub fn spawn_effects(
                     seconds = seconds.max(flight + 0.35);
                 }
                 if let Some((_, mut anim)) = models.iter_mut().find(|(m, _)| m.id == *unit) {
-                    anim.play(Clip::Attack { to, big }, seconds);
+                    anim.play(
+                        Clip::Attack {
+                            to,
+                            big,
+                            skill: *kind == AbilityKind::Skill,
+                        },
+                        seconds,
+                    );
                 }
             }
             Event::BroadsideFired => {

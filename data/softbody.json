@@ -76,5 +76,16 @@
       {"at": [0.55, 0.33], "r": 0.09, "kind": "sway", "weight": 1.0},
       {"at": [0.15, 0.6], "r": 0.14, "kind": "sway", "weight": 0.8}
     ]
+  },
+  "imperial_marine": {
+    "idle": [
+      {"at": [0.36, 0.07], "r": 0.07, "kind": "sway", "weight": 1.0}
+    ],
+    "attack": [
+      {"at": [0.36, 0.07], "r": 0.07, "kind": "sway", "weight": 1.0}
+    ],
+    "hit": [
+      {"at": [0.36, 0.07], "r": 0.07, "kind": "sway", "weight": 1.0}
+    ]
   }
 }

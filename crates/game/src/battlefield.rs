@@ -154,7 +154,13 @@ impl AnimatedArt {
     pub fn clip_name(&self, clip: Clip) -> &str {
         let name = match clip {
             Clip::Idle => "idle",
-            Clip::Attack { big: true, .. } if self.clips.contains_key("skill") => "skill",
+            // Ульта — своя поза, иначе поза умения; умение — своя поза, иначе атака.
+            Clip::Attack { big: true, .. } if self.clips.contains_key("ult") => "ult",
+            Clip::Attack { big: true, .. } | Clip::Attack { skill: true, .. }
+                if self.clips.contains_key("skill") =>
+            {
+                "skill"
+            }
             Clip::Attack { .. } => "attack",
             Clip::Hit { .. } => "hit",
             Clip::Death => "death",
@@ -241,10 +247,11 @@ pub struct EnergyBar(pub UnitId);
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Clip {
     Idle,
-    /// Рывок к точке и назад; `big` — ульта с приседом.
+    /// Рывок к точке и назад; `big` — ульта с приседом, `skill` — умение (своя поза листа).
     Attack {
         to: Vec2,
         big: bool,
+        skill: bool,
     },
     /// Отброс от удара в сторону `dir`.
     Hit {
@@ -655,7 +662,7 @@ pub fn animate_models(
 
         match anim.clip {
             Clip::Idle => {}
-            Clip::Attack { to, big } => {
+            Clip::Attack { to, big, .. } => {
                 let reach = if big {
                     look.ult_reach
                 } else {
