@@ -11,17 +11,17 @@ use crate::Screen;
 use crate::battle_screen::BattleScreen;
 use crate::view::{Fonts, ResultNote};
 
-const WOOD: Color = Color::srgba(0.11, 0.075, 0.05, 0.90);
-const DARK_WOOD: Color = Color::srgb(0.09, 0.06, 0.04);
-const BRASS: Color = Color::srgb(0.79, 0.59, 0.25);
-const PARCHMENT: Color = Color::srgb(0.965, 0.906, 0.784);
-const MUTED: Color = Color::srgb(0.80, 0.72, 0.58);
-const GOLD: Color = Color::srgb(0.95, 0.76, 0.31);
-const GO: Color = Color::srgb(0.85, 0.51, 0.17);
-const GO_EDGE: Color = Color::srgb(1.0, 0.89, 0.63);
+pub(crate) const WOOD: Color = Color::srgba(0.11, 0.075, 0.05, 0.90);
+pub(crate) const DARK_WOOD: Color = Color::srgb(0.09, 0.06, 0.04);
+pub(crate) const BRASS: Color = Color::srgb(0.79, 0.59, 0.25);
+pub(crate) const PARCHMENT: Color = Color::srgb(0.965, 0.906, 0.784);
+pub(crate) const MUTED: Color = Color::srgb(0.80, 0.72, 0.58);
+pub(crate) const GOLD: Color = Color::srgb(0.95, 0.76, 0.31);
+pub(crate) const GO: Color = Color::srgb(0.85, 0.51, 0.17);
+pub(crate) const GO_EDGE: Color = Color::srgb(1.0, 0.89, 0.63);
 const STORM: Color = Color::srgb(0.56, 0.82, 1.0);
 const ETHER: Color = Color::srgb(0.18, 0.61, 0.58);
-const RED_DOT: Color = Color::srgb(0.88, 0.29, 0.23);
+pub(crate) const RED_DOT: Color = Color::srgb(0.88, 0.29, 0.23);
 const PILL: Color = Color::srgba(0.0, 0.0, 0.0, 0.35);
 /// Сколько отсеков помещается в ряд под кораблём.
 const COMPARTMENTS_SHOWN: usize = 6;
@@ -141,13 +141,13 @@ impl Progress {
 }
 
 #[derive(Resource, Default)]
-struct Toast {
+pub(crate) struct Toast {
     text: String,
     left: f32,
 }
 
 impl Toast {
-    fn show(&mut self, text: &str) {
+    pub(crate) fn show(&mut self, text: &str) {
         self.text = text.to_string();
         self.left = TOAST_SECONDS;
     }
@@ -174,6 +174,23 @@ struct EtherBubble;
 #[derive(Component)]
 struct ToastNode;
 
+/// Куда идём в бой и куда вернуться после него.
+#[derive(Resource)]
+pub struct Voyage {
+    /// Этап, выбранный на карте; `None` — следующий непройденный.
+    pub stage: Option<usize>,
+    pub from: Screen,
+}
+
+impl Default for Voyage {
+    fn default() -> Self {
+        Self {
+            stage: None,
+            from: Screen::Menu,
+        }
+    }
+}
+
 #[derive(Component)]
 struct ShipSprite;
 
@@ -183,19 +200,18 @@ pub fn plugin(app: &mut App) {
         .insert_resource(data)
         .init_resource::<Progress>()
         .init_resource::<Toast>()
+        .init_resource::<Voyage>()
         .init_resource::<MenuRebuild>()
         .add_systems(OnEnter(Screen::Menu), spawn_menu)
         .add_systems(Update, accumulate_ether)
         .add_systems(
             Update,
-            (
-                rebuild_menu,
-                refresh_values,
-                refresh_ether_bubble,
-                refresh_toast,
-                bob_ship,
-            )
+            (rebuild_menu, refresh_values, refresh_ether_bubble, bob_ship)
                 .run_if(in_state(Screen::Menu)),
+        )
+        .add_systems(
+            Update,
+            refresh_toast.run_if(in_state(Screen::Menu).or_else(in_state(Screen::Map))),
         )
         .add_systems(Update, count_victory.run_if(in_state(Screen::Battle)));
     #[cfg(feature = "dev")]
@@ -252,7 +268,7 @@ fn rebuild_menu(
     );
 }
 
-fn text(
+pub(crate) fn text(
     fonts: &Fonts,
     value: impl Into<String>,
     bold: bool,
@@ -272,7 +288,7 @@ fn text(
 }
 
 /// Кнопка чуть сжимается под пальцем.
-fn pressable(button: &mut EntityCommands) {
+pub(crate) fn pressable(button: &mut EntityCommands) {
     button
         .observe(|ev: On<PointerPress>, mut nodes: Query<&mut UiTransform>| {
             if let Ok(mut t) = nodes.get_mut(ev.event_target()) {
@@ -294,14 +310,14 @@ fn pressable(button: &mut EntityCommands) {
 }
 
 /// Кнопка того, чего в игре ещё нет: показывает подсказку.
-fn later(button: &mut EntityCommands, message: &'static str) {
+pub(crate) fn later(button: &mut EntityCommands, message: &'static str) {
     pressable(button);
     button.observe(move |_: On<PointerClick>, mut toast: ResMut<Toast>| {
         toast.show(message);
     });
 }
 
-fn stage_title(id: &str) -> String {
+pub(crate) fn stage_title(id: &str) -> String {
     let mut parts = id.splitn(2, '-');
     let chapter = parts.next().unwrap_or("1");
     match parts.next() {
@@ -419,31 +435,34 @@ fn build(
 
             compartments(root, assets, fonts, data, profile);
             voyage(root, fonts, next, done);
-            bottom_nav(root, assets, fonts);
-
-            // Подсказка поверх всего.
-            root.spawn((
-                ToastNode,
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(250),
-                    left: px(40),
-                    width: px(460),
-                    padding: UiRect::all(px(12)),
-                    justify_content: JustifyContent::Center,
-                    border_radius: BorderRadius::all(px(10)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.78)),
-                Visibility::Hidden,
-                GlobalZIndex(20),
-                Pickable::IGNORE,
-            ))
-            .with_child((
-                text(fonts, "", false, 15.0, Color::WHITE),
-                TextLayout::justify(Justify::Center),
-            ));
+            bottom_nav(root, assets, fonts, Screen::Menu);
+            spawn_toast(root, fonts);
         });
+}
+
+/// Подсказка поверх всего экрана.
+pub(crate) fn spawn_toast(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
+    root.spawn((
+        ToastNode,
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(250),
+            left: px(40),
+            width: px(460),
+            padding: UiRect::all(px(12)),
+            justify_content: JustifyContent::Center,
+            border_radius: BorderRadius::all(px(10)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.78)),
+        Visibility::Hidden,
+        GlobalZIndex(20),
+        Pickable::IGNORE,
+    ))
+    .with_child((
+        text(fonts, "", false, 15.0, Color::WHITE),
+        TextLayout::justify(Justify::Center),
+    ));
 }
 
 fn top_bar(root: &mut ChildSpawnerCommands, fonts: &Fonts, profile: &Profile) {
@@ -800,34 +819,42 @@ fn voyage(root: &mut ChildSpawnerCommands, fonts: &Fonts, next: &game_data::Stag
         ));
         go.with_child(text(fonts, "В поход", true, 22.0, Color::WHITE));
         pressable(&mut go);
-        go.observe(|_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
-            next.set(Screen::Battle);
-        });
+        go.observe(
+            |_: On<PointerClick>,
+             mut voyage: ResMut<Voyage>,
+             mut next: ResMut<NextState<Screen>>| {
+                *voyage = Voyage::default();
+                next.set(Screen::Battle);
+            },
+        );
     });
 }
 
-fn bottom_nav(root: &mut ChildSpawnerCommands, assets: &AssetServer, fonts: &Fonts) {
-    let tabs: [(&str, &str, Option<&'static str>); 5] = [
-        ("Корабль", "menu/ship_lvl1.png", None),
+/// Нижняя панель вкладок: общая для корабля и карты.
+pub(crate) fn bottom_nav(
+    root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    active: Screen,
+) {
+    // Вкладка ведёт на экран или пока только показывает подсказку.
+    let tabs: [(&str, &str, Result<Screen, &'static str>); 5] = [
+        ("Корабль", "menu/ship_lvl1.png", Ok(Screen::Menu)),
         (
             "Экипаж",
             "menu/module_training_deck.png",
-            Some("Экран экипажа появится позже"),
+            Err("Экран экипажа появится позже"),
         ),
-        (
-            "Карта",
-            "menu/module_navigation.png",
-            Some("Карта островов появится позже"),
-        ),
+        ("Карта", "menu/module_navigation.png", Ok(Screen::Map)),
         (
             "Таверна",
             "menu/module_tavern.png",
-            Some("Таверна появится позже"),
+            Err("Таверна появится позже"),
         ),
         (
             "Активности",
             "menu/module_lookout.png",
-            Some("Активности появятся позже"),
+            Err("Активности появятся позже"),
         ),
     ];
     root.spawn((
@@ -843,10 +870,11 @@ fn bottom_nav(root: &mut ChildSpawnerCommands, assets: &AssetServer, fonts: &Fon
         },
         BackgroundColor(DARK_WOOD),
         BorderColor::all(BRASS),
+        GlobalZIndex(5),
     ))
     .with_children(|nav| {
-        for (name, icon, message) in tabs {
-            let active = message.is_none();
+        for (name, icon, target) in tabs {
+            let here = target == Ok(active);
             let mut tab = nav.spawn(Node {
                 flex_grow: 1.0,
                 flex_basis: px(0),
@@ -869,13 +897,22 @@ fn bottom_nav(root: &mut ChildSpawnerCommands, assets: &AssetServer, fonts: &Fon
                 t.spawn(text(
                     fonts,
                     name,
-                    active,
+                    here,
                     12.0,
-                    if active { GOLD } else { PARCHMENT },
+                    if here { GOLD } else { PARCHMENT },
                 ));
             });
-            if let Some(message) = message {
-                later(&mut tab, message);
+            match target {
+                Ok(screen) if !here => {
+                    pressable(&mut tab);
+                    tab.observe(
+                        move |_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
+                            next.set(screen);
+                        },
+                    );
+                }
+                Ok(_) => {}
+                Err(message) => later(&mut tab, message),
             }
         }
     });

@@ -150,6 +150,7 @@ pub fn rebuild(
     mut screen: ResMut<BattleScreen>,
     fonts: Res<Fonts>,
     assets: Res<AssetServer>,
+    voyage: Res<crate::menu::Voyage>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     roots: Query<Entity, Or<(With<ScreenRoot>, With<battlefield::FieldRoot>)>>,
@@ -169,10 +170,10 @@ pub fn rebuild(
         &screen,
         &fonts,
     );
-    spawn_hud(&mut commands, &screen, &fonts);
+    spawn_hud(&mut commands, &screen, &fonts, voyage.from);
 }
 
-fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts) {
+fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts, back: Screen) {
     let heroes: Vec<UnitId> = screen
         .battle
         .units()
@@ -305,13 +306,19 @@ fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts) {
                     });
                 row.spawn(button(BUTTON_ON))
                     .with_child((
-                        Text::new("На корабль"),
+                        Text::new(if back == Screen::Map {
+                            "К карте"
+                        } else {
+                            "На корабль"
+                        }),
                         fonts.text(true, 20.0),
                         TextColor(Color::WHITE),
                     ))
-                    .observe(|_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
-                        next.set(Screen::Menu);
-                    });
+                    .observe(
+                        move |_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
+                            next.set(back);
+                        },
+                    );
             });
         });
 }

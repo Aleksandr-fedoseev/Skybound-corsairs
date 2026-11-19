@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Готовит арт из assets/ для клиента: crates/game/assets/menu/ и battle/.
+"""Готовит арт из assets/ для клиента: crates/game/assets/menu/, battle/ и map/.
 
 Корабль и модули нарисованы на ровном сером фоне — фон вырезается заливкой от краёв,
 подписи под модулями отбрасываются. Фоны обрезаются до 9:16 и уменьшаются до 1080×1920.
@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFilter
 SRC = Path("assets")
 OUT = Path("crates/game/assets/menu")
 BATTLE = Path("crates/game/assets/battle")
+MAP = Path("crates/game/assets/map")
 # Серый фон листов (около 202,202,202) и допуск.
 GREY = 203
 TOL = 16
@@ -97,6 +98,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     background("first_island.jpg", OUT / "island.jpg")
     background("battle_deck.jpg", BATTLE / "deck.jpg")
+    background("world_map.jpg", MAP / "world.jpg")
 
     for level in (1, 3, 5):
         sheet = Image.open(SRC / f"ship_lvl{level}.jpg")

@@ -7,6 +7,7 @@ mod battle_screen;
 mod battlefield;
 mod dev;
 mod fx;
+mod map;
 mod menu;
 mod view;
 
@@ -25,6 +26,7 @@ const SCREEN_VAR: &str = "SKYBOUND_SCREEN";
 pub enum Screen {
     #[default]
     Menu,
+    Map,
     Battle,
 }
 const HEIGHT: f32 = 960.0;
@@ -56,7 +58,7 @@ fn main() {
             _ => Screen::Menu,
         })
         .init_resource::<view::Fonts>()
-        .add_plugins(menu::plugin)
+        .add_plugins((menu::plugin, map::plugin))
         .add_message::<Shown>()
         .insert_resource(BattleScreen::new(
             data,

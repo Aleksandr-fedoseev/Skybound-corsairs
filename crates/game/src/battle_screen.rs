@@ -245,9 +245,14 @@ fn new_battle(data: &GameData, stage: usize, level: u32, seed: u64) -> Battle {
     Battle::new(team, enemies, SHIP, seed)
 }
 
-/// Выход в поход: бой на следующем непройденном этапе.
-pub fn enter(mut screen: ResMut<BattleScreen>, progress: Res<crate::menu::Progress>) {
-    screen.stage = progress.next_stage(screen.data.stages.len());
+/// Выход в поход: этап с карты или следующий непройденный.
+pub fn enter(
+    mut screen: ResMut<BattleScreen>,
+    progress: Res<crate::menu::Progress>,
+    voyage: Res<crate::menu::Voyage>,
+) {
+    let next = progress.next_stage(screen.data.stages.len());
+    screen.stage = voyage.stage.unwrap_or(next);
     screen.paused = false;
     screen.restart_with_new_seed();
 }
