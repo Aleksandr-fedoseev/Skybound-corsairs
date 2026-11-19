@@ -65,6 +65,8 @@ impl ConvoyData {
             planks: tier.planks,
             journals: 0,
             energy_rate: 1,
+            ally_hp: Vec::new(),
+            charged: false,
         }
     }
 }

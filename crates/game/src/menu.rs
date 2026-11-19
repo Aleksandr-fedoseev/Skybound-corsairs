@@ -1143,6 +1143,32 @@ fn count_victory(
             }
             storm.record(damage, &event_data.storm, &mut spoils.profile)
         }
+        (Outcome::Defeat, Some(fight)) if matches!(fight.kind, FightKind::Blockade(_)) => {
+            let FightKind::Blockade(wave) = fight.kind else {
+                unreachable!()
+            };
+            week_events.blockade_lose(wave)
+        }
+        (Outcome::Victory, Some(fight)) if matches!(fight.kind, FightKind::Blockade(_)) => {
+            let FightKind::Blockade(wave) = fight.kind else {
+                unreachable!()
+            };
+            deeds.write(Deed("win"));
+            // Здоровье выживших — дальше, в следующую волну; павшие выбывают.
+            let allies: Vec<&battle_core::Unit> = screen
+                .battle
+                .units()
+                .iter()
+                .filter(|u| u.side == battle_core::Side::Ally)
+                .collect();
+            let hp = screen
+                .team
+                .iter()
+                .zip(allies)
+                .map(|(m, u)| (m.id.clone(), u.hp as f32 / u.def.stats.max_hp as f32))
+                .collect();
+            week_events.blockade_win(wave, hp, &event_data.blockade, &mut spoils.profile)
+        }
         (Outcome::Defeat, _) => "Усильте отряд или смените тактику".to_string(),
         (Outcome::Victory, Some(fight)) if matches!(fight.kind, FightKind::Regatta(_)) => {
             let FightKind::Regatta(leg) = fight.kind else {

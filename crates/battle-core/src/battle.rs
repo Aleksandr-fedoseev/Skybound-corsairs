@@ -154,6 +154,22 @@ impl Battle {
         self.energy_rate = rate.max(1);
     }
 
+    /// Особое правило боя: бойец начинает с части здоровья (оборона в несколько волн).
+    pub fn set_hp(&mut self, id: UnitId, hp: u32) {
+        let unit = &mut self.units[id.0];
+        unit.hp = hp.clamp(1, unit.def.stats.max_hp);
+    }
+
+    /// Особое правило боя: залп корабля заряжен с первого хода.
+    pub fn charge_broadside(&mut self) {
+        self.broadside = BROADSIDE_MAX;
+    }
+
+    /// Сколько накоплено на шкале залпа.
+    pub fn broadside_charge(&self) -> u32 {
+        self.broadside
+    }
+
     /// Создаёт бой. Первый ход уже определён: см. [`Battle::current`].
     pub fn new(allies: Vec<UnitDef>, enemies: Vec<UnitDef>, ship: Ship, seed: u64) -> Self {
         let mut units = Vec::with_capacity(allies.len() + enemies.len());

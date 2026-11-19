@@ -25,6 +25,10 @@ pub struct CustomFight {
     pub journals: u32,
     /// Особое правило: ульты копятся быстрее (1 — как обычно).
     pub energy_rate: u32,
+    /// Здоровье героев в начале боя (доля от максимума); пусто — все целы.
+    pub ally_hp: Vec<(String, f32)>,
+    /// Залп заряжен с первого хода.
+    pub charged: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,6 +40,8 @@ pub enum FightKind {
     Storm,
     /// Этап трассы «Небесной регаты».
     Regatta(usize),
+    /// Волна «Имперской блокады».
+    Blockade(usize),
 }
 
 /// Залп до первых данных о корабле (Пушечная палуба ур. 1).
@@ -299,6 +305,7 @@ fn new_battle(
     broadside_power: u32,
     seed: u64,
 ) -> Battle {
+    let team_ids: Vec<String> = team.iter().map(|m| m.id.clone()).collect();
     let team = team
         .iter()
         .map(|m| {
@@ -329,6 +336,15 @@ fn new_battle(
     let mut battle = Battle::new(team, enemies, Ship { broadside_power }, seed);
     if let Some(fight) = custom {
         battle.set_energy_rate(fight.energy_rate);
+        for (i, member) in team_ids.iter().enumerate() {
+            if let Some((_, frac)) = fight.ally_hp.iter().find(|(id, _)| id == member) {
+                let max = battle.unit(battle_core::UnitId(i)).def.stats.max_hp;
+                battle.set_hp(battle_core::UnitId(i), (max as f32 * frac).round() as u32);
+            }
+        }
+        if fight.charged {
+            battle.charge_broadside();
+        }
     }
     battle
 }
@@ -355,6 +371,18 @@ pub fn enter(
     let next = progress.next_stage(screen.data.stages.len());
     screen.stage = voyage.stage.unwrap_or(next);
     screen.custom = voyage.custom.clone();
+    // Блокада: в бой идут только выжившие в прошлых волнах.
+    if let Some(fight) = &screen.custom
+        && !fight.ally_hp.is_empty()
+    {
+        let alive: Vec<String> = fight
+            .ally_hp
+            .iter()
+            .filter(|(_, f)| *f > 0.0)
+            .map(|(id, _)| id.clone())
+            .collect();
+        screen.team.retain(|m| alive.contains(&m.id));
+    }
     screen.paused = false;
     screen.restart_with_new_seed();
 }

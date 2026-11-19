@@ -1,6 +1,7 @@
 {
   "cycle": [
     "storm",
+    "blockade",
     "fair",
     "regatta"
   ],
@@ -229,6 +230,147 @@
         "reward": {
           "doubloons": 60,
           "storm_cores": 1
+        }
+      }
+    ]
+  },
+  "blockade": {
+    "name": "Имперская блокада",
+    "about": "Шесть волн имперских судов подряд. Здоровье отряда не восстанавливается между волнами, павшие выбывают. Залп каждой волны заряжен с начала — решает Пушечная палуба.",
+    "waves": [
+      {
+        "enemies": [
+          [
+            "imperial_marine",
+            5
+          ],
+          [
+            "imperial_gunner",
+            5
+          ],
+          [
+            "imperial_marine",
+            5
+          ]
+        ],
+        "reward": {
+          "details": 20
+        }
+      },
+      {
+        "enemies": [
+          [
+            "imperial_marine",
+            7
+          ],
+          [
+            "imperial_gunner",
+            7
+          ],
+          [
+            "imperial_gunner",
+            7
+          ]
+        ],
+        "reward": {
+          "silver": 200
+        }
+      },
+      {
+        "enemies": [
+          [
+            "imperial_marine",
+            9
+          ],
+          [
+            "imperial_gunner",
+            9
+          ],
+          [
+            "imperial_marine",
+            9
+          ],
+          [
+            "imperial_gunner",
+            9
+          ]
+        ],
+        "reward": {
+          "storm_cores": 1
+        }
+      },
+      {
+        "enemies": [
+          [
+            "imperial_marine",
+            11
+          ],
+          [
+            "imperial_gunner",
+            11
+          ],
+          [
+            "imperial_marine",
+            11
+          ],
+          [
+            "imperial_gunner",
+            11
+          ]
+        ],
+        "reward": {
+          "details": 40
+        }
+      },
+      {
+        "enemies": [
+          [
+            "imperial_gunner",
+            13
+          ],
+          [
+            "imperial_marine",
+            13
+          ],
+          [
+            "imperial_gunner",
+            13
+          ],
+          [
+            "imperial_marine",
+            13
+          ]
+        ],
+        "reward": {
+          "doubloons": 40
+        }
+      },
+      {
+        "enemies": [
+          [
+            "imperial_marine",
+            15
+          ],
+          [
+            "imperial_gunner",
+            15
+          ],
+          [
+            "imperial_marine",
+            15
+          ],
+          [
+            "imperial_gunner",
+            15
+          ],
+          [
+            "imperial_gunner",
+            15
+          ]
+        ],
+        "reward": {
+          "storm_cores": 2,
+          "doubloons": 40
         }
       }
     ]

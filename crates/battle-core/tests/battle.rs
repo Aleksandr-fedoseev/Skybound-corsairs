@@ -335,3 +335,19 @@ fn energy_rate_speeds_up_ultimates() {
     };
     assert_eq!(energy_after(2), energy_after(1) * 2);
 }
+
+#[test]
+fn hp_and_broadside_can_be_preset() {
+    let hero = unit("hero", Element::Wind, 1000, 10, 100);
+    let mut battle = Battle::new(vec![hero], vec![sandbag()], SHIP, 3);
+    battle.set_hp(UnitId(0), 250);
+    assert_eq!(battle.unit(UnitId(0)).hp, 250);
+    battle.set_hp(UnitId(0), 0);
+    assert_eq!(
+        battle.unit(UnitId(0)).hp,
+        1,
+        "живой боец не может начать с нулём"
+    );
+    battle.charge_broadside();
+    assert_eq!(battle.broadside_charge(), BROADSIDE_MAX);
+}

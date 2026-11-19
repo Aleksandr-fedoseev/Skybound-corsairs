@@ -111,6 +111,8 @@ impl AbyssData {
             planks: 0,
             journals: r.journals,
             energy_rate: 1,
+            ally_hp: Vec::new(),
+            charged: false,
         }
     }
 }
