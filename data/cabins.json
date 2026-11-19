@@ -1,0 +1,8 @@
+{
+  "bonus_first": 0.05,
+  "bonus_per_level": 0.025,
+  "max_level": 5,
+  "points_per_level": 10,
+  "points_per_win": 1,
+  "points_per_talk": 3
+}

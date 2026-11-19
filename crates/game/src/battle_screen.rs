@@ -297,7 +297,9 @@ fn new_battle(
         .iter()
         .map(|m| {
             let hero = data.hero(&m.id).expect("герой есть в data/heroes.json");
-            crew.hero_unit(hero, m.level + bonus, m.stars, m.skills)
+            let mut unit = crew.hero_unit(hero, m.level + bonus, m.stars, m.skills);
+            unit.stats.atk = (unit.stats.atk as f32 * (1.0 + m.atk_bonus)).round() as u32;
+            unit
         })
         .collect();
     let enemies = match custom {
@@ -325,8 +327,13 @@ pub fn enter(
     roster: Res<crate::crew::Roster>,
     ship: Res<crate::ship::Ship>,
     ship_data: Res<crate::ship::ShipData>,
+    cabins: (Res<crate::cabins::Cabins>, Res<crate::cabins::CabinData>),
 ) {
     screen.team = roster.team_members();
+    let ids = roster.team.clone();
+    for m in &mut screen.team {
+        m.atk_bonus = cabins.0.atk_bonus(&m.id, &ids, &cabins.1);
+    }
     screen.broadside_power = ship.broadside(&ship_data);
     let next = progress.next_stage(screen.data.stages.len());
     screen.stage = voyage.stage.unwrap_or(next);

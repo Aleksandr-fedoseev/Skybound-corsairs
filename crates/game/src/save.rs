@@ -11,6 +11,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::abyss::Abyss;
+use crate::cabins::Cabins;
 use crate::contracts::Contracts;
 use crate::convoys::{ConvoyData, Convoys};
 use crate::crew::Roster;
@@ -41,6 +42,8 @@ pub struct SaveData {
     pub abyss: Abyss,
     #[serde(default)]
     pub expeditions: Expeditions,
+    #[serde(default)]
+    pub cabins: Cabins,
 }
 
 pub fn now() -> u64 {
@@ -150,7 +153,8 @@ pub fn apply(app: &mut App, mut save: SaveData) {
         .insert_resource(save.convoys)
         .insert_resource(save.contracts)
         .insert_resource(save.abyss)
-        .insert_resource(save.expeditions);
+        .insert_resource(save.expeditions)
+        .insert_resource(save.cabins);
     if !report.is_empty() {
         app.world_mut().resource_mut::<Toast>().show_long(&report);
     }
@@ -172,6 +176,7 @@ struct State<'w> {
     contracts: Res<'w, Contracts>,
     abyss: Res<'w, Abyss>,
     expeditions: Res<'w, Expeditions>,
+    cabins: Res<'w, Cabins>,
 }
 
 impl State<'_> {
@@ -188,6 +193,7 @@ impl State<'_> {
             contracts: self.contracts.clone(),
             abyss: self.abyss.clone(),
             expeditions: self.expeditions.clone(),
+            cabins: self.cabins.clone(),
         }
     }
 }
@@ -231,6 +237,7 @@ mod tests {
             contracts: Contracts::default(),
             abyss: Abyss::default(),
             expeditions: Expeditions::default(),
+            cabins: Cabins::default(),
         }
     }
 

@@ -7,6 +7,7 @@ mod abyss;
 mod audio;
 mod battle_screen;
 mod battlefield;
+mod cabins;
 mod contracts;
 mod convoys;
 mod crew;
@@ -88,6 +89,7 @@ fn main() {
         contracts::plugin,
         abyss::plugin,
         expeditions::plugin,
+        cabins::plugin,
     ))
     .add_message::<Shown>()
     .insert_resource(crew)

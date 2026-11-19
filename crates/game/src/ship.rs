@@ -96,6 +96,10 @@ pub enum Effect {
     Boats {
         values: Vec<u32>,
     },
+    /// Сколько кают для «Соседей по каюте».
+    Cabins {
+        values: Vec<u32>,
+    },
 }
 
 /// Значение по уровню: на уровне 0 (не построен) — ноль, выше таблицы — последнее.
@@ -237,6 +241,13 @@ impl Ship {
     pub fn extra_boats(&self, data: &ShipData) -> u32 {
         self.value(data, |e| match e {
             Effect::Boats { values } => Some(values),
+            _ => None,
+        })
+    }
+
+    pub fn cabins(&self, data: &ShipData) -> u32 {
+        self.value(data, |e| match e {
+            Effect::Cabins { values } => Some(values),
             _ => None,
         })
     }
@@ -403,6 +414,7 @@ fn effect_line(effect: &Effect, level: u32) -> String {
         Effect::Boats { values } => {
             format!("Шлюпок для экспедиций: +{}", at(values, level))
         }
+        Effect::Cabins { values } => format!("Кают для соседей: {}", at(values, level)),
     }
 }
 

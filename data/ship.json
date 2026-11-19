@@ -51,6 +51,10 @@
       "id": "boats", "name": "Шлюпки", "icon": "menu/module_boats.png", "unlock_hull": 4, "start_level": 0,
       "effect": { "kind": "boats", "values": [1, 1, 2, 2, 3, 3, 3] }
     },
+    {
+      "id": "cabins", "name": "Каюты", "icon": "menu/module_infirmary.png", "unlock_hull": 4, "start_level": 0,
+      "effect": { "kind": "cabins", "values": [1, 2, 3, 4, 5, 5, 5] }
+    },
     { "id": "infirmary", "name": "Лазарет", "icon": "menu/module_infirmary.png", "unlock_hull": 6, "start_level": 0 },
     { "id": "lookout", "name": "Подзорная башня", "icon": "menu/module_lookout.png", "unlock_hull": 7, "start_level": 0 }
   ]

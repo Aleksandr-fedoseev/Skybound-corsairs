@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::Screen;
 use crate::audio::Sfx;
 use crate::battle_screen::BattleScreen;
+use crate::cabins::{CabinData, Cabins};
 use crate::contracts::Deed;
 use crate::menu::{
     BRASS, GO, GO_EDGE, GOLD, MUTED, PARCHMENT, Profile, Toast, WOOD, bottom_nav, pressable,
@@ -232,6 +233,8 @@ pub struct Member {
     pub level: u32,
     pub stars: u32,
     pub skills: [u32; 3],
+    /// Прибавка к атаке от соседа по каюте в отряде.
+    pub atk_bonus: f32,
 }
 
 /// Герои на борту и отряд. Стартовый отряд уже в команде, остальных нанимают в Таверне.
@@ -326,6 +329,7 @@ impl Roster {
                 level: self.level(id),
                 stars: self.stars(id),
                 skills: self.skills(id),
+                atk_bonus: 0.0,
             })
             .collect()
     }
@@ -465,6 +469,7 @@ fn spawn_crew(
     profile: Res<Profile>,
     screen: Res<BattleScreen>,
     mut selected: ResMut<Selected>,
+    cabin: CabinView,
 ) {
     if selected.0.is_none() {
         selected.0 = roster.team.first().cloned();
@@ -478,7 +483,63 @@ fn spawn_crew(
         &profile,
         &screen.data,
         selected.0.as_deref(),
+        &cabin,
     );
+}
+
+/// Всё про каюты для карточки героя.
+#[derive(bevy::ecs::system::SystemParam)]
+struct CabinView<'w> {
+    cabins: Res<'w, Cabins>,
+    data: Res<'w, CabinData>,
+    ship: Res<'w, crate::ship::Ship>,
+    ship_data: Res<'w, crate::ship::ShipData>,
+}
+
+/// Что показать в разделе «Каюта» у героя.
+enum CabinInfo {
+    Locked,
+    Paired {
+        partner: String,
+        level: u32,
+        max: u32,
+        bonus: u32,
+        talked: bool,
+    },
+    Free {
+        free: u32,
+        total: u32,
+        candidates: Vec<(String, String)>,
+    },
+}
+
+fn cabin_info(view: &CabinView, roster: &Roster, data: &GameData, hero: &str) -> CabinInfo {
+    let total = view.ship.cabins(&view.ship_data);
+    if total == 0 {
+        return CabinInfo::Locked;
+    }
+    let name = |id: &str| data.hero(id).map_or(id.to_string(), |h| h.name.clone());
+    match view.cabins.pair_of(hero) {
+        Some(p) => CabinInfo::Paired {
+            partner: name(p.partner(hero)),
+            level: view.data.level(p.points),
+            max: view.data.max_level,
+            bonus: (view.data.bonus(p.points) * 100.0).round() as u32,
+            talked: p.talked_on == crate::cabins::today(),
+        },
+        None => CabinInfo::Free {
+            free: total.saturating_sub(view.cabins.pairs.len() as u32),
+            total,
+            candidates: data
+                .heroes
+                .iter()
+                .filter(|h| {
+                    h.id != hero && roster.owns(&h.id) && view.cabins.pair_of(&h.id).is_none()
+                })
+                .map(|h| (h.id.clone(), h.name.clone()))
+                .collect(),
+        },
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -493,6 +554,7 @@ fn rebuild_crew(
     profile: Res<Profile>,
     screen: Res<BattleScreen>,
     selected: Res<Selected>,
+    cabin: CabinView,
 ) {
     if !dirty.0 {
         return;
@@ -510,6 +572,7 @@ fn rebuild_crew(
         &profile,
         &screen.data,
         selected.0.as_deref(),
+        &cabin,
     );
 }
 
@@ -523,6 +586,7 @@ fn build(
     profile: &Profile,
     data: &GameData,
     selected: Option<&str>,
+    cabin: &CabinView,
 ) {
     commands
         .spawn((
@@ -568,7 +632,10 @@ fn build(
                         .map(|p| merge_line(p, data, hero))
                         .map_err(|e| e.clone()),
                 );
-                details(root, assets, fonts, crew, roster, profile, hero, merge);
+                let cabin = cabin_info(cabin, roster, data, &hero.id);
+                details(
+                    root, assets, fonts, crew, roster, profile, hero, merge, cabin,
+                );
             }
             bottom_nav(root, assets, fonts, Screen::Crew);
             spawn_toast(root, fonts);
@@ -736,6 +803,7 @@ fn details(
     profile: &Profile,
     hero: &HeroDef,
     merge: (Option<u32>, Result<String, String>),
+    cabin: CabinInfo,
 ) {
     let (merge_to, merge_info) = merge;
     let level = roster.level(&hero.id);
@@ -863,7 +931,139 @@ fn details(
                     to_tavern_button(buttons, fonts);
                 }
             });
+        if owned {
+            cabin_row(panel, fonts, cabin);
+        }
     });
+}
+
+/// Раздел «Каюта»: сосед, близость и бонус, или кого поселить рядом.
+fn cabin_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts, info: CabinInfo) {
+    panel
+        .spawn(Node {
+            margin: UiRect::top(px(4)),
+            column_gap: px(6),
+            row_gap: px(4),
+            flex_wrap: FlexWrap::Wrap,
+            align_items: AlignItems::Center,
+            ..default()
+        })
+        .with_children(|row| match info {
+            CabinInfo::Locked => {
+                row.spawn(text(
+                    fonts,
+                    "Каюты откроются на Корпусе 4: соседи в одном отряде сильнее",
+                    false,
+                    12.0,
+                    MUTED,
+                ));
+            }
+            CabinInfo::Paired {
+                partner,
+                level,
+                max,
+                bonus,
+                talked,
+            } => {
+                row.spawn(text(
+                    fonts,
+                    format!("Сосед по каюте: {partner} · близость {level}/{max} · +{bonus}% атаки вместе"),
+                    false,
+                    12.0,
+                    BETTER,
+                ));
+                cabin_button(row, fonts, if talked { "сегодня уже говорили" } else { "Поговорить" }, !talked, CabinAct::Talk);
+                cabin_button(row, fonts, "Выселить", true, CabinAct::Evict);
+            }
+            CabinInfo::Free {
+                free,
+                total,
+                candidates,
+            } => {
+                row.spawn(text(
+                    fonts,
+                    format!("Без каюты · свободно {free} из {total} · поселить с:"),
+                    false,
+                    12.0,
+                    MUTED,
+                ));
+                if free > 0 {
+                    for (id, name) in candidates {
+                        cabin_button(row, fonts, &name, true, CabinAct::Settle(id));
+                    }
+                }
+            }
+        });
+}
+
+#[derive(Clone)]
+enum CabinAct {
+    Talk,
+    Evict,
+    Settle(String),
+}
+
+fn cabin_button(
+    row: &mut ChildSpawnerCommands,
+    fonts: &Fonts,
+    label: &str,
+    active: bool,
+    act: CabinAct,
+) {
+    let mut button = row.spawn((
+        Node {
+            padding: UiRect::axes(px(10), px(5)),
+            border: UiRect::all(px(1)),
+            border_radius: BorderRadius::all(px(8)),
+            ..default()
+        },
+        BackgroundColor(if active {
+            Color::srgba(0.85, 0.51, 0.17, 0.85)
+        } else {
+            DISABLED
+        }),
+        BorderColor::all(if active { GO_EDGE } else { MUTED }),
+    ));
+    button.with_child(text(fonts, label, true, 12.0, Color::WHITE));
+    if active {
+        pressable(&mut button);
+        button.observe(move |_: On<PointerClick>, mut commands: Commands| {
+            commands.run_system_cached_with(cabin_act, act.clone());
+        });
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cabin_act(
+    In(act): In<CabinAct>,
+    selected: Res<Selected>,
+    data: Res<CabinData>,
+    ship: (Res<crate::ship::Ship>, Res<crate::ship::ShipData>),
+    mut cabins: ResMut<Cabins>,
+    mut toast: ResMut<Toast>,
+    mut dirty: ResMut<CrewDirty>,
+    mut sfx: MessageWriter<Sfx>,
+) {
+    let Some(hero) = selected.0.clone() else {
+        return;
+    };
+    match act {
+        CabinAct::Talk => {
+            if cabins.talk(&hero, &data, crate::cabins::today()) {
+                toast.show("Разговор по душам: соседи стали ближе");
+                sfx.write(Sfx("coin"));
+            }
+        }
+        CabinAct::Evict => cabins.evict(&hero),
+        CabinAct::Settle(partner) => match cabins.settle(&hero, &partner, ship.0.cabins(&ship.1)) {
+            Ok(()) => {
+                toast.show("Соседи заселились в каюту");
+                sfx.write(Sfx("done"));
+            }
+            Err(reason) => toast.show(&reason),
+        },
+    }
+    dirty.0 = true;
 }
 
 fn level_button(
