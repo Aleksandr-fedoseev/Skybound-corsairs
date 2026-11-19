@@ -77,6 +77,9 @@ pub struct FieldConfig {
     /// Спрайт-листы бойцов из `data/animated.json`; у кого нет — заглушка.
     #[serde(skip)]
     pub animated: HashMap<String, AnimatedArt>,
+    /// Мягкие области рисунков из `data/softbody.json` (боец → поза → области).
+    #[serde(skip)]
+    pub soft: crate::softbody::SoftData,
     /// Дальнобойные бойцы и чем они стреляют; остальные бьют вблизи (рывок к цели).
     #[serde(default)]
     pub ranged: HashMap<String, Shot>,
@@ -128,6 +131,11 @@ pub struct SheetClip {
 impl AnimatedArt {
     /// Клип листа для клипа рига: ульта и умение — `skill`, если он есть.
     fn clip(&self, clip: Clip) -> Option<&SheetClip> {
+        self.clips.get(self.clip_name(clip))
+    }
+
+    /// Имя клипа листа (позы) для клипа рига; нет такого — `idle`.
+    pub fn clip_name(&self, clip: Clip) -> &str {
         let name = match clip {
             Clip::Idle => "idle",
             Clip::Attack { big: true, .. } if self.clips.contains_key("skill") => "skill",
@@ -136,7 +144,7 @@ impl AnimatedArt {
             Clip::Death => "death",
             Clip::Victory => "victory",
         };
-        self.clips.get(name).or_else(|| self.clips.get("idle"))
+        if self.clips.contains_key(name) { name } else { "idle" }
     }
 
     /// Сдвиг UV на кадр `frame` строки `row`.
@@ -152,6 +160,7 @@ impl FieldConfig {
             .expect("data/battlefield.json корректен");
         config.animated = serde_json::from_str(include_str!("../../../data/animated.json"))
             .expect("data/animated.json корректен");
+        config.soft = crate::softbody::bundled();
         config
     }
 
@@ -197,7 +206,7 @@ pub struct ModelParts {
 #[derive(Component)]
 pub struct Flipbook {
     material: Handle<ColorMaterial>,
-    art: AnimatedArt,
+    pub art: AnimatedArt,
 }
 
 #[derive(Component)]
@@ -447,6 +456,7 @@ fn spawn_model(
         .id();
     let art = screen.field.animated.get(&unit.def.id).cloned();
     let mut flipbook = None;
+    let mut soft = None;
     let rig_children = if let Some(art) = &art {
         // Спрайт-лист вместо заглушки: ноги кадра — на слоте.
         for part in [legs, weapon, body, head, letter] {
@@ -464,9 +474,25 @@ fn spawn_model(
             material: material.clone(),
             art: art.clone(),
         });
+        // С мягкими областями — сетка (вершины пружинят), иначе — прямоугольник.
+        let mesh = match screen.field.soft.get(&unit.def.id) {
+            Some(poses) => {
+                let (grid, base, uvs) = crate::softbody::grid_mesh(size);
+                let handle = meshes.add(grid);
+                soft = Some(crate::softbody::SoftBody::new(
+                    handle.clone(),
+                    base,
+                    uvs,
+                    size,
+                    poses.clone(),
+                ));
+                handle
+            }
+            None => meshes.add(Rectangle::from_size(size)),
+        };
         let sprite = commands
             .spawn((
-                Mesh2d(meshes.add(Rectangle::from_size(size))),
+                Mesh2d(mesh),
                 MeshMaterial2d(material),
                 Transform::from_xyz(0.0, size.y * (0.5 - art.foot), 0.0),
             ))
@@ -555,6 +581,9 @@ fn spawn_model(
     model.add_children(&[shadow, ring, rig, overhead]);
     if let Some(flipbook) = flipbook {
         model.insert(flipbook);
+    }
+    if let Some(soft) = soft {
+        model.insert(soft);
     }
     model.id()
 }

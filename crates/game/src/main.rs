@@ -13,6 +13,7 @@ mod fx;
 mod map;
 mod menu;
 mod save;
+mod softbody;
 mod ship;
 mod story;
 mod tavern;
@@ -114,6 +115,7 @@ fn main() {
             ),
             (
                 battlefield::animate_models,
+                softbody::animate_soft_bodies,
                 fx::animate_floating,
                 fx::animate_projectiles,
                 fx::animate_band,
