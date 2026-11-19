@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use bevy::ecs::system::SystemParam;
 
 use crate::Screen;
+use crate::abyss::{Abyss, AbyssData};
 use crate::audio::Sfx;
 use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
 use crate::contracts::{BoardOpen, ContractData, Contracts, Deed};
@@ -85,6 +86,12 @@ pub struct Profile {
     pub ether: u32,
     pub doubloons: u32,
     pub journals: u32,
+    /// Лоции — книги умений (из Бездны, контрактов, ивентов).
+    #[serde(default)]
+    pub charts: u32,
+    /// Носовые фигуры — заменяют корм при слиянии.
+    #[serde(default)]
+    pub figureheads: u32,
     /// Эфир, который накопили Ветроловы и который ещё не собран.
     pub ether_pending: f32,
 }
@@ -98,6 +105,8 @@ impl Profile {
             ether: start.ether,
             doubloons: start.doubloons,
             journals: start.journals,
+            charts: 0,
+            figureheads: 0,
             ether_pending: start.ether_waiting,
         }
     }
@@ -206,7 +215,8 @@ pub fn plugin(app: &mut App) {
                 in_state(Screen::Menu)
                     .or_else(in_state(Screen::Map))
                     .or_else(in_state(Screen::Crew))
-                    .or_else(in_state(Screen::Tavern)),
+                    .or_else(in_state(Screen::Tavern))
+                    .or_else(in_state(Screen::Activities)),
             ),
         )
         .add_systems(Update, count_victory.run_if(in_state(Screen::Battle)));
@@ -863,7 +873,7 @@ pub(crate) fn bottom_nav(
         (
             "Активности",
             "menu/module_lookout.png",
-            Err("Активности появятся позже"),
+            Ok(Screen::Activities),
         ),
     ];
     root.spawn((
@@ -1027,7 +1037,9 @@ fn count_victory(
     mut story: ResMut<StoryQueue>,
     mut notes: Query<&mut Text, With<ResultNote>>,
     mut deeds: MessageWriter<Deed>,
+    abyss: (Res<AbyssData>, ResMut<Abyss>),
 ) {
+    let (abyss_data, mut abyss) = abyss;
     let Some(outcome) = screen.shown_outcome else {
         return;
     };
@@ -1038,6 +1050,24 @@ fn count_victory(
     *counted = Some(battle);
     let note = match (outcome, &screen.custom) {
         (Outcome::Defeat, _) => "Усильте отряд или смените тактику".to_string(),
+        (Outcome::Victory, Some(fight)) if matches!(fight.kind, FightKind::Abyss(_)) => {
+            let FightKind::Abyss(floor) = fight.kind else {
+                unreachable!()
+            };
+            deeds.write(Deed("win"));
+            if floor == abyss.best + 1 {
+                abyss.best = floor;
+                let r = abyss_data.reward(floor);
+                spoils.give(r.silver, 0, r.journals);
+                let p = &mut spoils.profile;
+                p.charts += r.charts;
+                p.doubloons += r.doubloons;
+                p.figureheads += r.figureheads;
+                format!("Этаж {floor} пройден! {}", r.line())
+            } else {
+                "Этаж уже пройден — награда выдаётся один раз".to_string()
+            }
+        }
         (Outcome::Victory, Some(fight))
             if fight.kind == FightKind::Convoy && convoys.ready == 0 =>
         {

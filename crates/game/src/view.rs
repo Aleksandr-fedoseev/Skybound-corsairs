@@ -306,10 +306,10 @@ fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts, back
                     });
                 row.spawn(button(BUTTON_ON))
                     .with_child((
-                        Text::new(if back == Screen::Map {
-                            "К карте"
-                        } else {
-                            "На корабль"
+                        Text::new(match back {
+                            Screen::Map => "К карте",
+                            Screen::Activities => "Назад",
+                            _ => "На корабль",
                         }),
                         fonts.text(true, 20.0),
                         TextColor(Color::WHITE),

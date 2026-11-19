@@ -1,0 +1,18 @@
+{
+  "enemy_pool": ["imperial_marine", "imperial_gunner", "storm_ray"],
+  "boss": "storm_leviathan",
+  "boss_every": 10,
+  "base_level": 4,
+  "level_per_floor": 1.0,
+  "base_count": 3,
+  "more_every": 10,
+  "max_count": 5,
+  "silver": 60,
+  "silver_per_floor": 6,
+  "journals": 40,
+  "journals_per_floor": 4,
+  "charts_every": 5,
+  "charts": 1,
+  "boss_doubloons": 50,
+  "boss_figureheads": 1
+}

@@ -28,6 +28,8 @@ pub struct CustomFight {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FightKind {
     Convoy,
+    /// Этаж Бездны облаков.
+    Abyss(u32),
 }
 
 /// Залп до первых данных о корабле (Пушечная палуба ур. 1).
