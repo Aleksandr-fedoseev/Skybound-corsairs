@@ -12,6 +12,7 @@ use bevy::ecs::system::SystemParam;
 use crate::Screen;
 use crate::audio::Sfx;
 use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
+use crate::contracts::{BoardOpen, ContractData, Contracts, Deed};
 use crate::convoys::Convoys;
 use crate::ship::{Compartment, OpenCompartment, Ship, ShipData};
 use crate::story::{StoryQueue, VoyageRequest};
@@ -225,6 +226,9 @@ struct MenuView<'w> {
     ship_data: Res<'w, ShipData>,
     ship: Res<'w, Ship>,
     open: Res<'w, OpenCompartment>,
+    contract_data: Res<'w, ContractData>,
+    contracts: Res<'w, Contracts>,
+    board_open: Res<'w, BoardOpen>,
 }
 
 fn spawn_menu(mut commands: Commands, view: MenuView) {
@@ -340,7 +344,7 @@ fn build(commands: &mut Commands, view: &MenuView) {
         ))
         .with_children(|root| {
             top_bar(root, fonts, profile);
-            side_buttons(root, fonts);
+            side_buttons(root, fonts, view.contracts.claimable(&view.contract_data));
 
             // Имя корабля над ним.
             root.spawn((
@@ -412,7 +416,8 @@ fn build(commands: &mut Commands, view: &MenuView) {
                  mut toast: ResMut<Toast>,
                  ship: Res<Ship>,
                  ship_data: Res<ShipData>,
-                 mut sfx: MessageWriter<Sfx>| {
+                 mut sfx: MessageWriter<Sfx>,
+                 mut deeds: MessageWriter<Deed>| {
                     let room = ship
                         .capacity(&ship_data)
                         .ether
@@ -425,6 +430,7 @@ fn build(commands: &mut Commands, view: &MenuView) {
                         profile.ether += got;
                         profile.ether_pending -= got as f32;
                         sfx.write(Sfx("coin"));
+                        deeds.write(Deed("ether"));
                         toast.show(&format!("Ветроловы: +{got} эфира"));
                     }
                 },
@@ -433,7 +439,9 @@ fn build(commands: &mut Commands, view: &MenuView) {
             compartments(root, assets, fonts, ship_data, ship);
             voyage(root, fonts, next, done);
             bottom_nav(root, assets, fonts, Screen::Menu);
-            if let Some(id) = &view.open.0 {
+            if view.board_open.0 {
+                crate::contracts::board(root, fonts, &view.contract_data, &view.contracts);
+            } else if let Some(id) = &view.open.0 {
                 crate::ship::panel(root, fonts, ship_data, ship, profile, id);
             }
             spawn_toast(root, fonts);
@@ -598,7 +606,7 @@ fn resource_pill(
     });
 }
 
-fn side_buttons(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
+fn side_buttons(root: &mut ChildSpawnerCommands, fonts: &Fonts, contracts_ready: bool) {
     let column = |left: bool| Node {
         position_type: PositionType::Absolute,
         top: px(76),
@@ -617,13 +625,7 @@ fn side_buttons(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
             false,
             "Боевой пропуск появится позже",
         ),
-        (
-            "Контракты",
-            "задания",
-            BRASS,
-            true,
-            "Доска контрактов появится позже",
-        ),
+        ("Контракты", "задания", BRASS, contracts_ready, ""),
         ("Почта", "", BRASS, false, "Почта появится позже"),
     ];
     for (left, chunk) in [(true, &items[..2]), (false, &items[2..])] {
@@ -664,7 +666,21 @@ fn side_buttons(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
                         ));
                     }
                 });
-                later(&mut button, message);
+                if title == "Контракты" {
+                    pressable(&mut button);
+                    button.observe(
+                        |_: On<PointerClick>,
+                         mut open: ResMut<BoardOpen>,
+                         mut panel: ResMut<OpenCompartment>,
+                         mut rebuild: ResMut<MenuRebuild>| {
+                            open.0 = true;
+                            panel.0 = None;
+                            rebuild.0 = true;
+                        },
+                    );
+                } else {
+                    later(&mut button, message);
+                }
             }
         });
     }
@@ -756,7 +772,9 @@ fn compartments(
             tile.observe(
                 move |_: On<PointerClick>,
                       mut opened: ResMut<OpenCompartment>,
+                      mut board: ResMut<BoardOpen>,
                       mut rebuild: ResMut<MenuRebuild>| {
+                    board.0 = false;
                     opened.0 = Some(id.clone());
                     rebuild.0 = true;
                 },
@@ -1008,6 +1026,7 @@ fn count_victory(
     mut counted: Local<Option<(usize, u64)>>,
     mut story: ResMut<StoryQueue>,
     mut notes: Query<&mut Text, With<ResultNote>>,
+    mut deeds: MessageWriter<Deed>,
 ) {
     let Some(outcome) = screen.shown_outcome else {
         return;
@@ -1026,8 +1045,10 @@ fn count_victory(
         }
         (Outcome::Victory, Some(fight)) => {
             spoils.give(fight.silver, fight.planks, fight.journals);
+            deeds.write(Deed("win"));
             if fight.kind == FightKind::Convoy {
                 convoys.ready -= 1;
+                deeds.write(Deed("convoy"));
             }
             let mut parts = vec![format!("+{} серебра", fight.silver)];
             if fight.planks > 0 {
@@ -1041,6 +1062,7 @@ fn count_victory(
         (Outcome::Victory, None) => {
             let reward = &data.victory_reward;
             spoils.give(reward.silver, reward.planks, reward.journals);
+            deeds.write(Deed("win"));
             let first = screen.stage == progress.cleared;
             if first {
                 story.0.push(screen.data.stages[screen.stage].id.clone());

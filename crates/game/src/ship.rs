@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Screen;
 use crate::audio::Sfx;
+use crate::contracts::Deed;
 use crate::menu::{
     BRASS, GO, GO_EDGE, GOLD, MUTED, MenuRebuild, PARCHMENT, Profile, Toast, pressable, text,
 };
@@ -644,6 +645,7 @@ fn act(
     mut rebuild: ResMut<MenuRebuild>,
     mut next: ResMut<NextState<Screen>>,
     mut sfx: MessageWriter<Sfx>,
+    mut deeds: MessageWriter<Deed>,
 ) {
     match action {
         Action::Upgrade(id) => match ship.next_step(&data, &id) {
@@ -665,6 +667,7 @@ fn act(
                     left: cost.seconds,
                 });
                 sfx.write(Sfx("hammer"));
+                deeds.write(Deed("build"));
                 rebuild.0 = true;
             }
         },

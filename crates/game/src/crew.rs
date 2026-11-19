@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::Screen;
 use crate::audio::Sfx;
 use crate::battle_screen::BattleScreen;
+use crate::contracts::Deed;
 use crate::menu::{
     BRASS, GO, GO_EDGE, GOLD, MUTED, PARCHMENT, Profile, Toast, WOOD, bottom_nav, pressable,
     spawn_toast, text,
@@ -849,6 +850,7 @@ fn level_up(
     mut dirty: ResMut<CrewDirty>,
     screen: Res<BattleScreen>,
     mut sfx: MessageWriter<Sfx>,
+    mut deeds: MessageWriter<Deed>,
 ) {
     let Some(id) = selected.0.clone() else {
         return;
@@ -877,6 +879,7 @@ fn level_up(
         .map_or(id.as_str(), |h| h.name.as_str());
     toast.show(&format!("{name}: уровень {}", level + 1));
     sfx.write(Sfx("levelup"));
+    deeds.write(Deed("levelup"));
     dirty.0 = true;
 }
 

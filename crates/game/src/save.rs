@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::contracts::Contracts;
 use crate::convoys::{ConvoyData, Convoys};
 use crate::crew::Roster;
 use crate::menu::{Profile, Progress, Toast};
@@ -32,6 +33,8 @@ pub struct SaveData {
     pub tavern: TavernState,
     #[serde(default)]
     pub convoys: Convoys,
+    #[serde(default)]
+    pub contracts: Contracts,
 }
 
 pub fn now() -> u64 {
@@ -138,7 +141,8 @@ pub fn apply(app: &mut App, mut save: SaveData) {
         .insert_resource(save.roster)
         .insert_resource(save.ship)
         .insert_resource(save.tavern)
-        .insert_resource(save.convoys);
+        .insert_resource(save.convoys)
+        .insert_resource(save.contracts);
     if !report.is_empty() {
         app.world_mut().resource_mut::<Toast>().show_long(&report);
     }
@@ -157,6 +161,7 @@ struct State<'w> {
     ship: Res<'w, Ship>,
     tavern: Res<'w, TavernState>,
     convoys: Res<'w, Convoys>,
+    contracts: Res<'w, Contracts>,
 }
 
 impl State<'_> {
@@ -170,6 +175,7 @@ impl State<'_> {
             ship: self.ship.clone(),
             tavern: self.tavern.clone(),
             convoys: self.convoys.clone(),
+            contracts: self.contracts.clone(),
         }
     }
 }
@@ -210,6 +216,7 @@ mod tests {
             ship: Ship::new(&ship),
             tavern: TavernState::default(),
             convoys: Convoys::default(),
+            contracts: Contracts::default(),
         }
     }
 

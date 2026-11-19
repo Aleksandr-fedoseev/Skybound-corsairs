@@ -6,6 +6,7 @@
 mod audio;
 mod battle_screen;
 mod battlefield;
+mod contracts;
 mod convoys;
 mod crew;
 mod dev;
@@ -81,6 +82,7 @@ fn main() {
         save::plugin,
         story::plugin,
         convoys::plugin,
+        contracts::plugin,
     ))
     .add_message::<Shown>()
     .insert_resource(crew)
