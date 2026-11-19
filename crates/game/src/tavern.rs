@@ -11,6 +11,7 @@ use game_data::{GameData, Rarity};
 use serde::Deserialize;
 
 use crate::Screen;
+use crate::audio::Sfx;
 use crate::battle_screen::{BattleScreen, random_seed};
 use crate::crew::Roster;
 use crate::menu::{
@@ -767,6 +768,7 @@ fn reveal_results(
     time: Res<Time>,
     mut results: ResMut<Results>,
     mut cards: Query<(&Reveal, &mut Visibility, &mut UiTransform)>,
+    mut sfx: MessageWriter<Sfx>,
 ) {
     if results.list.is_empty() {
         return;
@@ -776,6 +778,9 @@ fn reveal_results(
         let t = results.elapsed - *i as f32 * REVEAL_STEP;
         if t < 0.0 {
             continue;
+        }
+        if *vis == Visibility::Hidden {
+            sfx.write(Sfx(if *ssr { "ssr" } else { "flip" }));
         }
         vis.set_if_neq(Visibility::Inherited);
         let k = (t / REVEAL_POP).min(1.0);

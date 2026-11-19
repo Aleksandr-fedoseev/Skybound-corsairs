@@ -10,6 +10,7 @@ use bevy::prelude::*;
 use serde::Deserialize;
 
 use crate::Screen;
+use crate::audio::Sfx;
 use crate::menu::{
     BRASS, GO, GO_EDGE, GOLD, MUTED, MenuRebuild, PARCHMENT, Profile, Toast, pressable, text,
 };
@@ -311,6 +312,7 @@ fn tick_build(
     mut ship: ResMut<Ship>,
     mut toast: ResMut<Toast>,
     mut rebuild: ResMut<MenuRebuild>,
+    mut sfx: MessageWriter<Sfx>,
 ) {
     let Some(build) = &mut ship.build else {
         return;
@@ -324,6 +326,7 @@ fn tick_build(
     ship.levels.insert(id.clone(), to);
     let name = data.compartment(&id).map_or("", |c| c.name.as_str());
     toast.show(&format!("Готово: {name} — уровень {to}"));
+    sfx.write(Sfx("done"));
     rebuild.0 = true;
 }
 
@@ -624,6 +627,7 @@ fn action_button(
 }
 
 /// Нажатие в панели отсека: начать стройку, ускорить или открыть экран.
+#[allow(clippy::too_many_arguments)]
 fn act(
     In(action): In<Action>,
     data: Res<ShipData>,
@@ -632,6 +636,7 @@ fn act(
     mut toast: ResMut<Toast>,
     mut rebuild: ResMut<MenuRebuild>,
     mut next: ResMut<NextState<Screen>>,
+    mut sfx: MessageWriter<Sfx>,
 ) {
     match action {
         Action::Upgrade(id) => match ship.next_step(&data, &id) {
@@ -652,6 +657,7 @@ fn act(
                     to: cost.level,
                     left: cost.seconds,
                 });
+                sfx.write(Sfx("hammer"));
                 rebuild.0 = true;
             }
         },

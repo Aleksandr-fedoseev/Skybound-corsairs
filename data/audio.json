@@ -1,0 +1,25 @@
+{
+  "music_volume": 0.55,
+  "music_after_battle": 0.3,
+  "sfx_volume": 0.9,
+  "hit_gap": 0.06,
+  "heal_gap": 0.3,
+  "volumes": {
+    "hit": 0.55,
+    "crit": 0.8,
+    "skill": 0.6,
+    "ultimate": 0.9,
+    "broadside": 1.0,
+    "heal": 0.6,
+    "death": 0.6,
+    "victory": 0.9,
+    "defeat": 0.8,
+    "click": 0.45,
+    "coin": 0.7,
+    "hammer": 0.7,
+    "done": 0.7,
+    "levelup": 0.7,
+    "flip": 0.6,
+    "ssr": 0.9
+  }
+}

@@ -11,6 +11,7 @@ use game_data::{GameData, HeroDef, Rarity};
 use serde::Deserialize;
 
 use crate::Screen;
+use crate::audio::Sfx;
 use crate::battle_screen::BattleScreen;
 use crate::menu::{
     BRASS, GO, GO_EDGE, GOLD, MUTED, PARCHMENT, Profile, Toast, WOOD, bottom_nav, pressable,
@@ -638,6 +639,7 @@ fn level_up(
     mut toast: ResMut<Toast>,
     mut dirty: ResMut<CrewDirty>,
     screen: Res<BattleScreen>,
+    mut sfx: MessageWriter<Sfx>,
 ) {
     let Some(id) = selected.0.clone() else {
         return;
@@ -665,6 +667,7 @@ fn level_up(
         .hero(&id)
         .map_or(id.as_str(), |h| h.name.as_str());
     toast.show(&format!("{name}: уровень {}", level + 1));
+    sfx.write(Sfx("levelup"));
     dirty.0 = true;
 }
 

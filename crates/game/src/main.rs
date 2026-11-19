@@ -3,6 +3,7 @@
 //! Бой идёт сам (логика в battle-core), экран проигрывает его события анимациями моделей.
 //! Игрок вмешивается ультами: кнопки героев внизу. Модели пока — силуэты-заглушки.
 
+mod audio;
 mod battle_screen;
 mod battlefield;
 mod crew;
@@ -72,6 +73,7 @@ fn main() {
             crew::plugin,
             tavern::plugin,
             ship::plugin,
+            audio::plugin,
         ))
         .add_message::<Shown>()
         .insert_resource(crew)

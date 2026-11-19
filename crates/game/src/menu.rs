@@ -10,6 +10,7 @@ use serde::Deserialize;
 use bevy::ecs::system::SystemParam;
 
 use crate::Screen;
+use crate::audio::Sfx;
 use crate::battle_screen::BattleScreen;
 use crate::ship::{Compartment, OpenCompartment, Ship, ShipData};
 use crate::view::{Fonts, ResultNote};
@@ -253,11 +254,16 @@ pub(crate) fn text(
 /// Кнопка чуть сжимается под пальцем.
 pub(crate) fn pressable(button: &mut EntityCommands) {
     button
-        .observe(|ev: On<PointerPress>, mut nodes: Query<&mut UiTransform>| {
-            if let Ok(mut t) = nodes.get_mut(ev.event_target()) {
-                t.scale = Vec2::splat(PRESSED_SCALE);
-            }
-        })
+        .observe(
+            |ev: On<PointerPress>,
+             mut nodes: Query<&mut UiTransform>,
+             mut sfx: MessageWriter<Sfx>| {
+                if let Ok(mut t) = nodes.get_mut(ev.event_target()) {
+                    t.scale = Vec2::splat(PRESSED_SCALE);
+                }
+                sfx.write(Sfx("click"));
+            },
+        )
         .observe(
             |ev: On<PointerRelease>, mut nodes: Query<&mut UiTransform>| {
                 if let Ok(mut t) = nodes.get_mut(ev.event_target()) {
@@ -390,7 +396,8 @@ fn build(commands: &mut Commands, view: &MenuView) {
                  mut profile: ResMut<Profile>,
                  mut toast: ResMut<Toast>,
                  ship: Res<Ship>,
-                 ship_data: Res<ShipData>| {
+                 ship_data: Res<ShipData>,
+                 mut sfx: MessageWriter<Sfx>| {
                     let room = ship
                         .capacity(&ship_data)
                         .ether
@@ -402,6 +409,7 @@ fn build(commands: &mut Commands, view: &MenuView) {
                     if got > 0 {
                         profile.ether += got;
                         profile.ether_pending -= got as f32;
+                        sfx.write(Sfx("coin"));
                         toast.show(&format!("Ветроловы: +{got} эфира"));
                     }
                 },
