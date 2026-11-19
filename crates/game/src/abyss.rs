@@ -110,6 +110,7 @@ impl AbyssData {
             silver: r.silver,
             planks: 0,
             journals: r.journals,
+            energy_rate: 1,
         }
     }
 }
@@ -149,14 +150,27 @@ pub struct ActivitiesDirty(pub bool);
 #[derive(Component)]
 struct ActivitiesRoot;
 
+#[derive(Component)]
+struct ActivitiesScroll;
+
+/// Где прокручен список — чтобы пересборка экрана раз в секунду не сбрасывала его.
+#[derive(Resource, Default)]
+struct ScrollY(f32);
+
 pub fn plugin(app: &mut App) {
     app.insert_resource(AbyssData::bundled())
         .init_resource::<Abyss>()
         .init_resource::<ActivitiesDirty>()
+        .init_resource::<ScrollY>()
         .add_systems(OnEnter(Screen::Activities), spawn_activities)
         .add_systems(
             Update,
-            (tick_timers, rebuild_activities)
+            (
+                wheel_scroll,
+                remember_scroll,
+                tick_timers,
+                rebuild_activities,
+            )
                 .chain()
                 .run_if(in_state(Screen::Activities)),
         );
@@ -176,10 +190,35 @@ struct View<'w> {
     ship_data: Res<'w, ShipData>,
     event_data: Res<'w, crate::events::EventData>,
     storm: Res<'w, crate::events::StormEvent>,
+    scroll: Res<'w, ScrollY>,
+    week_events: Res<'w, crate::events::WeekEvents>,
+    profile: Res<'w, crate::menu::Profile>,
+    roster: Res<'w, crate::crew::Roster>,
 }
 
 fn spawn_activities(mut commands: Commands, view: View) {
     build(&mut commands, &view);
+}
+
+fn wheel_scroll(
+    mut wheel: MessageReader<bevy::input::mouse::MouseWheel>,
+    mut lists: Query<&mut ScrollPosition, With<ActivitiesScroll>>,
+) {
+    for ev in wheel.read() {
+        let step = match ev.unit {
+            bevy::input::mouse::MouseScrollUnit::Line => ev.y * 40.0,
+            bevy::input::mouse::MouseScrollUnit::Pixel => ev.y,
+        };
+        for mut pos in &mut lists {
+            pos.0.y = (pos.0.y - step).max(0.0);
+        }
+    }
+}
+
+fn remember_scroll(lists: Query<&ScrollPosition, With<ActivitiesScroll>>, mut y: ResMut<ScrollY>) {
+    for pos in &lists {
+        y.0 = pos.0.y;
+    }
 }
 
 /// Пока экспедиции в пути, раз в секунду обновляем время до возвращения.
@@ -253,17 +292,48 @@ fn build(commands: &mut Commands, view: &View) {
             ))
             .with_child(text(fonts, "Активности", true, 20.0, PARCHMENT));
 
-            root.spawn(Node {
-                position_type: PositionType::Absolute,
-                top: px(68),
-                left: px(10),
-                width: px(520),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(10),
-                ..default()
-            })
-            .with_children(|col| {
-                crate::events::storm_card(col, fonts, &view.event_data, &view.storm);
+            // Список прокручивается колесом и пальцем: ивент, Бездна и экспедиции не влезают.
+            let mut list = root.spawn((
+                ActivitiesScroll,
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: px(64),
+                    left: px(10),
+                    width: px(520),
+                    height: px(806),
+                    padding: UiRect::vertical(px(4)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(10),
+                    overflow: Overflow::scroll_y(),
+                    ..default()
+                },
+                ScrollPosition(Vec2::new(0.0, view.scroll.0)),
+            ));
+            list.observe(
+                |ev: On<PointerDrag>,
+                 mut lists: Query<&mut ScrollPosition, With<ActivitiesScroll>>| {
+                    for mut pos in &mut lists {
+                        pos.0.y = (pos.0.y - ev.delta.y).max(0.0);
+                    }
+                },
+            );
+            list.with_children(|col| {
+                let owned: Vec<(String, String)> = screen
+                    .data
+                    .heroes
+                    .iter()
+                    .filter(|h| view.roster.owns(&h.id))
+                    .map(|h| (h.id.clone(), h.name.clone()))
+                    .collect();
+                crate::events::event_card(
+                    col,
+                    fonts,
+                    &view.event_data,
+                    &view.storm,
+                    &view.week_events,
+                    &view.profile,
+                    &owned,
+                );
                 abyss_card(col, fonts, data, screen, floor, abyss.best);
                 crate::expeditions::section(
                     col,

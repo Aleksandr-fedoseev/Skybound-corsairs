@@ -144,9 +144,16 @@ pub struct Battle {
     current: Option<UnitId>,
     outcome: Option<Outcome>,
     turn: u32,
+    /// Во сколько раз быстрее копится энергия ульт (особые правила ивентов).
+    energy_rate: u32,
 }
 
 impl Battle {
+    /// Особое правило боя: ульты копятся в `rate` раз быстрее.
+    pub fn set_energy_rate(&mut self, rate: u32) {
+        self.energy_rate = rate.max(1);
+    }
+
     /// Создаёт бой. Первый ход уже определён: см. [`Battle::current`].
     pub fn new(allies: Vec<UnitDef>, enemies: Vec<UnitDef>, ship: Ship, seed: u64) -> Self {
         let mut units = Vec::with_capacity(allies.len() + enemies.len());
@@ -176,6 +183,7 @@ impl Battle {
             current: None,
             outcome: None,
             turn: 0,
+            energy_rate: 1,
         };
         let mut events = Vec::new();
         battle.check_outcome(&mut events);
@@ -471,7 +479,7 @@ impl Battle {
     fn gain_energy(&mut self, id: UnitId, amount: u32) {
         let unit = &mut self.units[id.0];
         if unit.def.ultimate.is_some() {
-            unit.energy = (unit.energy + amount).min(ENERGY_MAX);
+            unit.energy = (unit.energy + amount * self.energy_rate).min(ENERGY_MAX);
         }
     }
 

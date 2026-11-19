@@ -23,6 +23,8 @@ pub struct CustomFight {
     pub silver: u32,
     pub planks: u32,
     pub journals: u32,
+    /// Особое правило: ульты копятся быстрее (1 — как обычно).
+    pub energy_rate: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,6 +34,8 @@ pub enum FightKind {
     Abyss(u32),
     /// Буревая тварь ивента «Буря»: счёт — урон.
     Storm,
+    /// Этап трассы «Небесной регаты».
+    Regatta(usize),
 }
 
 /// Залп до первых данных о корабле (Пушечная палуба ур. 1).
@@ -322,7 +326,11 @@ fn new_battle(
             .stage_enemies(&data.stages[stage].id)
             .expect("этап есть в data/stages.json"),
     };
-    Battle::new(team, enemies, Ship { broadside_power }, seed)
+    let mut battle = Battle::new(team, enemies, Ship { broadside_power }, seed);
+    if let Some(fight) = custom {
+        battle.set_energy_rate(fight.energy_rate);
+    }
+    battle
 }
 
 /// Выход в поход: этап с карты или следующий непройденный.

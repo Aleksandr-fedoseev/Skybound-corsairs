@@ -15,7 +15,7 @@ use crate::audio::Sfx;
 use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
 use crate::contracts::{BoardOpen, ContractData, Contracts, Deed};
 use crate::convoys::Convoys;
-use crate::events::{EventData, StormEvent};
+use crate::events::{EventData, StormEvent, WeekEvents};
 use crate::ship::{Compartment, OpenCompartment, Ship, ShipData};
 use crate::story::{StoryQueue, VoyageRequest};
 use crate::view::{Fonts, ResultNote};
@@ -1116,10 +1116,10 @@ fn count_victory(
     mut notes: Query<&mut Text, With<ResultNote>>,
     mut deeds: MessageWriter<Deed>,
     abyss: (Res<AbyssData>, ResMut<Abyss>),
-    events: (Res<EventData>, ResMut<StormEvent>),
+    events: (Res<EventData>, ResMut<StormEvent>, ResMut<WeekEvents>),
 ) {
     let (abyss_data, mut abyss) = abyss;
-    let (event_data, mut storm) = events;
+    let (event_data, mut storm, mut week_events) = events;
     let Some(outcome) = screen.shown_outcome else {
         return;
     };
@@ -1144,6 +1144,13 @@ fn count_victory(
             storm.record(damage, &event_data.storm, &mut spoils.profile)
         }
         (Outcome::Defeat, _) => "Усильте отряд или смените тактику".to_string(),
+        (Outcome::Victory, Some(fight)) if matches!(fight.kind, FightKind::Regatta(_)) => {
+            let FightKind::Regatta(leg) = fight.kind else {
+                unreachable!()
+            };
+            deeds.write(Deed("win"));
+            week_events.finish_leg(leg, &event_data.regatta, &mut spoils.profile)
+        }
         (Outcome::Victory, Some(fight)) if matches!(fight.kind, FightKind::Abyss(_)) => {
             let FightKind::Abyss(floor) = fight.kind else {
                 unreachable!()

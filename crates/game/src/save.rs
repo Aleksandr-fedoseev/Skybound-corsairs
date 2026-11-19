@@ -15,7 +15,7 @@ use crate::cabins::Cabins;
 use crate::contracts::Contracts;
 use crate::convoys::{ConvoyData, Convoys};
 use crate::crew::Roster;
-use crate::events::StormEvent;
+use crate::events::{StormEvent, WeekEvents};
 use crate::expeditions::Expeditions;
 use crate::gear::Gear;
 use crate::menu::{Profile, Progress, Toast};
@@ -50,6 +50,8 @@ pub struct SaveData {
     pub gear: Gear,
     #[serde(default)]
     pub storm: StormEvent,
+    #[serde(default)]
+    pub week_events: WeekEvents,
 }
 
 pub fn now() -> u64 {
@@ -162,7 +164,8 @@ pub fn apply(app: &mut App, mut save: SaveData) {
         .insert_resource(save.expeditions)
         .insert_resource(save.cabins)
         .insert_resource(save.gear)
-        .insert_resource(save.storm);
+        .insert_resource(save.storm)
+        .insert_resource(save.week_events);
     if !report.is_empty() {
         app.world_mut().resource_mut::<Toast>().show_long(&report);
     }
@@ -187,6 +190,7 @@ struct State<'w> {
     cabins: Res<'w, Cabins>,
     gear: Res<'w, Gear>,
     storm: Res<'w, StormEvent>,
+    week_events: Res<'w, WeekEvents>,
 }
 
 impl State<'_> {
@@ -206,6 +210,7 @@ impl State<'_> {
             cabins: self.cabins.clone(),
             gear: self.gear.clone(),
             storm: self.storm.clone(),
+            week_events: self.week_events.clone(),
         }
     }
 }
@@ -252,6 +257,7 @@ mod tests {
             cabins: Cabins::default(),
             gear: Gear::default(),
             storm: StormEvent::default(),
+            week_events: WeekEvents::default(),
         }
     }
 

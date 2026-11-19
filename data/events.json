@@ -1,15 +1,236 @@
 {
-  "cycle": ["storm"],
+  "cycle": [
+    "storm",
+    "fair",
+    "regatta"
+  ],
   "storm": {
     "name": "Буря",
     "about": "Из глубин поднялась буревая тварь. Бейте её всем отрядом: засчитывается лучший бой недели.",
-    "enemies": [["storm_ray", 20], ["storm_leviathan", 30], ["storm_ray", 20]],
+    "enemies": [
+      [
+        "storm_ray",
+        20
+      ],
+      [
+        "storm_leviathan",
+        30
+      ],
+      [
+        "storm_ray",
+        20
+      ]
+    ],
     "milestones": [
-      { "damage": 1500, "reward": { "charts": 1, "doubloons": 20 } },
-      { "damage": 4000, "reward": { "storm_cores": 1, "charts": 1 } },
-      { "damage": 7000, "reward": { "storm_cores": 2, "doubloons": 50 } },
-      { "damage": 10000, "reward": { "storm_cores": 3, "charts": 2 } }
+      {
+        "damage": 1500,
+        "reward": {
+          "charts": 1,
+          "doubloons": 20
+        }
+      },
+      {
+        "damage": 4000,
+        "reward": {
+          "storm_cores": 1,
+          "charts": 1
+        }
+      },
+      {
+        "damage": 7000,
+        "reward": {
+          "storm_cores": 2,
+          "doubloons": 50
+        }
+      },
+      {
+        "damage": 10000,
+        "reward": {
+          "storm_cores": 3,
+          "charts": 2
+        }
+      }
     ]
   },
-  "tailwind": { "days": [5, 6], "convoy_multiplier": 2 }
+  "tailwind": {
+    "days": [
+      5,
+      6
+    ],
+    "convoy_multiplier": 2
+  },
+  "fair": {
+    "name": "Ярмарка островов",
+    "about": "Торговцы со всех островов: меняйте лишнее на нужное. Лимиты — на неделю.",
+    "offers": [
+      {
+        "id": "planks",
+        "text": "Доски за серебро",
+        "give": {
+          "silver": 300
+        },
+        "get": {
+          "planks": 80
+        },
+        "limit": 5
+      },
+      {
+        "id": "silver",
+        "text": "Серебро за доски",
+        "give": {
+          "planks": 100
+        },
+        "get": {
+          "silver": 250
+        },
+        "limit": 5
+      },
+      {
+        "id": "journals",
+        "text": "Журналы за эфир",
+        "give": {
+          "ether": 50
+        },
+        "get": {
+          "journals": 120
+        },
+        "limit": 5
+      },
+      {
+        "id": "charts",
+        "text": "Лоция за детали",
+        "give": {
+          "details": 60
+        },
+        "get": {
+          "charts": 1
+        },
+        "limit": 3
+      },
+      {
+        "id": "copy",
+        "text": "Копия героя на выбор",
+        "give": {
+          "doubloons": 120
+        },
+        "get": {
+          "copies": 1
+        },
+        "limit": 1
+      }
+    ]
+  },
+  "regatta": {
+    "name": "Небесная регата",
+    "about": "Гонка по трассе из пяти боёв. Особое правило: ульты копятся вдвое быстрее.",
+    "energy_rate": 2,
+    "legs": [
+      {
+        "enemies": [
+          [
+            "storm_ray",
+            5
+          ],
+          [
+            "storm_ray",
+            5
+          ],
+          [
+            "storm_ray",
+            5
+          ]
+        ],
+        "reward": {
+          "doubloons": 20
+        }
+      },
+      {
+        "enemies": [
+          [
+            "imperial_marine",
+            8
+          ],
+          [
+            "imperial_gunner",
+            8
+          ],
+          [
+            "imperial_marine",
+            8
+          ]
+        ],
+        "reward": {
+          "doubloons": 20,
+          "charts": 1
+        }
+      },
+      {
+        "enemies": [
+          [
+            "storm_ray",
+            11
+          ],
+          [
+            "storm_ray",
+            11
+          ],
+          [
+            "storm_ray",
+            11
+          ],
+          [
+            "storm_ray",
+            11
+          ]
+        ],
+        "reward": {
+          "doubloons": 30
+        }
+      },
+      {
+        "enemies": [
+          [
+            "imperial_marine",
+            14
+          ],
+          [
+            "imperial_gunner",
+            14
+          ],
+          [
+            "imperial_gunner",
+            14
+          ],
+          [
+            "imperial_marine",
+            14
+          ]
+        ],
+        "reward": {
+          "doubloons": 30,
+          "charts": 1
+        }
+      },
+      {
+        "enemies": [
+          [
+            "storm_ray",
+            12
+          ],
+          [
+            "storm_leviathan",
+            12
+          ],
+          [
+            "storm_ray",
+            12
+          ]
+        ],
+        "reward": {
+          "doubloons": 60,
+          "storm_cores": 1
+        }
+      }
+    ]
+  }
 }

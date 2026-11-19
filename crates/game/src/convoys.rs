@@ -64,6 +64,7 @@ impl ConvoyData {
             silver: tier.silver,
             planks: tier.planks,
             journals: 0,
+            energy_rate: 1,
         }
     }
 }

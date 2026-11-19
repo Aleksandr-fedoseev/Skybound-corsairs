@@ -34,6 +34,7 @@ CAPTURE (бой): SKYBOUND_SCREEN=battle SKYBOUND_SCREENSHOT=.studioigor/capture
 EDITOR: none — у Bevy нет редактора, код в репозитории
 
 ## Pitfalls
+- Отладка (фича dev): H — уровень Корпуса, E — следующий ивент недели, [ ] — уровень героев в бою, X — скорость боя.
 - Сохранение: `~/.local/share/skybound-corsairs/save.json` (автосохранение раз в 5 с и при выходе); свой путь — `SKYBOUND_SAVE`; в режиме скриншота сохранение не читается и не пишется. Начать заново — удалить файл.
 - Игра стартует в главном меню; сразу в бой — `SKYBOUND_SCREEN=battle`. В меню клавиша H (dev) — следующий уровень Корпуса.
 - Звуки и музыку синтезирует `python3 tools/make_sounds.py` (numpy + ffmpeg/libvorbis) → crates/game/assets/audio/; громкости — data/audio.json. Проверка без ушей: `parec --device=$(pactl get-default-sink).monitor` и уровень RMS.
