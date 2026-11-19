@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use battle_core::Rng;
 use bevy::prelude::*;
 use game_data::{GameData, Rarity};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::Screen;
 use crate::audio::Sfx;
@@ -61,7 +61,7 @@ impl TavernData {
 }
 
 /// Счётчики гаранта: сколько наймов прошло с последнего SSR и с последнего SR-или-выше.
-#[derive(Resource, Default, Clone, Copy, Debug)]
+#[derive(Resource, Default, Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Pity {
     pub since_ssr: u32,
     pub since_sr: u32,
@@ -104,13 +104,18 @@ pub fn pull(
     candidates[index].clone()
 }
 
-/// Состояние Таверны между заходами.
-#[derive(Resource)]
-struct TavernState {
+/// Состояние Таверны между заходами (гарант и бесплатные наймы сохраняются в файл).
+#[derive(Resource, Clone, Serialize, Deserialize)]
+pub struct TavernState {
     pity: Pity,
+    #[serde(skip, default = "fresh_rng")]
     rng: Rng,
     /// День (по UTC) и сколько бесплатных наймов в этот день уже взято.
     free_used: (u64, u32),
+}
+
+fn fresh_rng() -> Rng {
+    Rng::new(random_seed())
 }
 
 impl Default for TavernState {

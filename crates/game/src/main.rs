@@ -11,6 +11,7 @@ mod dev;
 mod fx;
 mod map;
 mod menu;
+mod save;
 mod ship;
 mod tavern;
 mod view;
@@ -56,63 +57,68 @@ fn main() {
     let crew = crew::CrewData::bundled();
     let roster = crew::Roster::new(&crew);
     let team = roster.team_levels();
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(window),
-            ..default()
-        }))
-        .add_plugins(dev::plugin)
-        .insert_state(match std::env::var(SCREEN_VAR).as_deref() {
-            Ok("battle") => Screen::Battle,
-            _ => Screen::Menu,
-        })
-        .init_resource::<view::Fonts>()
-        .add_plugins((
-            menu::plugin,
-            map::plugin,
-            crew::plugin,
-            tavern::plugin,
-            ship::plugin,
-            audio::plugin,
-        ))
-        .add_message::<Shown>()
-        .insert_resource(crew)
-        .insert_resource(roster)
-        .insert_resource(BattleScreen::new(
-            data,
-            Presentation::bundled(),
-            battlefield::FieldConfig::bundled(),
-            team,
-        ))
-        .init_resource::<fx::BandFx>()
-        .init_resource::<fx::ScreenFx>()
-        .add_systems(Startup, view::setup)
-        .add_systems(OnEnter(Screen::Battle), battle_screen::enter)
-        .add_systems(OnExit(Screen::Battle), battle_screen::leave)
-        .add_systems(
-            Update,
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(window),
+        ..default()
+    }))
+    .add_plugins(dev::plugin)
+    .insert_state(match std::env::var(SCREEN_VAR).as_deref() {
+        Ok("battle") => Screen::Battle,
+        _ => Screen::Menu,
+    })
+    .init_resource::<view::Fonts>()
+    .add_plugins((
+        menu::plugin,
+        map::plugin,
+        crew::plugin,
+        tavern::plugin,
+        ship::plugin,
+        audio::plugin,
+        save::plugin,
+    ))
+    .add_message::<Shown>()
+    .insert_resource(crew)
+    .insert_resource(roster)
+    .insert_resource(BattleScreen::new(
+        data,
+        Presentation::bundled(),
+        battlefield::FieldConfig::bundled(),
+        team,
+    ))
+    .init_resource::<fx::BandFx>()
+    .init_resource::<fx::ScreenFx>()
+    .add_systems(Startup, view::setup)
+    .add_systems(OnEnter(Screen::Battle), battle_screen::enter)
+    .add_systems(OnExit(Screen::Battle), battle_screen::leave)
+    .add_systems(
+        Update,
+        (
+            battle_screen::keyboard,
+            view::rebuild,
+            battle_screen::play_events,
+            fx::spawn_effects,
             (
-                battle_screen::keyboard,
-                view::rebuild,
-                battle_screen::play_events,
-                fx::spawn_effects,
-                (
-                    view::refresh_status,
-                    view::refresh_ult_buttons,
-                    view::refresh_skill_badges,
-                    view::refresh_controls,
-                    view::refresh_result,
-                    battlefield::refresh_overhead,
-                ),
-                (
-                    battlefield::animate_models,
-                    fx::animate_floating,
-                    fx::animate_band,
-                    fx::animate_screen,
-                ),
-            )
-                .chain()
-                .run_if(in_state(Screen::Battle)),
+                view::refresh_status,
+                view::refresh_ult_buttons,
+                view::refresh_skill_badges,
+                view::refresh_controls,
+                view::refresh_result,
+                battlefield::refresh_overhead,
+            ),
+            (
+                battlefield::animate_models,
+                fx::animate_floating,
+                fx::animate_band,
+                fx::animate_screen,
+            ),
         )
-        .run();
+            .chain()
+            .run_if(in_state(Screen::Battle)),
+    );
+    // Сохранение заменяет стартовые ресурсы — до первого кадра, пока экран не собран.
+    if let Some(save) = save::load() {
+        save::apply(&mut app, save);
+    }
+    app.run();
 }

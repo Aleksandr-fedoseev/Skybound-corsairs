@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::Screen;
 use crate::audio::Sfx;
@@ -146,15 +146,15 @@ impl ShipData {
 }
 
 /// Идущая стройка.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Build {
     pub id: String,
     pub to: u32,
     pub left: f32,
 }
 
-/// Уровни отсеков и стройка. Пока только на клиенте и без сохранения.
-#[derive(Resource)]
+/// Уровни отсеков и стройка. Пока на клиенте; сохраняются в файл (`save.rs`).
+#[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct Ship {
     levels: HashMap<String, u32>,
     pub build: Option<Build>,
@@ -181,6 +181,13 @@ impl Ship {
 
     pub fn hull(&self) -> u32 {
         self.level(HULL).max(1)
+    }
+
+    /// Закончить стройку: отсек получает уровень. Возвращает, что достроено.
+    pub fn finish_build(&mut self) -> Option<(String, u32)> {
+        let build = self.build.take()?;
+        self.levels.insert(build.id.clone(), build.to);
+        Some((build.id, build.to))
     }
 
     /// Тестовая клавиша: следующий уровень Корпуса без стройки (1 → 7 → 1).
@@ -321,9 +328,9 @@ fn tick_build(
     if build.left > 0.0 {
         return;
     }
-    let (id, to) = (build.id.clone(), build.to);
-    ship.build = None;
-    ship.levels.insert(id.clone(), to);
+    let Some((id, to)) = ship.finish_build() else {
+        return;
+    };
     let name = data.compartment(&id).map_or("", |c| c.name.as_str());
     toast.show(&format!("Готово: {name} — уровень {to}"));
     sfx.write(Sfx("done"));

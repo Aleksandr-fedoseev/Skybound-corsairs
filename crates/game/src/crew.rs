@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use battle_core::{Element, Role};
 use bevy::prelude::*;
 use game_data::{GameData, HeroDef, Rarity};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::Screen;
 use crate::audio::Sfx;
@@ -63,14 +63,14 @@ impl CrewData {
 }
 
 /// Нанятый герой: уровень и лишние копии (пойдут на звёзды через слияние).
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 struct Owned {
     level: u32,
     copies: u32,
 }
 
 /// Герои на борту и отряд. Стартовый отряд уже в команде, остальных нанимают в Таверне.
-#[derive(Resource)]
+#[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct Roster {
     heroes: HashMap<String, Owned>,
     pub team: Vec<String>,

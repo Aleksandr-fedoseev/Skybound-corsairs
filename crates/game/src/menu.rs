@@ -5,7 +5,7 @@
 
 use battle_core::Outcome;
 use bevy::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use bevy::ecs::system::SystemParam;
 
@@ -30,6 +30,7 @@ const PILL: Color = Color::srgba(0.0, 0.0, 0.0, 0.35);
 /// Сколько отсеков помещается в ряд под кораблём.
 const COMPARTMENTS_SHOWN: usize = 6;
 const TOAST_SECONDS: f32 = 2.2;
+const TOAST_LONG_SECONDS: f32 = 6.0;
 /// Корабль покачивается на ветру: период (с) и размах (px).
 const BOB_PERIOD: f32 = 4.0;
 const BOB_PX: f32 = 6.0;
@@ -72,8 +73,8 @@ impl MenuData {
     }
 }
 
-/// Ресурсы капитана. Пока только на клиенте и без сохранения.
-#[derive(Resource)]
+/// Ресурсы капитана. Пока на клиенте; сохраняются в файл (`save.rs`).
+#[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct Profile {
     pub captain_level: u32,
     pub silver: u32,
@@ -86,7 +87,7 @@ pub struct Profile {
 }
 
 impl Profile {
-    fn new(start: &Start) -> Self {
+    pub(crate) fn new(start: &Start) -> Self {
         Self {
             captain_level: start.captain_level,
             silver: start.silver,
@@ -100,7 +101,7 @@ impl Profile {
 }
 
 /// Сколько этапов пройдено подряд с начала главы.
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Clone, Serialize, Deserialize)]
 pub struct Progress {
     pub cleared: usize,
 }
@@ -126,6 +127,12 @@ impl Toast {
     pub(crate) fn show(&mut self, text: &str) {
         self.text = text.to_string();
         self.left = TOAST_SECONDS;
+    }
+
+    /// Длинная подсказка — например, отчёт «пока вас не было».
+    pub(crate) fn show_long(&mut self, text: &str) {
+        self.text = text.to_string();
+        self.left = TOAST_LONG_SECONDS;
     }
 }
 
