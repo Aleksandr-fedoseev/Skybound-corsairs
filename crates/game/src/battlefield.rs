@@ -643,8 +643,8 @@ pub fn animate_models(
             }
             Clip::Death => {
                 let k = ease_out(t);
-                // У спрайт-листа падение уже нарисовано в кадрах — риг не кладём.
-                if flipbook.is_none() {
+                // Если в листе есть клип смерти, падение уже нарисовано — риг не кладём.
+                if !flipbook.is_some_and(|b| b.art.clips.contains_key("death")) {
                     angle = model.facing * FRAC_PI_2 * k;
                 }
                 offset = Vec2::new(-model.facing * h * 0.25 * k, 0.0);
@@ -672,11 +672,14 @@ pub fn animate_models(
             if let Some(mut material) = materials.get_mut(&book.material) {
                 material.uv_transform = book.art.uv(sheet.row, frame);
             }
-            // Тело уже «дышит» и шатается в кадрах: риг не сжимаем в покое и почти не наклоняем.
-            if anim.clip == Clip::Idle {
-                scale = Vec2::ONE;
+            // Покадровый клип уже «дышит» и шатается: риг не сжимаем в покое и почти не наклоняем.
+            // Ключевая поза (один рисунок) живёт за счёт рига — её не трогаем.
+            if n > 1 {
+                if anim.clip == Clip::Idle {
+                    scale = Vec2::ONE;
+                }
+                angle *= 0.3;
             }
-            angle *= 0.3;
         }
         if anim.timer.is_finished() && matches!(anim.clip, Clip::Attack { .. } | Clip::Hit { .. }) {
             anim.clip = Clip::Idle;

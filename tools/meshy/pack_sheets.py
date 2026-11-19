@@ -23,10 +23,12 @@ ap = argparse.ArgumentParser()
 ap.add_argument("name")
 ap.add_argument("--height", type=float, default=1.4)
 ap.add_argument("--id", help="id бойца в игре, если папка кадров называется иначе (kaya1 → kaya)")
+ap.add_argument("--frame-h", type=int, default=FRAME_H, help="высота кадра в листе (рисункам — 384)")
+ap.add_argument("--frames", help="папка с кадрами вместо art/meshy/<имя>/frames (например, art/2d/kaya/frames)")
 a = ap.parse_args()
 UNIT = a.id or a.name
 
-src = ROOT / "art" / "meshy" / a.name / "frames"
+src = ROOT / a.frames if a.frames else ROOT / "art" / "meshy" / a.name / "frames"
 # Только клипы из ORDER: черновые варианты рядом (например, attack_side104) не попадают в лист.
 clips = [c for c in ORDER if (src / c).is_dir()]
 OUTLINE = (40, 26, 26)   # цвет контура, как у линий в рисованных референсах
@@ -40,7 +42,9 @@ def outlined(im):
     return Image.alpha_composite(line, im)
 
 
-frames = {c: [outlined(Image.open(p).convert("RGBA")) for p in sorted((src / c).glob("*.png"))]
+# Рисунки (ключевые позы) уже с линиями — контур только у рендеров 3D.
+draw = outlined if not a.frames else (lambda im: im)
+frames = {c: [draw(Image.open(p).convert("RGBA")) for p in sorted((src / c).glob("*.png"))]
           for c in clips}
 
 # Общая рамка по всем кадрам.
@@ -61,8 +65,8 @@ foot = (crop_h - 1 - rows.max()) / crop_h
 # Рост персонажа в кадре ожидания — от ног до макушки, в долях рамки.
 stature = (rows.max() - rows.min()) / crop_h
 
-scale = FRAME_H / crop_h
-fw, fh = round(crop_w * scale), FRAME_H
+scale = a.frame_h / crop_h
+fw, fh = round(crop_w * scale), a.frame_h
 cols = max(len(v) for v in frames.values())
 sheet = Image.new("RGBA", (fw * cols, fh * len(clips)), (0, 0, 0, 0))
 meta = {}

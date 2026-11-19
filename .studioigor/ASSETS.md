@@ -21,4 +21,5 @@
 ## License registry
 | asset / pack | source (URL) | license | author | path | attribution |
 |---|---|---|---|---|---|
+| позы Каи (4 рисунка) | Gemini (nano-banana), аккаунт пользователя, по развороту из art/references/nano-banana | по условиям Google на сгенерированный контент — проверить перед релизом | команда | art/2d/kaya, crates/game/assets/units/kaya.png | — |
 | спрайт-листы Каи и Мэй | Meshy (image-to-3D, авториг, библиотека анимаций) по референсам nano-banana | по условиям подписки Meshy пользователя — проверить перед релизом | команда | crates/game/assets/units/ | — |
