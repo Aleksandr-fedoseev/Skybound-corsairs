@@ -195,7 +195,15 @@ pub fn spawn_effects(
                     .max(0.1);
                     let hand = home + Vec2::new(facing * height * 0.28, height * 0.55);
                     let aim = target + Vec2::new(0.0, target_h * 0.5);
-                    spawn_shot(&mut commands, &mut meshes, &mut materials, shot, hand, aim, flight);
+                    spawn_shot(
+                        &mut commands,
+                        &mut meshes,
+                        &mut materials,
+                        shot,
+                        hand,
+                        aim,
+                        flight,
+                    );
                     // Выстрел виден дольше рывка: клип спрайта не сжимается в мелькание.
                     seconds = seconds.max(flight + 0.35);
                 }
@@ -406,7 +414,12 @@ pub fn animate_projectiles(
     time: Res<Time>,
     screen: Res<BattleScreen>,
     mut shots: Query<(Entity, &mut Projectile, &mut Transform), Without<Flash>>,
-    mut flashes: Query<(Entity, &mut Flash, &mut Transform, &MeshMaterial2d<ColorMaterial>)>,
+    mut flashes: Query<(
+        Entity,
+        &mut Flash,
+        &mut Transform,
+        &MeshMaterial2d<ColorMaterial>,
+    )>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     let dt = fx_delta(&time, &screen);

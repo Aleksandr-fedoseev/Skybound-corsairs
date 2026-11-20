@@ -81,11 +81,17 @@ pub fn grid_mesh(size: Vec2) -> (Mesh, Vec<[f32; 3]>, Vec<[f32; 2]>) {
             indices.extend_from_slice(&[a, a + w, a + 1, a + 1, a + w, a + w + 1]);
         }
     }
-    let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions.clone())
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 0.0, 1.0]; positions.len()])
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs.clone())
-        .with_inserted_indices(Indices::U32(indices));
+    let mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions.clone())
+    .with_inserted_attribute(
+        Mesh::ATTRIBUTE_NORMAL,
+        vec![[0.0, 0.0, 1.0]; positions.len()],
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs.clone())
+    .with_inserted_indices(Indices::U32(indices));
     (mesh, positions, uvs)
 }
 
@@ -183,11 +189,14 @@ pub fn animate_soft_bodies(
             } else {
                 Vec2::ZERO
             };
-            let force = -k * (spring.off - rest) - 2.0 * zeta * k.sqrt() * spring.vel
+            let force = -k * (spring.off - rest)
+                - 2.0 * zeta * k.sqrt() * spring.vel
                 - accel * INERTIA * k.sqrt();
             spring.vel += force * dt;
             spring.off += spring.vel * dt;
-            spring.off = spring.off.clamp(Vec2::splat(-limit * h), Vec2::splat(limit * h));
+            spring.off = spring
+                .off
+                .clamp(Vec2::splat(-limit * h), Vec2::splat(limit * h));
         }
 
         let Some(mut mesh) = meshes.get_mut(&soft.mesh) else {

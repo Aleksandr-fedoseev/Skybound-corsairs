@@ -15,6 +15,7 @@ use bevy::sprite::Anchor;
 use serde::Deserialize;
 
 use crate::battle_screen::BattleScreen;
+use crate::battle_screen::FightKind;
 use crate::view::{Fonts, element_color};
 
 const ALLY_DECK: Color = Color::srgb(0.47, 0.32, 0.19);
@@ -166,7 +167,11 @@ impl AnimatedArt {
             Clip::Death => "death",
             Clip::Victory => "victory",
         };
-        if self.clips.contains_key(name) { name } else { "idle" }
+        if self.clips.contains_key(name) {
+            name
+        } else {
+            "idle"
+        }
     }
 
     /// Сдвиг UV на кадр `frame` строки `row`.
@@ -303,7 +308,14 @@ pub fn spawn_field(
     };
 
     // Фон: палуба «Ласточки» над морем облаков или свой фон этапа, во весь экран.
-    let stage_background = screen.field.stage_backgrounds.get(screen.stage_id());
+    // Абордаж конвоя и блокада — у имперского корабля (фон 1-1); Бездна и ивенты — своя палуба.
+    let stage_background = match screen.custom.as_ref().map(|f| f.kind) {
+        None => screen.field.stage_backgrounds.get(screen.stage_id()),
+        Some(FightKind::Convoy | FightKind::Blockade(_)) => {
+            screen.field.stage_backgrounds.get("1-1")
+        }
+        Some(_) => None,
+    };
     let background = commands
         .spawn((
             Sprite {
