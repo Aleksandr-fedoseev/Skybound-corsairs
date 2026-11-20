@@ -24,6 +24,9 @@ const BAND: Color = Color::srgba(0.03, 0.05, 0.12, 0.7);
 const DAMAGE_JITTER: [f32; 4] = [0.0, 22.0, -22.0, 11.0];
 /// Полоса ульты выезжает слева на столько пикселей.
 const BAND_SLIDE: f32 = 80.0;
+/// Доля клипа ближнего боя, к которой боец добежал до цели (рывок кончается на 0.35, держится до
+/// 0.5): удар своего эффекта (spells.rs) приходится сюда.
+pub const MELEE_ARRIVE: f32 = 0.42;
 const DAMAGE_SIZE: f32 = 28.0;
 /// Победная анимация идёт, пока игрок не начнёт новый бой.
 const VICTORY_SECONDS: f32 = 3600.0;
@@ -194,7 +197,7 @@ pub fn spawn_effects(
                 // Ближний бой со своим эффектом (spells.rs): клип растягивается на замах — к удару
                 // боец уже у цели и стоит там, пока эффект бьёт.
                 if shooter.is_none() && screen.field.spells.get(&actor.def.id, *kind).is_some() {
-                    let arrive = if big { 0.62 } else { 0.42 };
+                    let arrive = if big { 0.62 } else { MELEE_ARRIVE };
                     seconds = seconds.max(screen.windup(*unit, *kind) / arrive);
                 }
                 if let Some((shot, home, height, facing)) = shooter

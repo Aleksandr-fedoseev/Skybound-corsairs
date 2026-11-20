@@ -16,14 +16,11 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-root = Path(sys.argv[1])
-clips = [c.split("@")[0] for c in sys.argv[2:]]
-scales = {c.split("@")[0]: float(c.split("@")[1]) if "@" in c else 1.0 for c in sys.argv[2:]}
 FOOT_MARGIN = 24   # ноги — на столько пикселей выше нижнего края холста
 EDGE_FADE = 0.04   # эффекты, упёртые в край рисунка (дым, вихрь), гаснут на этой доле ширины
 
 
-def load(clip):
+def load(root, clip):
     for ext in ("png", "jpeg", "jpg"):
         p = root / f"{clip}.{ext}"
         if p.exists():
@@ -65,34 +62,42 @@ def mask_of(img):
     return Image.fromarray(alpha.astype(np.uint8), "L")
 
 
-out = []
-size = None
-for clip in clips:
-    img = load(clip)
-    # Позы, нарисованные в другом размере (тот же кадр 3:4), — к размеру первой: рост одинаковый.
-    size = size or img.size
-    if img.size != size:
-        img = img.resize(size, Image.Resampling.LANCZOS)
-    k = scales[clip]
-    if k != 1.0:
-        # Крупнее/мельче вокруг низа кадра (ноги остаются внизу), холст прежний, фон белый.
-        big = img.resize((round(size[0] * k), round(size[1] * k)), Image.Resampling.LANCZOS)
-        img = Image.new("RGB", size, (255, 255, 255))
-        img.paste(big, ((size[0] - big.width) // 2, size[1] - big.height))
-    alpha = mask_of(img)
-    a = np.asarray(alpha) > 64
-    rows = np.nonzero(a.any(axis=1))[0]
-    out.append((clip, img, alpha, rows.max()))
+def main():
+    root = Path(sys.argv[1])
+    clips = [c.split("@")[0] for c in sys.argv[2:]]
+    scales = {c.split("@")[0]: float(c.split("@")[1]) if "@" in c else 1.0 for c in sys.argv[2:]}
+    out = []
+    size = None
+    for clip in clips:
+        img = load(root, clip)
+        # Позы, нарисованные в другом размере (тот же кадр 3:4), — к размеру первой: рост одинаковый.
+        size = size or img.size
+        if img.size != size:
+            img = img.resize(size, Image.Resampling.LANCZOS)
+        k = scales[clip]
+        if k != 1.0:
+            # Крупнее/мельче вокруг низа кадра (ноги остаются внизу), холст прежний, фон белый.
+            big = img.resize((round(size[0] * k), round(size[1] * k)), Image.Resampling.LANCZOS)
+            img = Image.new("RGB", size, (255, 255, 255))
+            img.paste(big, ((size[0] - big.width) // 2, size[1] - big.height))
+        alpha = mask_of(img)
+        a = np.asarray(alpha) > 64
+        rows = np.nonzero(a.any(axis=1))[0]
+        out.append((clip, img, alpha, rows.max()))
 
-w, h = out[0][1].size
-for clip, img, alpha, foot in out:
-    rgba = img.convert("RGBA")
-    rgba.putalpha(alpha)
-    canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    canvas.paste(rgba, (0, (h - FOOT_MARGIN) - foot), rgba)
-    d = root / "frames" / clip
-    d.mkdir(parents=True, exist_ok=True)
-    for old in d.glob("*.png"):
-        old.unlink()
-    canvas.save(d / "0000.png")
-    print(f"{clip}: ноги {foot} → {h - FOOT_MARGIN}")
+    w, h = out[0][1].size
+    for clip, img, alpha, foot in out:
+        rgba = img.convert("RGBA")
+        rgba.putalpha(alpha)
+        canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        canvas.paste(rgba, (0, (h - FOOT_MARGIN) - foot), rgba)
+        d = root / "frames" / clip
+        d.mkdir(parents=True, exist_ok=True)
+        for old in d.glob("*.png"):
+            old.unlink()
+        canvas.save(d / "0000.png")
+        print(f"{clip}: ноги {foot} → {h - FOOT_MARGIN}")
+
+
+if __name__ == "__main__":
+    main()

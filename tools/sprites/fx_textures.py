@@ -7,6 +7,7 @@
 - gust.png — серп порыва ветра из art/2d/fx/gust.png (тоже на чёрном).
 - storm_cloud.png — грозовая туча (шум), рисуется здесь же.
 - slash.png, thrust.png — разрез саблей (серп) и укол (веретено): белая сердцевина, голубое свечение.
+- whirl.png — круговой взмах: кольцо-комета, голова справа, хвост гаснет по часовой стрелке.
 Нужны Pillow и numpy.
 """
 from pathlib import Path
@@ -130,8 +131,27 @@ def thrust():
     Image.fromarray((out * 255).astype(np.uint8), "RGBA").save(OUT / "thrust.png", optimize=True)
 
 
+def whirl():
+    """Кольцо-комета для кругового удара: крутится против часовой — хвост тянется позади головы."""
+    n = 512
+    y, x = np.mgrid[0:n, 0:n].astype(np.float32)
+    dx, dy = x - n / 2, n / 2 - y
+    r = np.hypot(dx, dy)
+    behind = np.mod(-np.arctan2(dy, dx), 2 * np.pi)     # 0 у головы, растёт назад по часовой
+    u = behind / (2 * np.pi * 0.8)
+    inside = u <= 1
+    width = np.where(inside, 4 + 34 * np.clip(1 - u, 0, 1) ** 0.8, 0)
+    out = blade_light(r - 200, width)
+    # Ореол — только у кольца, без бледного квадрата вокруг головы.
+    near = np.clip(1 - np.abs(r - 200) / 52, 0, 1) ** 1.5
+    near *= np.clip(behind / 0.1, 0, 1) ** 0.7       # голова скруглена, без прямого среза
+    out[..., 3] *= inside * np.clip(1 - u, 0, 1) ** 1.3 * near
+    Image.fromarray((out * 255).astype(np.uint8), "RGBA").save(OUT / "whirl.png", optimize=True)
+
+
 tornado()
 gust()
+whirl()
 slash()
 thrust()
 glow()

@@ -146,6 +146,9 @@ pub struct SheetClip {
     /// Играть туда и обратно: отрезок длинного клипа зацикливается без шва.
     #[serde(default)]
     pub pingpong: bool,
+    /// Порядок показа кадров (повтор — задержка кадра); пусто — подряд.
+    #[serde(default)]
+    pub seq: Vec<u32>,
 }
 
 impl AnimatedArt {
@@ -177,10 +180,15 @@ impl AnimatedArt {
         }
     }
 
-    /// Сдвиг UV на кадр `frame` строки `row`.
+    /// Сдвиг UV на кадр `frame` клипа, что начинается со строки `row` (длинный клип
+    /// продолжается на следующих строках).
     fn uv(&self, row: u32, frame: u32) -> Affine2 {
         let size = Vec2::new(1.0 / self.columns as f32, 1.0 / self.rows as f32);
-        Affine2::from_scale_angle_translation(size, 0.0, size * Vec2::new(frame as f32, row as f32))
+        let cell = Vec2::new(
+            (frame % self.columns) as f32,
+            (row + frame / self.columns) as f32,
+        );
+        Affine2::from_scale_angle_translation(size, 0.0, size * cell)
     }
 }
 
@@ -755,8 +763,13 @@ pub fn animate_models(
         if let Some(book) = flipbook
             && let Some(sheet) = book.art.clip(pose)
         {
-            let n = sheet.frames.max(1);
-            let frame = match sheet.fps {
+            // Порядок показа: свой (seq) или кадры подряд.
+            let n = if sheet.seq.is_empty() {
+                sheet.frames.max(1)
+            } else {
+                sheet.seq.len() as u32
+            };
+            let step = match sheet.fps {
                 Some(fps) if sheet.pingpong && n > 1 => {
                     let k = (now * fps + phase * 7.0) as u32 % (2 * n - 2);
                     if k < n { k } else { 2 * n - 2 - k }
@@ -764,6 +777,7 @@ pub fn animate_models(
                 Some(fps) => (now * fps + phase * 7.0) as u32 % n,
                 None => ((t * n as f32) as u32).min(n - 1),
             };
+            let frame = sheet.seq.get(step as usize).copied().unwrap_or(step);
             if let Some(mut material) = materials.get_mut(&book.material) {
                 material.uv_transform = book.art.uv(sheet.row, frame);
             }

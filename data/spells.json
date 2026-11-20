@@ -20,7 +20,7 @@
     },
     "ren": {
       "basic": { "fx": "thrust", "windup": 0.22 },
-      "skill": { "fx": "cross_slash", "windup": 0.45, "hit_gap": 0.14 },
+      "skill": { "fx": "whirl_slash", "windup": 0.5, "hit_gap": 0.14 },
       "ultimate": { "fx": "thunder_strike", "windup": 1.15 }
     }
   }

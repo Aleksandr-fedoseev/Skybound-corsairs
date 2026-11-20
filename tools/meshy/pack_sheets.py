@@ -3,7 +3,7 @@
 
   python3 tools/meshy/pack_sheets.py kaya --height 1.45
 
-Лист: строка — клип, столбец — кадр. Рамка общая для всех клипов (объединение непрозрачного),
+Лист: строка — клип, столбец — кадр (с --cols длинный клип занимает несколько строк подряд). Рамка общая для всех клипов (объединение непрозрачного),
 поэтому ноги стоят на одной линии во всех клипах. `--height` — рост бойца в долях высоты модели
 на поле боя. Нужны Pillow и numpy.
 """
@@ -24,6 +24,7 @@ ap.add_argument("name")
 ap.add_argument("--height", type=float, default=1.4)
 ap.add_argument("--id", help="id бойца в игре, если папка кадров называется иначе (kaya1 → kaya)")
 ap.add_argument("--frame-h", type=int, default=FRAME_H, help="высота кадра в листе (рисункам — 384)")
+ap.add_argument("--cols", type=int, help="столбцов в листе; длинный клип переносится на следующие строки")
 ap.add_argument("--frames", help="папка с кадрами вместо art/meshy/<имя>/frames (например, art/2d/kaya/frames)")
 a = ap.parse_args()
 UNIT = a.id or a.name
@@ -68,17 +69,28 @@ stature = (rows.max() - rows.min()) / crop_h
 scale = a.frame_h / crop_h
 fw, fh = round(crop_w * scale), a.frame_h
 cols = max(len(v) for v in frames.values())
-sheet = Image.new("RGBA", (fw * cols, fh * len(clips)), (0, 0, 0, 0))
+cols = min(cols, a.cols) if a.cols else cols
+# Строка, с которой начинается клип: клип длиннее cols продолжается на следующей.
+starts, rows_used = {}, 0
+for c in clips:
+    starts[c] = rows_used
+    rows_used += -(-len(frames[c]) // cols)
+sheet = Image.new("RGBA", (fw * cols, fh * rows_used), (0, 0, 0, 0))
 meta = {}
-for r, c in enumerate(clips):
+for c in clips:
+    r = starts[c]
     for i, im in enumerate(frames[c]):
         tile = im.crop((left, top, right, bottom)).convert("RGBa").resize((fw, fh), Image.Resampling.LANCZOS)
-        sheet.paste(tile.convert("RGBA"), (i * fw, r * fh))
+        sheet.paste(tile.convert("RGBA"), ((i % cols) * fw, (r + i // cols) * fh))
     meta[c] = {"row": r, "frames": len(frames[c])}
+    # Порядок показа кадров (painted_frames.py): повтор кадра — задержка.
+    m = src / c / "meta.json"
+    if m.exists() and "seq" in json.loads(m.read_text()):
+        meta[c]["seq"] = json.loads(m.read_text())["seq"]
     if c in CLIP_FPS:
         # Частота из рендера (meta.json), иначе — запасная из CLIP_FPS.
         m = src / c / "meta.json"
-        meta[c]["fps"] = round(json.loads(m.read_text())["fps"], 1) if m.exists() else CLIP_FPS[c]
+        meta[c]["fps"] = round(json.loads(m.read_text()).get("fps", CLIP_FPS[c]), 1) if m.exists() else CLIP_FPS[c]
     if c == "idle":
         meta[c]["pingpong"] = True   # отрезок длинного ожидания: туда и обратно, без шва
 
@@ -92,7 +104,7 @@ data[UNIT] = {
     "sheet": f"units/{UNIT}.png",
     "frame": [fw, fh],
     "columns": cols,
-    "rows": len(clips),
+    "rows": rows_used,
     # Рост на поле в долях высоты модели и где ноги в кадре (доля снизу), чтобы ставить на слот.
     "height": round(a.height / stature, 3),
     "foot": round(foot, 4),
@@ -102,4 +114,4 @@ data[UNIT] = {
 lines = ["{"] + [f'  "{k}": {json.dumps(v, ensure_ascii=False)}' + ("," if i < len(data) - 1 else "")
                  for i, (k, v) in enumerate(data.items())] + ["}"]
 data_path.write_text("\n".join(lines) + "\n")
-print(f"{out.relative_to(ROOT)}: {cols}×{len(clips)} кадров {fw}×{fh}; клипы {', '.join(clips)}")
+print(f"{out.relative_to(ROOT)}: {cols}×{rows_used} кадров {fw}×{fh}; клипы {', '.join(clips)}")

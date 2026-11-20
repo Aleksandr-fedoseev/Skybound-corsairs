@@ -32,7 +32,9 @@ PROPS = [v.split(":") for k, v in OPTS if k == "prop"]
 MAX_FRAMES = int(next((v for k, v in OPTS if k == "frames"), MAX_FRAMES))
 # pose=<клип>:<заготовка> — поверх клипа держать руки в позе из POSES (например, idle:pirate).
 POSE_OF = dict(v.split(":") for k, v in OPTS if k == "pose")
-CLIPS = {k: v for k, v in OPTS if k not in ("turn", "prop", "frames", "pose")}
+# window=<клип>:<с>:<по> — взять из клипа только эти кадры (например, сам оборот из длинного вращения).
+WINDOW = {c: (int(a), int(b)) for c, a, b in (v.split(":") for k, v in OPTS if k == "window")}
+CLIPS = {k: v for k, v in OPTS if k not in ("turn", "prop", "frames", "pose", "window")}
 
 # Позы рук поверх клипа: кость → направление (от начала к концу кости) в системе персонажа,
 # который смотрит на камеру: -X — его правая сторона, -Y — вперёд, +Z — вверх.
@@ -298,6 +300,8 @@ def clip_window(sc, arm, clip, start, end):
     """Атака и умение — окно вокруг пика (кисть быстрее всего): 0,6 с до и 0,4 с после,
     чтобы длинный клип не сжимался в мелькание. Победа — первые 3 секунды."""
     fps = sc.render.fps
+    if clip in WINDOW:
+        return max(start, WINDOW[clip][0]), min(end, WINDOW[clip][1])
     if clip == "victory":
         return start, min(end, start + 3 * fps)
     if clip == "idle":

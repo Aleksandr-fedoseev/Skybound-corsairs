@@ -13,7 +13,7 @@
       "effects": [{ "target": "single_enemy", "type": "damage", "multiplier": 1.0 }]
     },
     "skill": {
-      "name": "Двойной удар",
+      "name": "Круговой удар",
       "cooldown": 3,
       "effects": [{ "target": "single_enemy", "type": "damage", "multiplier": 2.0 }]
     },

@@ -2,7 +2,8 @@
 //!
 //! Порыв — серп ветра летит в одну цель. Вихрь — смерч идёт от бойца по вражеской линии и
 //! задевает цели по очереди (урон каждой — когда смерч до неё дошёл). Буря — над врагами
-//! сгущается туча, льёт дождь, в каждого бьёт молния. Клинки (Рэн): укол, крест из двух разрезов,
+//! сгущается туча, льёт дождь, в каждого бьёт молния. Клинки (Рэн): укол, круговой удар (кольцо
+//! взмаха крутится вокруг бойца и бежит с ним к цели, потом разрез по цели),
 //! гроза — молния с неба в поднятые сабли, рывок, молния и крест-разрез по цели. Какое умение каким
 //! эффектом показано и его темп — в `data/spells.json`.
 
@@ -16,7 +17,7 @@ use bevy::prelude::*;
 use serde::Deserialize;
 
 use crate::battle_screen::{BattleScreen, Shown};
-use crate::battlefield::{UnitModel, Z_FLOATING};
+use crate::battlefield::{Rig, UnitModel, Z_FLOATING};
 
 const Z_TORNADO: f32 = Z_FLOATING - 6.0;
 const Z_CLOUD: f32 = Z_FLOATING - 5.0;
@@ -35,7 +36,7 @@ pub enum SpellFx {
     Whirlwind,
     Storm,
     Thrust,
-    CrossSlash,
+    WhirlSlash,
     ThunderStrike,
 }
 
@@ -202,6 +203,19 @@ enum Piece {
     Arcs { at: Vec2, radius: f32 },
     /// Белый проблеск на весь экран и тряска.
     Flash,
+    /// Кольцо кругового взмаха вокруг бойца: держится за его риг и бежит вместе с ним.
+    Whirl {
+        rig: Entity,
+        height: f32,
+        seconds: f32,
+    },
+}
+
+/// Круговой взмах: эллипс вокруг пояса, внутри крутится кольцо-комета.
+#[derive(Component)]
+pub struct WhirlFx {
+    timer: Timer,
+    turns: f32,
 }
 
 /// Разрез: быстро прочерчивается и гаснет.
@@ -341,7 +355,8 @@ pub fn spawn_spells(
     mut commands: Commands,
     mut shown: MessageReader<Shown>,
     screen: Res<BattleScreen>,
-    models: Query<&UnitModel>,
+    models: Query<(&UnitModel, &Children)>,
+    rigs: Query<(), With<Rig>>,
     assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
@@ -351,8 +366,14 @@ pub fn spawn_spells(
     let place = |id: UnitId| {
         models
             .iter()
-            .find(|m| m.id == id)
-            .map(|m| (m.home, m.height, m.facing))
+            .find(|(m, _)| m.id == id)
+            .map(|(m, _)| (m.home, m.height, m.facing))
+    };
+    let rig_of = |id: UnitId| {
+        models
+            .iter()
+            .find(|(m, _)| m.id == id)
+            .and_then(|(_, children)| children.iter().find(|c| rigs.contains(*c)))
     };
     for Shown { event, .. } in shown.read() {
         let Event::AbilityUsed { unit, kind, .. } = event else {
@@ -544,28 +565,44 @@ pub fn spawn_spells(
                     &time,
                 ));
             }
-            SpellFx::CrossSlash => {
-                // Два разреза крестом: первый чуть раньше, второй — с уроном.
+            SpellFx::WhirlSlash => {
+                // Оборот на бегу (кадры листа), кольцо взмаха вокруг бойца; к удару — широкий
+                // разрез по цели. Клип ближнего боя растянут так, что к замаху боец у цели.
+                let clip = windup / crate::fx::MELEE_ARRIVE;
                 let hit = first + Vec2::new(0.0, first_h * 0.5);
-                let w = first_h * 1.4;
+                let w = first_h * 1.8;
                 let size = Vec2::new(w, w * 200.0 / 512.0);
                 let flip = facing < 0.0;
-                let cut = |angle: f32| Piece::Slash {
+                let cut = |angle: f32, k: f32| Piece::Slash {
                     at: hit,
                     angle: angle * facing,
-                    size,
+                    size: size * k,
                     thrust: false,
                     flip,
                 };
-                commands.spawn(blades(
-                    vec![
-                        (windup - gap.max(0.12), cut(-0.75)),
-                        (windup, cut(0.75)),
-                        (windup, Piece::Glow { at: hit, size: first_h * 1.1 }),
-                        (windup, Piece::Arcs { at: hit, radius: first_h * 0.4 }),
-                    ],
-                    &time,
-                ));
+                let mut steps = vec![
+                    (windup - gap.max(0.1), cut(0.25, 0.8)),
+                    (windup, cut(-0.2, 1.0)),
+                    (windup, Piece::Glow { at: hit, size: first_h * 1.2 }),
+                    (windup, Piece::Arcs { at: hit, radius: first_h * 0.45 }),
+                ];
+                // Кольцо — по росту рисунка (рисованный боец бывает выше своего слота).
+                let stature = screen
+                    .field
+                    .animated
+                    .get(&actor.def.id)
+                    .map_or(height, |art| (art.top - art.foot) * art.height * height);
+                if let Some(rig) = rig_of(*unit) {
+                    steps.push((
+                        clip * 0.06,
+                        Piece::Whirl {
+                            rig,
+                            height: stature,
+                            seconds: windup - clip * 0.06 + 0.12,
+                        },
+                    ));
+                }
+                commands.spawn(blades(steps, &time));
             }
             SpellFx::ThunderStrike => {
                 // Молния с неба в поднятые сабли, пока боец заряжается; потом — в цель и крест.
@@ -719,6 +756,35 @@ pub fn animate_blades(
                     ));
                     screen_fx.shake(0.3, 12.0);
                 }
+                Piece::Whirl {
+                    rig,
+                    height,
+                    seconds,
+                } => {
+                    // Риг мог исчезнуть (конец боя) — тогда без кольца.
+                    if let Ok(mut rig) = commands.get_entity(rig) {
+                        rig.with_children(|p| {
+                            p.spawn((
+                                WhirlFx {
+                                    timer: once(seconds),
+                                    turns: 2.0,
+                                },
+                                Transform::from_xyz(0.0, height * 0.45, 0.05)
+                                    .with_scale(Vec3::new(1.0, 0.32, 1.0)),
+                                Visibility::default(),
+                            ))
+                            .with_child((
+                                Sprite {
+                                    image: assets.load("fx/whirl.png"),
+                                    custom_size: Some(Vec2::splat(height * 1.35)),
+                                    color: Color::WHITE.with_alpha(0.0),
+                                    ..default()
+                                },
+                                Transform::default(),
+                            ));
+                        });
+                    }
+                }
             }
         }
         blades.seed = seed;
@@ -736,6 +802,36 @@ pub fn animate_blades(
         sprite.custom_size = Some(slash.size);
         sprite.color = Color::WHITE.with_alpha(1.0 - fade * fade);
         if slash.timer.is_finished() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+/// Круговой взмах: кольцо крутится, голова спереди — перед бойцом, сзади — за ним.
+pub fn animate_whirls(
+    mut commands: Commands,
+    time: Res<Time>,
+    screen: Res<BattleScreen>,
+    mut whirls: Query<(Entity, &mut WhirlFx, &mut Transform, &Children)>,
+    mut rings: Query<(&mut Transform, &mut Sprite), Without<WhirlFx>>,
+) {
+    let dt = crate::fx::fx_delta(&time, &screen);
+    for (entity, mut whirl, mut transform, children) in &mut whirls {
+        whirl.timer.tick(dt);
+        let t = whirl.timer.fraction();
+        let angle = t * whirl.turns * TAU;
+        // Нижняя половина эллипса ближе к зрителю.
+        transform.translation.z = if angle.sin() < 0.0 { 0.05 } else { -0.05 };
+        let grow = 0.85 + 0.2 * t;
+        transform.scale = Vec3::new(grow, 0.32 * grow, 1.0);
+        let alpha = (t / 0.12).min(1.0) * ((1.0 - t) / 0.25).min(1.0);
+        for child in children.iter() {
+            if let Ok((mut ring, mut sprite)) = rings.get_mut(child) {
+                ring.rotation = Quat::from_rotation_z(angle);
+                sprite.color = Color::WHITE.with_alpha(alpha);
+            }
+        }
+        if whirl.timer.is_finished() {
             commands.entity(entity).despawn();
         }
     }
