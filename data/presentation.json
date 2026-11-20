@@ -15,7 +15,7 @@
   "ult_reach": 0.7,
   "hit_time": 0.26,
   "hit_knockback": 14.0,
-  "death_time": 0.6,
+  "death_time": 1.0,
   "idle_period": 1.8,
   "idle_amp": 0.025,
   "flash_time": 0.2,

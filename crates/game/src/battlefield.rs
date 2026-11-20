@@ -639,6 +639,9 @@ fn ease_out(t: f32) -> f32 {
     1.0 - (1.0 - t).powi(3)
 }
 
+/// Доля клипа смерти, пока боец с рисованным поражением ещё в позе удара.
+const DEATH_RECOIL: f32 = 0.3;
+
 /// Анимации моделей: дыхание всегда, поверх — рывок, отброс, смерть, победа.
 pub fn animate_models(
     time: Res<Time>,
@@ -718,13 +721,19 @@ pub fn animate_models(
                 angle = -0.15 * model.facing * (PI * t).sin();
             }
             Clip::Death => {
-                let k = ease_out(t);
-                // Если в листе есть клип смерти, падение уже нарисовано — риг не кладём.
-                if !flipbook.is_some_and(|b| b.art.clips.contains_key("death")) {
+                if flipbook.is_some_and(|b| b.art.clips.contains_key("death")) {
+                    // Поражение нарисовано: сперва отшатнулась от удара (поза удара), затем
+                    // оседает на палубу и остаётся видна, чуть бледнее живых.
+                    let recoil = (t / DEATH_RECOIL).min(1.0);
+                    offset = Vec2::new(-model.facing * h * 0.08 * (PI * recoil).sin(), 0.0);
+                    let sink = ((t - DEATH_RECOIL) / (1.0 - DEATH_RECOIL)).max(0.0);
+                    fade = 1.0 - 0.35 * ease_out(sink);
+                } else {
+                    let k = ease_out(t);
                     angle = model.facing * FRAC_PI_2 * k;
+                    offset = Vec2::new(-model.facing * h * 0.25 * k, 0.0);
+                    fade = 1.0 - 0.7 * k;
                 }
-                offset = Vec2::new(-model.facing * h * 0.25 * k, 0.0);
-                fade = 1.0 - 0.7 * k;
                 scale = Vec2::ONE;
             }
             Clip::Victory => {
@@ -733,8 +742,14 @@ pub fn animate_models(
         }
         // Кадр спрайт-листа: зацикленные клипы — по часам, остальные — на время клипа рига
         // (смерть замирает на последнем кадре).
+        // Начало смерти — поза удара, потом поза поражения.
+        let pose = if anim.clip == Clip::Death && t < DEATH_RECOIL {
+            Clip::Hit { dir: Vec2::ZERO }
+        } else {
+            anim.clip
+        };
         if let Some(book) = flipbook
-            && let Some(sheet) = book.art.clip(anim.clip)
+            && let Some(sheet) = book.art.clip(pose)
         {
             let n = sheet.frames.max(1);
             let frame = match sheet.fps {
