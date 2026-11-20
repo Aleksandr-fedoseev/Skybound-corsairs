@@ -791,14 +791,15 @@ pub fn animate_models(
         }
         for (handle, base, textured) in &parts.parts {
             if let Some(mut material) = materials.get_mut(handle) {
-                let tinted = base.mix(&GOLD, 0.6 * glow);
                 let lit = if *textured {
-                    // Цвет умножается на текстуру: вспышку даёт множитель больше единицы.
-                    let k = 1.0 + 2.5 * anim.flash;
-                    let c = tinted.to_linear();
+                    // Цвет умножается на текстуру: вспышку даёт множитель больше единицы. Заряд ульты —
+                    // тоже высветление: золото поверх рисунка даёт грязно-бурый цвет.
+                    let k = 1.0 + 2.5 * anim.flash + 0.45 * glow;
+                    let c = base.to_linear();
                     Color::linear_rgb(c.red * k, c.green * k, c.blue * k)
                 } else {
-                    tinted.mix(&Color::WHITE, 0.7 * anim.flash)
+                    base.mix(&GOLD, 0.6 * glow)
+                        .mix(&Color::WHITE, 0.7 * anim.flash)
                 };
                 material.color = lit.with_alpha(base.alpha() * fade);
             }

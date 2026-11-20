@@ -6,6 +6,7 @@
 - tornado.png — смерч из art/2d/fx/tornado.png (рисунок на чёрном фоне): яркость → прозрачность.
 - gust.png — серп порыва ветра из art/2d/fx/gust.png (тоже на чёрном).
 - storm_cloud.png — грозовая туча (шум), рисуется здесь же.
+- slash.png, thrust.png — разрез саблей (серп) и укол (веретено): белая сердцевина, голубое свечение.
 Нужны Pillow и numpy.
 """
 from pathlib import Path
@@ -91,8 +92,48 @@ def glow():
     Image.fromarray(out.astype(np.uint8), "RGBA").save(OUT / "glow.png", optimize=True)
 
 
+BLADE_EDGE = np.array([0.45, 0.72, 1.0])
+
+
+def blade_light(d, w):
+    """d — расстояние до линии клинка, w — полуширина: белая сердцевина и голубой ореол."""
+    core = np.clip(1 - np.abs(d) / np.maximum(w, 1e-3), 0, 1) ** 0.45
+    halo = np.exp(-(d / np.maximum(w * 1.7, 1e-3)) ** 2) * 0.6 * (w > 0.5)
+    a = np.maximum(core, halo)
+    rgb = BLADE_EDGE[None, None, :] * (1 - core[..., None]) + core[..., None]
+    return np.dstack([rgb, a])
+
+
+def slash():
+    """Серп разреза: дуга, тонкая на концах, толстая к началу удара (летит слева направо)."""
+    w, h = 512, 200
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    cx, cy, r0 = 256.0, 380.0, 330.0
+    r = np.hypot(x - cx, y - cy)
+    th = np.arctan2(x - cx, cy - y)
+    span = np.radians(50)
+    u = (th + span) / (2 * span)
+    inside = (u >= 0) & (u <= 1)
+    width = np.where(inside, 30 * np.clip(np.sin(np.pi * np.clip(u, 0, 1) ** 0.75), 0, 1) ** 0.6, 0)
+    out = blade_light(r - r0, width)
+    out[..., 3] *= inside
+    Image.fromarray((out * 255).astype(np.uint8), "RGBA").save(OUT / "slash.png", optimize=True)
+
+
+def thrust():
+    """Укол: острое веретено, остриё справа."""
+    w, h = 512, 128
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    u = x / (w - 1)
+    width = 20 * np.clip(np.sin(np.pi * u ** 0.55), 0, 1) ** 0.9
+    out = blade_light(y - h / 2, width)
+    Image.fromarray((out * 255).astype(np.uint8), "RGBA").save(OUT / "thrust.png", optimize=True)
+
+
 tornado()
 gust()
+slash()
+thrust()
 glow()
 storm_cloud()
 for f in sorted(OUT.glob("*.png")):

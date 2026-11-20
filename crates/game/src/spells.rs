@@ -2,8 +2,9 @@
 //!
 //! Порыв — серп ветра летит в одну цель. Вихрь — смерч идёт от бойца по вражеской линии и
 //! задевает цели по очереди (урон каждой — когда смерч до неё дошёл). Буря — над врагами
-//! сгущается туча, льёт дождь, в каждого бьёт молния. Какое умение каким эффектом показано и его
-//! темп — в `data/spells.json`.
+//! сгущается туча, льёт дождь, в каждого бьёт молния. Клинки (Рэн): укол, крест из двух разрезов,
+//! гроза — молния с неба в поднятые сабли, рывок, молния и крест-разрез по цели. Какое умение каким
+//! эффектом показано и его темп — в `data/spells.json`.
 
 use std::collections::HashMap;
 use std::f32::consts::TAU;
@@ -33,6 +34,9 @@ pub enum SpellFx {
     Gust,
     Whirlwind,
     Storm,
+    Thrust,
+    CrossSlash,
+    ThunderStrike,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -60,6 +64,9 @@ pub struct Tuning {
     pub storm_linger: f32,
     pub rain_drops: usize,
     pub bolt_time: f32,
+    /// Сколько живёт разрез клинка (с); откуда бьёт молния с неба (высота на поле).
+    pub slash_time: f32,
+    pub sky_y: f32,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -169,6 +176,41 @@ pub struct Spark {
     alpha: f32,
 }
 
+/// Удар клинком: кусочки эффекта по расписанию (с от начала умения).
+#[derive(Component)]
+pub struct Blades {
+    age: f32,
+    steps: Vec<(f32, Piece)>,
+    seed: u32,
+}
+
+#[derive(Clone, Copy)]
+enum Piece {
+    /// Разрез (серп) или укол (веретено) — рисунок, угол, размер.
+    Slash {
+        at: Vec2,
+        angle: f32,
+        size: Vec2,
+        thrust: bool,
+        flip: bool,
+    },
+    /// Молния с неба в точку; толщина — множитель.
+    SkyBolt { to: Vec2, width: f32 },
+    /// Свечение в точке.
+    Glow { at: Vec2, size: f32 },
+    /// Короткие разряды во все стороны.
+    Arcs { at: Vec2, radius: f32 },
+    /// Белый проблеск на весь экран и тряска.
+    Flash,
+}
+
+/// Разрез: быстро прочерчивается и гаснет.
+#[derive(Component)]
+pub struct SlashFx {
+    timer: Timer,
+    size: Vec2,
+}
+
 fn once(seconds: f32) -> Timer {
     Timer::from_seconds(seconds.max(0.01), TimerMode::Once)
 }
@@ -226,6 +268,71 @@ fn bolt_mesh(lines: &[Vec<Vec2>], width: f32) -> Mesh {
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 0.0, 1.0]; count])
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0, 0.0]; count])
     .with_inserted_indices(Indices::U32(indices))
+}
+
+/// Молния от точки к точке: зигзаг и два коротких ответвления.
+fn zigzag(from: Vec2, to: Vec2, steps: usize, jitter: f32, seed: &mut u32) -> Vec<Vec<Vec2>> {
+    let mut points = vec![from];
+    for i in 1..steps {
+        let k = i as f32 / steps as f32;
+        points.push(from.lerp(to, k) + Vec2::new((next(seed) - 0.5) * jitter, 0.0));
+    }
+    points.push(to);
+    let down = (to - from).normalize_or(Vec2::NEG_Y);
+    let mut lines = vec![points.clone()];
+    for (i, side) in [(steps / 3, 0.7_f32), (steps * 2 / 3, -0.6)] {
+        let mut p = points[i];
+        let dir = Vec2::from_angle(side).rotate(down);
+        let mut branch = vec![p];
+        for _ in 0..3 {
+            p += dir * 24.0 + Vec2::new((next(seed) - 0.5) * 18.0, 0.0);
+            branch.push(p);
+        }
+        lines.push(branch);
+    }
+    lines
+}
+
+/// Молния: широкое голубое свечение и белая сердцевина, мерцает и гаснет (Bolt).
+fn spawn_bolt(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<ColorMaterial>,
+    lines: &[Vec<Vec2>],
+    width: f32,
+    seconds: f32,
+) {
+    for (glow, w, color) in [(true, 22.0, BOLT_GLOW), (false, 5.5, BOLT_CORE)] {
+        commands.spawn((
+            SpellRoot,
+            Bolt {
+                timer: once(seconds),
+                glow,
+            },
+            Mesh2d(meshes.add(bolt_mesh(lines, w * width))),
+            MeshMaterial2d(materials.add(color)),
+            Transform::from_xyz(0.0, 0.0, Z_BOLT + if glow { 0.0 } else { 0.1 }),
+        ));
+    }
+}
+
+/// Свечение в точке: вспыхивает и расходится (Spark).
+fn glow_sprite(assets: &AssetServer, at: Vec2, size: f32, seconds: f32) -> impl Bundle {
+    (
+        SpellRoot,
+        Spark {
+            timer: once(seconds),
+            grow: 1.2,
+            alpha: 1.0,
+        },
+        Sprite {
+            image: assets.load("fx/glow.png"),
+            custom_size: Some(Vec2::splat(size)),
+            color: Color::srgb(0.8, 0.9, 1.0),
+            ..default()
+        },
+        Transform::from_xyz(at.x, at.y, Z_BOLT + 0.2),
+    )
 }
 
 /// Запускает эффект умения, если у этого бойца и вида умения он есть.
@@ -414,6 +521,222 @@ pub fn spawn_spells(
                         }
                     });
             }
+            SpellFx::Thrust => {
+                // Укол: веретено света вдоль выпада, остриё — в цели.
+                let hit = first + Vec2::new(0.0, first_h * 0.5);
+                let dir = (hit - (home + Vec2::new(0.0, height * 0.5))).normalize_or(Vec2::X);
+                let size = Vec2::new(height * 1.3, height * 0.32);
+                commands.spawn(blades(
+                    vec![
+                        (
+                            windup - 0.05,
+                            Piece::Slash {
+                                at: hit - dir * size.x * 0.3,
+                                angle: dir.y.atan2(dir.x),
+                                size,
+                                thrust: true,
+                                flip: false,
+                            },
+                        ),
+                        (windup, Piece::Glow { at: hit, size: first_h * 0.9 }),
+                        (windup, Piece::Arcs { at: hit, radius: first_h * 0.35 }),
+                    ],
+                    &time,
+                ));
+            }
+            SpellFx::CrossSlash => {
+                // Два разреза крестом: первый чуть раньше, второй — с уроном.
+                let hit = first + Vec2::new(0.0, first_h * 0.5);
+                let w = first_h * 1.4;
+                let size = Vec2::new(w, w * 200.0 / 512.0);
+                let flip = facing < 0.0;
+                let cut = |angle: f32| Piece::Slash {
+                    at: hit,
+                    angle: angle * facing,
+                    size,
+                    thrust: false,
+                    flip,
+                };
+                commands.spawn(blades(
+                    vec![
+                        (windup - gap.max(0.12), cut(-0.75)),
+                        (windup, cut(0.75)),
+                        (windup, Piece::Glow { at: hit, size: first_h * 1.1 }),
+                        (windup, Piece::Arcs { at: hit, radius: first_h * 0.4 }),
+                    ],
+                    &time,
+                ));
+            }
+            SpellFx::ThunderStrike => {
+                // Молния с неба в поднятые сабли, пока боец заряжается; потом — в цель и крест.
+                let sabers = home + Vec2::new(0.0, height * 1.08);
+                let hit = first + Vec2::new(0.0, first_h * 0.5);
+                let w = first_h * 1.9;
+                let size = Vec2::new(w, w * 200.0 / 512.0);
+                let flip = facing < 0.0;
+                let cut = |angle: f32| Piece::Slash {
+                    at: hit,
+                    angle: angle * facing,
+                    size,
+                    thrust: false,
+                    flip,
+                };
+                commands.spawn(blades(
+                    vec![
+                        (0.05, Piece::SkyBolt { to: sabers, width: 0.9 }),
+                        (0.05, Piece::Glow { at: sabers, size: height * 0.9 }),
+                        (0.05, Piece::Arcs { at: sabers, radius: height * 0.3 }),
+                        (0.35, Piece::SkyBolt { to: sabers, width: 0.6 }),
+                        (0.35, Piece::Arcs { at: sabers, radius: height * 0.25 }),
+                        (windup - 0.12, Piece::SkyBolt { to: hit, width: 1.4 }),
+                        (windup - 0.12, Piece::Glow { at: hit, size: first_h * 1.2 }),
+                        (windup, cut(-0.75)),
+                        (windup, cut(0.75)),
+                        (windup, Piece::Glow { at: hit, size: first_h * 1.8 }),
+                        (windup, Piece::Arcs { at: hit, radius: first_h * 0.6 }),
+                        (windup, Piece::Flash),
+                    ],
+                    &time,
+                ));
+            }
+        }
+    }
+}
+
+fn blades(steps: Vec<(f32, Piece)>, time: &Time) -> impl Bundle {
+    (
+        SpellRoot,
+        Blades {
+            age: 0.0,
+            steps,
+            seed: (time.elapsed_secs() * 1000.0) as u32 | 1,
+        },
+    )
+}
+
+/// Удары клинком: по расписанию появляются разрезы, молнии, свечение, проблеск.
+#[allow(clippy::too_many_arguments)]
+pub fn animate_blades(
+    mut commands: Commands,
+    time: Res<Time>,
+    screen: Res<BattleScreen>,
+    mut list: Query<(Entity, &mut Blades)>,
+    mut slashes: Query<(Entity, &mut SlashFx, &mut Transform, &mut Sprite)>,
+    assets: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut screen_fx: ResMut<crate::fx::ScreenFx>,
+) {
+    let dt = crate::fx::fx_delta(&time, &screen).as_secs_f32();
+    let tune = &screen.field.spells.tuning;
+    for (entity, mut blades) in &mut list {
+        blades.age += dt;
+        let age = blades.age;
+        let mut seed = blades.seed;
+        let due: Vec<Piece> = blades
+            .steps
+            .iter()
+            .filter(|(at, _)| *at <= age)
+            .map(|(_, p)| *p)
+            .collect();
+        blades.steps.retain(|(at, _)| *at > age);
+        for piece in due {
+            match piece {
+                Piece::Slash {
+                    at,
+                    angle,
+                    size,
+                    thrust,
+                    flip,
+                } => {
+                    let image = if thrust { "fx/thrust.png" } else { "fx/slash.png" };
+                    commands.spawn((
+                        SpellRoot,
+                        SlashFx {
+                            timer: once(tune.slash_time),
+                            size,
+                        },
+                        Sprite {
+                            image: assets.load(image),
+                            custom_size: Some(size),
+                            flip_x: flip,
+                            ..default()
+                        },
+                        Transform::from_xyz(at.x, at.y, Z_BOLT + 0.3)
+                            .with_rotation(Quat::from_rotation_z(angle)),
+                    ));
+                }
+                Piece::SkyBolt { to, width } => {
+                    let from = Vec2::new(to.x + (next(&mut seed) - 0.5) * 60.0, tune.sky_y);
+                    let lines = zigzag(from, to, 12, 40.0, &mut seed);
+                    spawn_bolt(
+                        &mut commands,
+                        &mut meshes,
+                        &mut materials,
+                        &lines,
+                        width,
+                        tune.bolt_time,
+                    );
+                }
+                Piece::Glow { at, size } => {
+                    commands.spawn(glow_sprite(&assets, at, size, 0.35));
+                }
+                Piece::Arcs { at, radius } => {
+                    let lines: Vec<Vec<Vec2>> = (0..4)
+                        .map(|i| {
+                            let dir = Vec2::from_angle(
+                                i as f32 * TAU / 4.0 + next(&mut seed) * 1.2,
+                            );
+                            let mut p = at + dir * radius * 0.3;
+                            let mut line = vec![p];
+                            for _ in 0..3 {
+                                p += dir * radius * 0.25
+                                    + dir.perp() * (next(&mut seed) - 0.5) * radius * 0.35;
+                                line.push(p);
+                            }
+                            line
+                        })
+                        .collect();
+                    spawn_bolt(
+                        &mut commands,
+                        &mut meshes,
+                        &mut materials,
+                        &lines,
+                        0.45,
+                        tune.bolt_time * 0.8,
+                    );
+                }
+                Piece::Flash => {
+                    commands.spawn((
+                        SpellRoot,
+                        Spark {
+                            timer: once(0.2),
+                            grow: 0.0,
+                            alpha: 0.45,
+                        },
+                        Sprite::from_color(Color::WHITE, Vec2::new(1400.0, 2400.0)),
+                        Transform::from_xyz(0.0, 0.0, Z_CLOUD - 1.0),
+                    ));
+                    screen_fx.shake(0.3, 12.0);
+                }
+            }
+        }
+        blades.seed = seed;
+        if blades.steps.is_empty() {
+            commands.entity(entity).despawn();
+        }
+    }
+    for (entity, mut slash, mut transform, mut sprite) in &mut slashes {
+        slash.timer.tick(std::time::Duration::from_secs_f32(dt));
+        let t = slash.timer.fraction();
+        // Прочерчивается за первую треть (растёт вдоль), потом сужается и гаснет.
+        let draw = (t / 0.3).min(1.0);
+        let fade = ((t - 0.3) / 0.7).clamp(0.0, 1.0);
+        transform.scale = Vec3::new(0.35 + 0.65 * draw, 1.0 - 0.5 * fade, 1.0);
+        sprite.custom_size = Some(slash.size);
+        sprite.color = Color::WHITE.with_alpha(1.0 - fade * fade);
+        if slash.timer.is_finished() {
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -627,55 +950,17 @@ pub fn animate_spells(
             // Ломаная от тучи к цели: зигзаг, чуть отклоняясь от прямой.
             let to = strike.0;
             let from = Vec2::new(to.x + (next(&mut seed) - 0.5) * 80.0, bottom);
-            let steps = 9;
-            let mut points = vec![from];
-            for i in 1..steps {
-                let k = i as f32 / steps as f32;
-                let p = from.lerp(to, k);
-                points.push(p + Vec2::new((next(&mut seed) - 0.5) * 34.0, 0.0));
-            }
-            points.push(to);
-            // Два ответвления: короткие изломы вбок и вниз.
-            let down = (to - from).normalize_or(Vec2::NEG_Y);
-            let mut lines = vec![points.clone()];
-            for (i, side) in [(3, 0.7_f32), (6, -0.6)] {
-                let mut p = points[i];
-                let dir = Vec2::from_angle(side).rotate(down);
-                let mut branch = vec![p];
-                for _ in 0..3 {
-                    p += dir * 24.0 + Vec2::new((next(&mut seed) - 0.5) * 18.0, 0.0);
-                    branch.push(p);
-                }
-                lines.push(branch);
-            }
-            for (glow, width, color) in [(true, 22.0, BOLT_GLOW), (false, 5.5, BOLT_CORE)] {
-                commands.spawn((
-                    SpellRoot,
-                    Bolt {
-                        timer: once(tune.bolt_time),
-                        glow,
-                    },
-                    Mesh2d(meshes.add(bolt_mesh(&lines, width))),
-                    MeshMaterial2d(materials.add(color)),
-                    Transform::from_xyz(0.0, 0.0, Z_BOLT + if glow { 0.0 } else { 0.1 }),
-                ));
-            }
+            let lines = zigzag(from, to, 9, 34.0, &mut seed);
+            spawn_bolt(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                &lines,
+                1.0,
+                tune.bolt_time,
+            );
             // Свечение в месте удара и белый проблеск на весь экран.
-            commands.spawn((
-                SpellRoot,
-                Spark {
-                    timer: once(0.3),
-                    grow: 1.2,
-                    alpha: 1.0,
-                },
-                Sprite {
-                    image: assets.load("fx/glow.png"),
-                    custom_size: Some(Vec2::splat(150.0)),
-                    color: Color::srgb(0.8, 0.9, 1.0),
-                    ..default()
-                },
-                Transform::from_xyz(to.x, to.y, Z_BOLT + 0.2),
-            ));
+            commands.spawn(glow_sprite(&assets, to, 150.0, 0.3));
             commands.spawn((
                 SpellRoot,
                 Spark {

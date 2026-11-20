@@ -134,6 +134,7 @@ fn main() {
                 fx::animate_floating,
                 fx::animate_projectiles,
                 spells::animate_spells,
+                spells::animate_blades,
                 fx::animate_band,
                 fx::animate_screen,
             ),

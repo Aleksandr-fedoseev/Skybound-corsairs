@@ -71,6 +71,13 @@ pub struct ScreenFx {
     dim: Option<(Timer, f32)>,
 }
 
+impl ScreenFx {
+    /// Тряхнуть камеру: на столько секунд, на столько пикселей.
+    pub fn shake(&mut self, seconds: f32, px: f32) {
+        self.shake = Some((once(seconds), px));
+    }
+}
+
 fn once(seconds: f32) -> Timer {
     Timer::from_seconds(seconds.max(0.01), TimerMode::Once)
 }
@@ -184,6 +191,12 @@ pub fn spawn_effects(
                     .find(|(m, _)| m.id == *unit)
                     .and_then(|(m, _)| m.shot.map(|shot| (shot, m.home, m.height, m.facing)));
                 let mut seconds = seconds;
+                // Ближний бой со своим эффектом (spells.rs): клип растягивается на замах — к удару
+                // боец уже у цели и стоит там, пока эффект бьёт.
+                if shooter.is_none() && screen.field.spells.get(&actor.def.id, *kind).is_some() {
+                    let arrive = if big { 0.62 } else { 0.42 };
+                    seconds = seconds.max(screen.windup(*unit, *kind) / arrive);
+                }
                 if let Some((shot, home, height, facing)) = shooter
                     && let Some((target, target_h)) = focus.and_then(|t| place(&models, t))
                 {

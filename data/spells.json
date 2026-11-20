@@ -8,13 +8,20 @@
     "storm_cloud_y": 290.0,
     "storm_linger": 0.7,
     "rain_drops": 110,
-    "bolt_time": 0.32
+    "bolt_time": 0.32,
+    "slash_time": 0.32,
+    "sky_y": 700.0
   },
   "units": {
     "sora": {
       "basic": { "fx": "gust", "windup": 0.35 },
       "skill": { "fx": "whirlwind", "windup": 0.6, "hit_gap": 0.32 },
       "ultimate": { "fx": "storm", "windup": 1.2, "hit_gap": 0.22 }
+    },
+    "ren": {
+      "basic": { "fx": "thrust", "windup": 0.22 },
+      "skill": { "fx": "cross_slash", "windup": 0.45, "hit_gap": 0.14 },
+      "ultimate": { "fx": "thunder_strike", "windup": 1.15 }
     }
   }
 }

@@ -2,6 +2,9 @@
 """Ключевые позы бойца (рисунки на белом фоне, например из Gemini) → кадры для pack_sheets.py.
 
   python3 tools/sprites/keypose.py art/2d/kaya idle attack skill hit
+  python3 tools/sprites/keypose.py art/2d/ren idle@1.25 attack@1.25 skill hit   # поза@масштаб
+
+Масштаб — если Gemini нарисовал позу мельче или крупнее остальных (голова другого размера).
 
 Берёт <папка>/<клип>.jpeg|png, делает фон прозрачным (белое, связанное с краем кадра; вспышки и
 дым, отдельные от тела, остаются), выравнивает ноги всех поз на одну линию и кладёт по кадру в
@@ -14,7 +17,8 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 root = Path(sys.argv[1])
-clips = sys.argv[2:]
+clips = [c.split("@")[0] for c in sys.argv[2:]]
+scales = {c.split("@")[0]: float(c.split("@")[1]) if "@" in c else 1.0 for c in sys.argv[2:]}
 FOOT_MARGIN = 24   # ноги — на столько пикселей выше нижнего края холста
 EDGE_FADE = 0.04   # эффекты, упёртые в край рисунка (дым, вихрь), гаснут на этой доле ширины
 
@@ -69,6 +73,12 @@ for clip in clips:
     size = size or img.size
     if img.size != size:
         img = img.resize(size, Image.Resampling.LANCZOS)
+    k = scales[clip]
+    if k != 1.0:
+        # Крупнее/мельче вокруг низа кадра (ноги остаются внизу), холст прежний, фон белый.
+        big = img.resize((round(size[0] * k), round(size[1] * k)), Image.Resampling.LANCZOS)
+        img = Image.new("RGB", size, (255, 255, 255))
+        img.paste(big, ((size[0] - big.width) // 2, size[1] - big.height))
     alpha = mask_of(img)
     a = np.asarray(alpha) > 64
     rows = np.nonzero(a.any(axis=1))[0]
