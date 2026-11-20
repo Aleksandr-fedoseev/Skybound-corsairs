@@ -22,6 +22,18 @@
       {"at": [0.45, 0.47], "r": 0.09, "kind": "bounce", "weight": 0.7},
       {"at": [0.45, 0.13], "r": 0.09, "kind": "sway"},
       {"at": [0.62, 0.33], "r": 0.09, "kind": "sway", "weight": 0.7}
+    ],
+    "ult": [
+      {"at": [0.4, 0.29], "r": 0.065, "kind": "bounce"},
+      {"at": [0.4, 0.49], "r": 0.09, "kind": "bounce", "weight": 0.6},
+      {"at": [0.42, 0.12], "r": 0.09, "kind": "sway"},
+      {"at": [0.25, 0.33], "r": 0.08, "kind": "sway", "weight": 0.7}
+    ],
+    "victory": [
+      {"at": [0.4, 0.29], "r": 0.065, "kind": "bounce"},
+      {"at": [0.4, 0.49], "r": 0.09, "kind": "bounce", "weight": 0.6},
+      {"at": [0.42, 0.12], "r": 0.09, "kind": "sway"},
+      {"at": [0.25, 0.33], "r": 0.08, "kind": "sway", "weight": 0.7}
     ]
   },
   "sora": {
@@ -48,6 +60,20 @@
       {"at": [0.47, 0.55], "r": 0.1, "kind": "bounce", "weight": 0.5},
       {"at": [0.75, 0.3], "r": 0.12, "kind": "sway", "weight": 1.0},
       {"at": [0.3, 0.4], "r": 0.14, "kind": "sway", "weight": 1.0}
+    ],
+    "ult": [
+      {"at": [0.48, 0.29], "r": 0.06, "kind": "bounce", "weight": 1.0},
+      {"at": [0.47, 0.55], "r": 0.1, "kind": "bounce", "weight": 0.5},
+      {"at": [0.3, 0.45], "r": 0.14, "kind": "sway", "weight": 1.0},
+      {"at": [0.5, 0.13], "r": 0.08, "kind": "sway", "weight": 1.0},
+      {"at": [0.8, 0.5], "r": 0.12, "kind": "sway", "weight": 0.8}
+    ],
+    "victory": [
+      {"at": [0.48, 0.29], "r": 0.06, "kind": "bounce", "weight": 1.0},
+      {"at": [0.47, 0.55], "r": 0.1, "kind": "bounce", "weight": 0.5},
+      {"at": [0.3, 0.45], "r": 0.14, "kind": "sway", "weight": 1.0},
+      {"at": [0.5, 0.13], "r": 0.08, "kind": "sway", "weight": 1.0},
+      {"at": [0.8, 0.5], "r": 0.12, "kind": "sway", "weight": 0.8}
     ]
   },
   "lira": {
@@ -75,6 +101,20 @@
       {"at": [0.44, 0.5], "r": 0.08, "kind": "bounce", "weight": 0.6},
       {"at": [0.55, 0.33], "r": 0.09, "kind": "sway", "weight": 1.0},
       {"at": [0.15, 0.6], "r": 0.14, "kind": "sway", "weight": 0.8}
+    ],
+    "ult": [
+      {"at": [0.45, 0.28], "r": 0.06, "kind": "bounce", "weight": 1.0},
+      {"at": [0.45, 0.5], "r": 0.08, "kind": "bounce", "weight": 0.6},
+      {"at": [0.53, 0.33], "r": 0.09, "kind": "sway", "weight": 1.0},
+      {"at": [0.15, 0.62], "r": 0.14, "kind": "sway", "weight": 0.8},
+      {"at": [0.85, 0.6], "r": 0.12, "kind": "sway", "weight": 0.8}
+    ],
+    "victory": [
+      {"at": [0.45, 0.28], "r": 0.06, "kind": "bounce", "weight": 1.0},
+      {"at": [0.45, 0.5], "r": 0.08, "kind": "bounce", "weight": 0.6},
+      {"at": [0.53, 0.33], "r": 0.09, "kind": "sway", "weight": 1.0},
+      {"at": [0.15, 0.62], "r": 0.14, "kind": "sway", "weight": 0.8},
+      {"at": [0.85, 0.6], "r": 0.12, "kind": "sway", "weight": 0.8}
     ]
   },
   "imperial_marine": {

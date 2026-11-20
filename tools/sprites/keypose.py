@@ -16,6 +16,7 @@ from PIL import Image, ImageDraw, ImageFilter
 root = Path(sys.argv[1])
 clips = sys.argv[2:]
 FOOT_MARGIN = 24   # ноги — на столько пикселей выше нижнего края холста
+EDGE_FADE = 0.04   # эффекты, упёртые в край рисунка (дым, вихрь), гаснут на этой доле ширины
 
 
 def load(clip):
@@ -51,12 +52,23 @@ def mask_of(img):
     alpha = Image.fromarray((~outside).astype(np.uint8) * 255, "L")
     # Убрать пыль, смягчить край на пиксель.
     alpha = alpha.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))
-    return alpha.filter(ImageFilter.GaussianBlur(0.7))
+    alpha = np.asarray(alpha.filter(ImageFilter.GaussianBlur(0.7))).astype(np.float32)
+    # Плавно гасить у левого, правого и верхнего края: обрезанный кадром дым не даёт прямой линии.
+    n = max(2, int(w * EDGE_FADE))
+    ramp = np.clip(np.arange(w) / n, 0, 1) * np.clip((w - 1 - np.arange(w)) / n, 0, 1)
+    top = np.clip(np.arange(h) / n, 0, 1)
+    alpha *= ramp[None, :] * top[:, None]
+    return Image.fromarray(alpha.astype(np.uint8), "L")
 
 
 out = []
+size = None
 for clip in clips:
     img = load(clip)
+    # Позы, нарисованные в другом размере (тот же кадр 3:4), — к размеру первой: рост одинаковый.
+    size = size or img.size
+    if img.size != size:
+        img = img.resize(size, Image.Resampling.LANCZOS)
     alpha = mask_of(img)
     a = np.asarray(alpha) > 64
     rows = np.nonzero(a.any(axis=1))[0]
