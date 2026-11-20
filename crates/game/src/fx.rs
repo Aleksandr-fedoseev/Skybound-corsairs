@@ -187,23 +187,22 @@ pub fn spawn_effects(
                 if let Some((shot, home, height, facing)) = shooter
                     && let Some((target, target_h)) = focus.and_then(|t| place(&models, t))
                 {
-                    let flight = match kind {
-                        AbilityKind::Basic => look.basic_windup,
-                        AbilityKind::Skill => look.skill_windup,
-                        AbilityKind::Ultimate => look.ult_windup,
-                    }
-                    .max(0.1);
+                    let flight = screen.windup(*unit, *kind).max(0.1);
                     let hand = home + Vec2::new(facing * height * 0.28, height * 0.55);
                     let aim = target + Vec2::new(0.0, target_h * 0.5);
-                    spawn_shot(
-                        &mut commands,
-                        &mut meshes,
-                        &mut materials,
-                        shot,
-                        hand,
-                        aim,
-                        flight,
-                    );
+                    // У умения свой эффект (spells.rs) — общий снаряд не нужен.
+                    let own_fx = screen.field.spells.get(&actor.def.id, *kind).is_some();
+                    if !own_fx {
+                        spawn_shot(
+                            &mut commands,
+                            &mut meshes,
+                            &mut materials,
+                            shot,
+                            hand,
+                            aim,
+                            flight,
+                        );
+                    }
                     // Выстрел виден дольше рывка: клип спрайта не сжимается в мелькание.
                     seconds = seconds.max(flight + 0.35);
                 }
@@ -335,7 +334,7 @@ pub fn spawn_effects(
 }
 
 /// Время эффектов идёт вместе со скоростью боя и стоит на паузе.
-fn fx_delta(time: &Time, screen: &BattleScreen) -> std::time::Duration {
+pub fn fx_delta(time: &Time, screen: &BattleScreen) -> std::time::Duration {
     if screen.paused {
         std::time::Duration::ZERO
     } else {

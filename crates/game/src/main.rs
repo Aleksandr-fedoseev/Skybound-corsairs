@@ -21,6 +21,7 @@ mod menu;
 mod save;
 mod ship;
 mod softbody;
+mod spells;
 mod story;
 mod tavern;
 mod view;
@@ -118,6 +119,7 @@ fn main() {
             view::rebuild,
             battle_screen::play_events,
             fx::spawn_effects,
+            spells::spawn_spells,
             (
                 view::refresh_status,
                 view::refresh_ult_buttons,
@@ -131,6 +133,7 @@ fn main() {
                 softbody::animate_soft_bodies,
                 fx::animate_floating,
                 fx::animate_projectiles,
+                spells::animate_spells,
                 fx::animate_band,
                 fx::animate_screen,
             ),

@@ -142,6 +142,8 @@ pub struct BattleScreen {
     pub auto: bool,
     /// Экран надо собрать заново (новый бой с другим составом).
     pub rebuild: bool,
+    /// Темп умения, которое сейчас показывается (свой эффект — свои паузы между попаданиями).
+    pub spell: Option<crate::spells::Spell>,
     /// Сообщение для строки тестовой сцены (например, ошибка в data/).
     #[cfg_attr(not(feature = "dev"), allow(dead_code))]
     pub notice: Option<String>,
@@ -179,6 +181,7 @@ impl BattleScreen {
             paused: false,
             auto: true,
             rebuild: true,
+            spell: None,
             notice: None,
         };
         screen.reset_view();
@@ -226,6 +229,7 @@ impl BattleScreen {
         self.shown_current = self.battle.current();
         self.shown_outcome = None;
         self.queue.clear();
+        self.spell = None;
         self.wait = self.look.step_pause;
         self.rebuild = true;
     }
@@ -241,17 +245,30 @@ impl BattleScreen {
     }
 
     /// Сколько ждать после показа события.
+    /// Замах умения до первого попадания: свой у умения с эффектом, иначе общий для вида.
+    pub fn windup(&self, unit: UnitId, kind: AbilityKind) -> f32 {
+        let id = &self.battle.unit(unit).def.id;
+        if let Some(w) = self.field.spells.get(id, kind).and_then(|s| s.windup) {
+            return w;
+        }
+        let look = &self.look;
+        match kind {
+            AbilityKind::Basic => look.basic_windup,
+            AbilityKind::Skill => look.skill_windup,
+            AbilityKind::Ultimate => look.ult_windup,
+        }
+    }
+
     fn delay_after(&self, event: &Event) -> f32 {
         let look = &self.look;
         match event {
-            Event::AbilityUsed { kind, .. } => match kind {
-                AbilityKind::Basic => look.basic_windup,
-                AbilityKind::Skill => look.skill_windup,
-                AbilityKind::Ultimate => look.ult_windup,
-            },
+            Event::AbilityUsed { unit, kind, .. } => self.windup(*unit, *kind),
             Event::BroadsideFired => look.broadside_windup,
             Event::Damage { weakness, crit, .. } => {
-                look.hit_gap
+                self.spell
+                    .as_ref()
+                    .and_then(|s| s.hit_gap)
+                    .unwrap_or(look.hit_gap)
                     + if *weakness || *crit {
                         look.crit_hitstop
                     } else {
@@ -399,6 +416,7 @@ pub fn leave(
             With<crate::fx::Floating>,
             With<crate::fx::Projectile>,
             With<crate::fx::Flash>,
+            With<crate::spells::SpellRoot>,
         )>,
     >,
     mut camera: Query<&mut Transform, With<Camera2d>>,
@@ -429,6 +447,14 @@ pub fn play_events(
         }
         if let Some(event) = screen.queue.pop_front() {
             screen.apply_shown(&event);
+            match &event {
+                Event::AbilityUsed { unit, kind, .. } => {
+                    let id = screen.battle.unit(*unit).def.id.clone();
+                    screen.spell = screen.field.spells.get(&id, *kind).cloned();
+                }
+                Event::TurnStarted { .. } => screen.spell = None,
+                _ => {}
+            }
             screen.wait += screen.delay_after(&event);
             let focus = match event {
                 Event::AbilityUsed { unit, .. } => first_target(&screen.queue, unit),

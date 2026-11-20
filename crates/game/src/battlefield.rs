@@ -85,6 +85,9 @@ pub struct FieldConfig {
     /// Мягкие области рисунков из `data/softbody.json` (боец → поза → области).
     #[serde(skip)]
     pub soft: crate::softbody::SoftData,
+    /// Эффекты умений из `data/spells.json`.
+    #[serde(skip, default = "crate::spells::Spells::bundled")]
+    pub spells: crate::spells::Spells,
     /// Дальнобойные бойцы и чем они стреляют; остальные бьют вблизи (рывок к цели).
     #[serde(default)]
     pub ranged: HashMap<String, Shot>,
@@ -188,6 +191,7 @@ impl FieldConfig {
         config.animated = serde_json::from_str(include_str!("../../../data/animated.json"))
             .expect("data/animated.json корректен");
         config.soft = crate::softbody::bundled();
+        config.spells = crate::spells::Spells::bundled();
         config
     }
 

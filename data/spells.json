@@ -1,0 +1,20 @@
+{
+  "tuning": {
+    "gust_length": 1.0,
+    "tornado_height": 1.45,
+    "tornado_spin_hz": 3.0,
+    "tornado_exit": 0.5,
+    "storm_cloud_width": 600.0,
+    "storm_cloud_y": 290.0,
+    "storm_linger": 0.7,
+    "rain_drops": 110,
+    "bolt_time": 0.32
+  },
+  "units": {
+    "sora": {
+      "basic": { "fx": "gust", "windup": 0.35 },
+      "skill": { "fx": "whirlwind", "windup": 0.6, "hit_gap": 0.32 },
+      "ultimate": { "fx": "storm", "windup": 1.2, "hit_gap": 0.22 }
+    }
+  }
+}
