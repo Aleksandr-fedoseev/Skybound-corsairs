@@ -241,15 +241,43 @@ def figure(hero, anim):
 
 
 def from_source(path, size):
-    """Рисованная деталь: пурпурный фон — прозрачный, обрезка по рисунку, размер как у временной."""
+    """Рисованная деталь: ровный фон (пурпурный, белый — любой, какой в углах картинки)
+    становится прозрачным, обрезка по рисунку, размер как у временной."""
     im = Image.open(path).convert("RGBA")
+    w, h = im.size
+    # Водяной знак в углу не мешает: цвет фона — медиана по краям, а не по одному углу.
     a = np.asarray(im).astype(int)
-    r, g, b = a[:, :, 0], a[:, :, 1], a[:, :, 2]
-    magenta = (r > 180) & (b > 180) & (g < 110)
-    a[:, :, 3] = np.where(magenta, 0, a[:, :, 3])
-    im = Image.fromarray(a.astype(np.uint8), "RGBA")
-    im = im.crop(im.getbbox())
-    return im.resize(size, Image.LANCZOS)
+    edge = np.concatenate([a[0, :, :3], a[-1, :, :3], a[:, 0, :3], a[:, -1, :3]])
+    bg = np.median(edge, axis=0)
+    dist = np.abs(a[:, :, :3] - bg).sum(axis=2)
+    near = dist < 60
+    # Прозрачным становится только фон, связанный с краем картинки.
+    mask = Image.fromarray((near * 255).astype(np.uint8), "L").copy()
+    for x, y in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1), (w // 2, 0), (w // 2, h - 1), (0, h // 2), (w - 1, h // 2)]:
+        if mask.getpixel((x, y)) == 255:
+            ImageDraw.floodfill(mask, (x, y), 128)
+    outside = np.asarray(mask) == 128
+    # Мягкий край: полупрозрачность по близости к цвету фона на границе.
+    soft = np.clip((dist - 30) / 60, 0, 1)
+    edge_zone = np.asarray(Image.fromarray(outside.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(5))) > 0
+    alpha = np.where(outside, 0, np.where(edge_zone, soft * 255, 255))
+    a[:, :, 3] = alpha
+    out = Image.fromarray(a.astype(np.uint8), "RGBA")
+    # Водяной знак Gemini в углу — отдельное пятнышко: берём самый большой кусок рисунка.
+    box = biggest_blob_box(np.asarray(out)[:, :, 3] > 128)
+    out = out.crop(box)
+    return out.resize(size, Image.LANCZOS)
+
+
+def biggest_blob_box(solid):
+    """Рамка рисунка без мелких пятнышек (водяной знак в углу): берём строки и столбцы,
+    где рисунок занимает заметную долю ширины или высоты."""
+    h, w = solid.shape
+    rows = np.where(solid.sum(axis=1) > w * 0.06)[0]
+    cols = np.where(solid.sum(axis=0) > h * 0.06)[0]
+    if len(rows) == 0 or len(cols) == 0:
+        return (0, 0, w, h)
+    return (int(cols.min()), int(rows.min()), int(cols.max()) + 1, int(rows.max()) + 1)
 
 
 def save(name, im):
