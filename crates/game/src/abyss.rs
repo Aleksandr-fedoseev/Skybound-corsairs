@@ -9,17 +9,29 @@ use serde::{Deserialize, Serialize};
 
 use crate::Screen;
 use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
+use crate::contracts::{BoardOpen, ContractData, Contracts};
 use crate::expeditions::{ExpeditionData, Expeditions};
 use crate::menu::{
-    BRASS, GO, GO_EDGE, GOLD, MUTED, PARCHMENT, Voyage, WOOD, bottom_nav, later, pressable,
-    spawn_toast, text,
+    GOLD, MUTED, PARCHMENT, Voyage, bottom_nav, later, pressable, spawn_toast, text,
 };
 use crate::save::now;
 use crate::ship::{Ship, ShipData};
 use crate::story::VoyageRequest;
+use crate::style::{self, INK, INK_SOFT, Look, Skin};
 use crate::view::Fonts;
 
-const ABYSS: Color = Color::srgb(0.20, 0.24, 0.42);
+const BRIGHT: Color = Color::srgb(1.0, 0.93, 0.78);
+
+/// Раздел Активностей, открытый из карточки; `None` — список карточек.
+#[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ActivitiesPage(pub Option<Page>);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Page {
+    Event,
+    Abyss,
+    Expeditions,
+}
 
 #[derive(Resource, Deserialize)]
 pub struct AbyssData {
@@ -164,6 +176,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Abyss>()
         .init_resource::<ActivitiesDirty>()
         .init_resource::<ScrollY>()
+        .init_resource::<ActivitiesPage>()
         .add_systems(OnEnter(Screen::Activities), spawn_activities)
         .add_systems(
             Update,
@@ -196,6 +209,9 @@ struct View<'w> {
     week_events: Res<'w, crate::events::WeekEvents>,
     profile: Res<'w, crate::menu::Profile>,
     roster: Res<'w, crate::crew::Roster>,
+    page: Res<'w, ActivitiesPage>,
+    contract_data: Res<'w, ContractData>,
+    contracts: Res<'w, Contracts>,
 }
 
 fn spawn_activities(mut commands: Commands, view: View) {
@@ -277,86 +293,305 @@ fn build(commands: &mut Commands, view: &View) {
             BackgroundColor(Color::srgb(0.10, 0.11, 0.18)),
         ))
         .with_children(|root| {
-            root.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(0),
-                    left: px(0),
-                    width: percent(100),
-                    height: px(56),
-                    padding: UiRect::horizontal(px(16)),
-                    align_items: AlignItems::Center,
-                    border: UiRect::bottom(px(2)),
-                    ..default()
-                },
-                BackgroundColor(WOOD),
-                BorderColor::all(BRASS),
-            ))
-            .with_child(text(fonts, "Активности", true, 20.0, PARCHMENT));
-
-            // Список прокручивается колесом и пальцем: ивент, Бездна и экспедиции не влезают.
-            let mut list = root.spawn((
-                ActivitiesScroll,
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(64),
-                    left: px(10),
-                    width: px(520),
-                    height: px(806),
-                    padding: UiRect::vertical(px(4)),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(10),
-                    overflow: Overflow::scroll_y(),
-                    ..default()
-                },
-                ScrollPosition(Vec2::new(0.0, view.scroll.0)),
-            ));
-            list.observe(
-                |ev: On<PointerDrag>,
-                 mut lists: Query<&mut ScrollPosition, With<ActivitiesScroll>>| {
-                    for mut pos in &mut lists {
-                        pos.0.y = (pos.0.y - ev.delta.y).max(0.0);
-                    }
-                },
+            // Вид из вороньего гнезда на бурю над Бездной.
+            style::backdrop(root, assets, "backgrounds/activities.jpg", 0.1);
+            style::top_bar(
+                root,
+                assets,
+                fonts,
+                &[
+                    ("doubloons", view.profile.doubloons),
+                    ("silver", view.profile.silver),
+                    ("charts", view.profile.charts),
+                ],
             );
-            list.with_children(|col| {
-                let owned: Vec<(String, String)> = screen
-                    .data
-                    .heroes
-                    .iter()
-                    .filter(|h| view.roster.owns(&h.id))
-                    .map(|h| (h.id.clone(), h.name.clone()))
-                    .collect();
-                crate::events::event_card(
-                    col,
-                    fonts,
-                    &view.event_data,
-                    &view.storm,
-                    &view.week_events,
-                    &view.profile,
-                    &owned,
-                );
-                abyss_card(col, fonts, data, screen, floor, abyss.best);
-                crate::expeditions::section(
-                    col,
-                    fonts,
-                    &view.exp_data,
-                    &view.exps,
-                    boats,
-                    screen,
-                    now(),
-                );
-                soon_card(
-                    col,
-                    fonts,
-                    "Скоро: Руины старого мира и Арена капитанов",
-                    "подземелье с выбором пути и бои против отрядов других игроков",
-                    "Руины и Арена откроются после запуска игры",
-                );
-            });
+            let title = match view.page.0 {
+                None => "Активности".to_string(),
+                Some(Page::Event) => view.event_data.current_name().to_string(),
+                Some(Page::Abyss) => "Бездна облаков".to_string(),
+                Some(Page::Expeditions) => "Экспедиции".to_string(),
+            };
+            style::title(root, fonts, &title, 56.0);
+            match view.page.0 {
+                None => hub(root, view, floor, boats),
+                Some(page) => {
+                    back_button(root, fonts);
+                    section_page(root, view, page, floor, boats);
+                }
+            }
             bottom_nav(root, assets, fonts, Screen::Activities);
             spawn_toast(root, fonts);
         });
+    let _ = (data, screen);
+}
+
+/// Карточки-сводки: картинка, название, состояние и «В путь».
+fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
+    let (assets, fonts) = (&*view.assets, &*view.fonts);
+    let now = now();
+    let back = view
+        .exps
+        .running
+        .iter()
+        .filter(|r| now >= r.ends_at)
+        .count();
+    let cards = [
+        (
+            "event",
+            format!("Ивент недели: {}", view.event_data.current_name()),
+            "Особые правила и награды — раз в неделю".to_string(),
+            format!(
+                "осталось {}",
+                crate::events::days_left(crate::events::week_left())
+            ),
+            Go::Page(Page::Event),
+        ),
+        (
+            "abyss",
+            format!("Бездна облаков · этаж {floor}"),
+            "Каждый этаж сложнее, каждый 10-й — босс".to_string(),
+            format!("лучший этаж: {}", view.abyss.best),
+            Go::Page(Page::Abyss),
+        ),
+        (
+            "expeditions",
+            format!("Экспедиции · {} из {boats}", view.exps.running.len()),
+            "Свободные герои уходят на шлюпках за добычей".to_string(),
+            if back > 0 {
+                format!("вернулись: {back} — забрать добычу!")
+            } else if view.exps.running.is_empty() {
+                "шлюпки свободны".to_string()
+            } else {
+                "шлюпки в пути".to_string()
+            },
+            Go::Page(Page::Expeditions),
+        ),
+        (
+            "contracts",
+            format!(
+                "Контракты дня · {} из {}",
+                view.contracts.done_today(),
+                view.contract_data.daily.len()
+            ),
+            "Поручения команды — награда каждый день".to_string(),
+            "новые — в полночь по UTC".to_string(),
+            Go::Contracts,
+        ),
+    ];
+    root.spawn(Node {
+        position_type: PositionType::Absolute,
+        top: px(110),
+        left: px(14),
+        right: px(14),
+        flex_direction: FlexDirection::Column,
+        row_gap: px(10),
+        ..default()
+    })
+    .with_children(|col| {
+        for (art, title, sub, status, go) in cards {
+            col.spawn((
+                Node {
+                    height: px(136),
+                    padding: UiRect::all(px(10)),
+                    column_gap: px(12),
+                    align_items: AlignItems::Center,
+                    border_radius: BorderRadius::all(px(12)),
+                    ..default()
+                },
+                Skin(Look::Parchment),
+                Outline::new(px(2), px(0), Color::srgb(0.72, 0.55, 0.26)),
+            ))
+            .with_children(|card| {
+                card.spawn((
+                    Node {
+                        width: px(120),
+                        height: px(114),
+                        flex_shrink: 0.0,
+                        border_radius: BorderRadius::all(px(8)),
+                        ..default()
+                    },
+                    ImageNode::new(assets.load(format!("ui/act_{art}.png"))),
+                    Outline::new(px(2), px(0), Color::srgb(0.72, 0.55, 0.26)),
+                ));
+                card.spawn(Node {
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
+                    height: percent(100),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::SpaceBetween,
+                    ..default()
+                })
+                .with_children(|c| {
+                    c.spawn(text(fonts, title, true, 16.0, INK));
+                    c.spawn(text(fonts, sub, false, 12.0, INK_SOFT));
+                    c.spawn(Node {
+                        justify_content: JustifyContent::SpaceBetween,
+                        align_items: AlignItems::Center,
+                        column_gap: px(6),
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        row.spawn((
+                            Node {
+                                flex_shrink: 1.0,
+                                padding: UiRect::axes(px(10), px(3)),
+                                border_radius: BorderRadius::all(px(10)),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.24, 0.15, 0.09)),
+                        ))
+                        .with_child(text(fonts, status, false, 11.0, BRIGHT));
+                        go_button(row, fonts, go);
+                    });
+                });
+            });
+        }
+        let mut soon = col.spawn((
+            Node {
+                padding: UiRect::axes(px(16), px(8)),
+                flex_direction: FlexDirection::Column,
+                border_radius: BorderRadius::all(px(10)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.06, 0.04, 0.03, 0.72)),
+        ));
+        soon.with_children(|c| {
+            c.spawn(text(
+                fonts,
+                "Скоро: Руины старого мира и Арена капитанов",
+                true,
+                13.0,
+                PARCHMENT,
+            ));
+        });
+        later(&mut soon, "Руины и Арена откроются после запуска игры");
+    });
+}
+
+#[derive(Clone, Copy)]
+enum Go {
+    Page(Page),
+    Contracts,
+}
+
+fn go_button(row: &mut ChildSpawnerCommands, fonts: &Fonts, go: Go) {
+    let mut button = row.spawn((
+        Node {
+            width: px(96),
+            height: px(40),
+            flex_shrink: 0.0,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        Skin(Look::Go),
+    ));
+    button.with_child(text(fonts, "В путь »", true, 14.0, Color::WHITE));
+    pressable(&mut button);
+    button.observe(
+        move |_: On<PointerClick>,
+              mut page: ResMut<ActivitiesPage>,
+              mut dirty: ResMut<ActivitiesDirty>,
+              mut board: ResMut<BoardOpen>,
+              mut next: ResMut<NextState<Screen>>| match go {
+            Go::Page(p) => {
+                page.0 = Some(p);
+                dirty.0 = true;
+            }
+            // Доска контрактов — на главном экране.
+            Go::Contracts => {
+                board.0 = true;
+                next.set(Screen::Menu);
+            }
+        },
+    );
+}
+
+fn back_button(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
+    let mut button = root.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(58),
+            left: px(10),
+            height: px(40),
+            padding: UiRect::horizontal(px(14)),
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        Skin(Look::Dark),
+        GlobalZIndex(2),
+    ));
+    button.with_child(text(fonts, "« Назад", true, 14.0, BRIGHT));
+    pressable(&mut button);
+    button.observe(
+        |_: On<PointerClick>,
+         mut page: ResMut<ActivitiesPage>,
+         mut dirty: ResMut<ActivitiesDirty>,
+         mut scroll: ResMut<ScrollY>| {
+            page.0 = None;
+            scroll.0 = 0.0;
+            dirty.0 = true;
+        },
+    );
+}
+
+/// Открытый раздел: прокручиваемый список с одной секцией.
+fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor: u32, boats: u32) {
+    let (fonts, data, screen) = (&*view.fonts, &*view.data, &*view.screen);
+    // Список прокручивается колесом и пальцем: разделы бывают длинными.
+    let mut list = root.spawn((
+        ActivitiesScroll,
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(108),
+            left: px(10),
+            right: px(10),
+            bottom: px(88),
+            padding: UiRect::vertical(px(4)),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(10),
+            overflow: Overflow::scroll_y(),
+            ..default()
+        },
+        ScrollPosition(Vec2::new(0.0, view.scroll.0)),
+    ));
+    list.observe(
+        |ev: On<PointerDrag>, mut lists: Query<&mut ScrollPosition, With<ActivitiesScroll>>| {
+            for mut pos in &mut lists {
+                pos.0.y = (pos.0.y - ev.delta.y).max(0.0);
+            }
+        },
+    );
+    list.with_children(|col| match page {
+        Page::Event => {
+            let owned: Vec<(String, String)> = screen
+                .data
+                .heroes
+                .iter()
+                .filter(|h| view.roster.owns(&h.id))
+                .map(|h| (h.id.clone(), h.name.clone()))
+                .collect();
+            crate::events::event_card(
+                col,
+                fonts,
+                &view.event_data,
+                &view.storm,
+                &view.week_events,
+                &view.profile,
+                &owned,
+            );
+        }
+        Page::Abyss => abyss_card(col, fonts, data, screen, floor, view.abyss.best),
+        Page::Expeditions => crate::expeditions::section(
+            col,
+            fonts,
+            &view.exp_data,
+            &view.exps,
+            boats,
+            screen,
+            now(),
+        ),
+    });
 }
 
 fn abyss_card(
@@ -375,15 +610,14 @@ fn abyss_card(
     let level = enemies.iter().map(|(_, l)| *l).max().unwrap_or(1);
     col.spawn((
         Node {
-            padding: UiRect::all(px(16)),
+            padding: UiRect::axes(px(30), px(28)),
             flex_direction: FlexDirection::Column,
             row_gap: px(6),
             border: UiRect::all(px(2)),
             border_radius: BorderRadius::all(px(14)),
             ..default()
         },
-        BackgroundColor(ABYSS),
-        BorderColor::all(GOLD),
+        Skin(Look::Wood),
     ))
     .with_children(|card| {
         card.spawn(text(fonts, "Бездна облаков", true, 22.0, PARCHMENT));
@@ -429,8 +663,7 @@ fn abyss_card(
                 border_radius: BorderRadius::all(px(12)),
                 ..default()
             },
-            BackgroundColor(GO),
-            BorderColor::all(GO_EDGE),
+            Skin(Look::Go),
         ));
         go.with_child(text(fonts, "Спуститься", true, 20.0, Color::WHITE));
         pressable(&mut go);
@@ -448,32 +681,6 @@ fn abyss_card(
             },
         );
     });
-}
-
-fn soon_card(
-    col: &mut ChildSpawnerCommands,
-    fonts: &Fonts,
-    title: &str,
-    sub: &str,
-    message: &'static str,
-) {
-    let mut card = col.spawn((
-        Node {
-            padding: UiRect::axes(px(16), px(12)),
-            flex_direction: FlexDirection::Column,
-            row_gap: px(3),
-            border: UiRect::all(px(1)),
-            border_radius: BorderRadius::all(px(12)),
-            ..default()
-        },
-        BackgroundColor(WOOD),
-        BorderColor::all(BRASS),
-    ));
-    card.with_children(|c| {
-        c.spawn(text(fonts, title, true, 16.0, PARCHMENT));
-        c.spawn(text(fonts, sub, false, 12.0, MUTED));
-    });
-    later(&mut card, message);
 }
 
 #[cfg(test)]

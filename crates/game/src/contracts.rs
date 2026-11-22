@@ -9,15 +9,12 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::audio::Sfx;
-use crate::menu::{
-    BRASS, GO, GO_EDGE, GOLD, MUTED, MenuRebuild, PARCHMENT, Spoils, Toast, pressable, text,
-};
+use crate::menu::{GOLD, MUTED, MenuRebuild, PARCHMENT, Spoils, Toast, pressable, text};
 use crate::save::now;
+use crate::style::{Look, Skin};
 use crate::view::Fonts;
 
 const SECONDS_PER_DAY: u64 = 86_400;
-const DONE: Color = Color::srgb(0.30, 0.62, 0.38);
-const DISABLED: Color = Color::srgb(0.36, 0.38, 0.43);
 
 #[derive(Resource, Deserialize)]
 pub struct ContractData {
@@ -86,6 +83,15 @@ pub struct Contracts {
 impl Contracts {
     fn today() -> u64 {
         now() / SECONDS_PER_DAY
+    }
+
+    /// Сколько поручений сегодня уже закрыто.
+    pub fn done_today(&self) -> usize {
+        if self.day == Self::today() {
+            self.claimed.len()
+        } else {
+            0
+        }
     }
 
     /// Новый день — всё сначала.
@@ -169,15 +175,14 @@ pub fn board(
             left: px(10),
             top: px(74),
             width: px(520),
-            padding: UiRect::all(px(14)),
+            padding: UiRect::axes(px(30), px(28)),
             flex_direction: FlexDirection::Column,
             row_gap: px(8),
             border: UiRect::all(px(2)),
             border_radius: BorderRadius::all(px(14)),
             ..default()
         },
-        BackgroundColor(Color::srgb(0.11, 0.075, 0.05)),
-        BorderColor::all(BRASS),
+        Skin(Look::Wood),
         GlobalZIndex(12),
     ))
     .with_children(|p| {
@@ -310,10 +315,10 @@ fn row(
                 col.spawn(text(fonts, title, true, 15.0, PARCHMENT));
                 col.spawn(text(fonts, sub, false, 12.0, MUTED));
             });
-            let (label, fill) = match state {
-                Row::Progress => ("в работе", DISABLED),
-                Row::Ready => ("Забрать", GO),
-                Row::Claimed => ("готово", DONE),
+            let label = match state {
+                Row::Progress => "в работе",
+                Row::Ready => "Забрать",
+                Row::Claimed => "готово",
             };
             let mut button = r.spawn((
                 Node {
@@ -325,8 +330,11 @@ fn row(
                     border_radius: BorderRadius::all(px(10)),
                     ..default()
                 },
-                BackgroundColor(fill),
-                BorderColor::all(if state == Row::Ready { GO_EDGE } else { MUTED }),
+                Skin(if state == Row::Ready {
+                    Look::Go
+                } else {
+                    Look::Off
+                }),
             ));
             button.with_child(text(fonts, label, true, 14.0, Color::WHITE));
             if state == Row::Ready {

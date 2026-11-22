@@ -351,6 +351,20 @@ SKILL_RINGS = {
 }
 
 
+# Картинки карточек Активностей — из макетов Gemini: (макет, рамка).
+ACTIVITY_ART = {
+    "event": ("activities", (62, 172, 180, 284)),
+    "abyss": ("activities", (62, 327, 180, 437)),
+    "expeditions": ("activities", (62, 482, 180, 592)),
+    "contracts": ("activities_alt", (88, 688, 200, 800)),
+}
+
+
+def activity_art(mockup, box, size=(160, 152)):
+    src = Image.open(SRC / "mockups" / f"{mockup}.png").convert("RGBA")
+    return src.crop(box).resize(size, Image.LANCZOS)
+
+
 def skill_ring(mockup, cx, cy, r, size=96):
     src = Image.open(SRC / "mockups" / f"{mockup}.png").convert("RGBA")
     im = src.crop((cx - r, cy - r, cx + r, cy + r)).resize((size * 2, size * 2), Image.LANCZOS)
@@ -444,6 +458,8 @@ def main():
     if (SRC / "mockups").exists():
         for kind, ring in SKILL_RINGS.items():
             save(f"skill_{kind}.png", skill_ring(*ring))
+        for kind, (mockup, box) in ACTIVITY_ART.items():
+            save(f"act_{kind}.png", activity_art(mockup, box))
     heroes = json.load(open("data/heroes.json"))
     anim = json.load(open("data/animated.json"))
     for h in heroes:

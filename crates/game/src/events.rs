@@ -9,16 +9,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::Screen;
 use crate::battle_screen::{CustomFight, FightKind};
-use crate::menu::{GO, GO_EDGE, GOLD, MUTED, PARCHMENT, Profile, Voyage, pressable, text};
+use crate::menu::{GOLD, MUTED, PARCHMENT, Profile, Voyage, pressable, text};
 use crate::save::now;
 use crate::ship::clock;
 use crate::story::VoyageRequest;
+use crate::style::{Look, Skin};
 use crate::view::Fonts;
 
 const SECONDS_PER_DAY: u64 = 86_400;
 /// 1 января 1970 года — четверг; сдвиг, чтобы неделя начиналась в понедельник.
 const THURSDAY_SHIFT: u64 = 3;
-const STORM: Color = Color::srgb(0.30, 0.20, 0.45);
 
 #[derive(Resource, Deserialize)]
 pub struct EventData {
@@ -202,6 +202,17 @@ impl EventData {
         &self.cycle[i % self.cycle.len()]
     }
 
+    /// Название ивента этой недели.
+    pub fn current_name(&self) -> &str {
+        match self.current() {
+            "storm" => &self.storm.name,
+            "fair" => &self.fair.name,
+            "regatta" => &self.regatta.name,
+            "blockade" => &self.blockade.name,
+            _ => "",
+        }
+    }
+
     pub fn blockade_fight(&self, wave: usize, hp: Vec<(String, f32)>) -> CustomFight {
         CustomFight {
             title: format!(
@@ -283,7 +294,7 @@ pub fn week_left() -> u64 {
 }
 
 /// «3д 5ч» для долгих сроков, «1:23:45» — для коротких.
-fn days_left(seconds: u64) -> String {
+pub fn days_left(seconds: u64) -> String {
     let (d, h) = (seconds / SECONDS_PER_DAY, seconds % SECONDS_PER_DAY / 3600);
     if d > 0 {
         format!("{d}д {h}ч")
@@ -494,15 +505,14 @@ fn event_frame<'a>(
 ) -> EntityCommands<'a> {
     let mut card = col.spawn((
         Node {
-            padding: UiRect::all(px(14)),
+            padding: UiRect::axes(px(30), px(28)),
             flex_direction: FlexDirection::Column,
             row_gap: px(5),
             border: UiRect::all(px(2)),
             border_radius: BorderRadius::all(px(14)),
             ..default()
         },
-        BackgroundColor(STORM),
-        BorderColor::all(GOLD),
+        Skin(Look::Wood),
     ));
     card.with_children(|c| {
         c.spawn(text(fonts, title, true, 18.0, PARCHMENT));
@@ -588,12 +598,7 @@ fn trade_button(
             border_radius: BorderRadius::all(px(8)),
             ..default()
         },
-        BackgroundColor(if active {
-            GO
-        } else {
-            Color::srgb(0.36, 0.38, 0.43)
-        }),
-        BorderColor::all(if active { GO_EDGE } else { MUTED }),
+        Skin(if active { Look::Go } else { Look::Off }),
     ));
     button.with_child(text(fonts, label, true, 12.0, Color::WHITE));
     if active {
@@ -740,12 +745,7 @@ fn blockade_button(
             border_radius: BorderRadius::all(px(12)),
             ..default()
         },
-        BackgroundColor(if fight {
-            GO
-        } else {
-            Color::srgb(0.36, 0.38, 0.43)
-        }),
-        BorderColor::all(if fight { GO_EDGE } else { MUTED }),
+        Skin(if fight { Look::Go } else { Look::Off }),
     ));
     go.with_child(text(fonts, label, true, 16.0, Color::WHITE));
     pressable(&mut go);
@@ -833,8 +833,7 @@ fn regatta_card(
                         border_radius: BorderRadius::all(px(12)),
                         ..default()
                     },
-                    BackgroundColor(GO),
-                    BorderColor::all(GO_EDGE),
+                    Skin(Look::Go),
                 ));
                 go.with_child(text(fonts, "На старт", true, 18.0, Color::WHITE));
                 pressable(&mut go);
@@ -875,15 +874,14 @@ pub fn storm_card(
     let next = data.storm.milestones.get(reached);
     col.spawn((
         Node {
-            padding: UiRect::all(px(14)),
+            padding: UiRect::axes(px(30), px(28)),
             flex_direction: FlexDirection::Column,
             row_gap: px(5),
             border: UiRect::all(px(2)),
             border_radius: BorderRadius::all(px(14)),
             ..default()
         },
-        BackgroundColor(STORM),
-        BorderColor::all(GOLD),
+        Skin(Look::Wood),
     ))
     .with_children(|card| {
         card.spawn(text(
@@ -922,8 +920,7 @@ pub fn storm_card(
                 border_radius: BorderRadius::all(px(12)),
                 ..default()
             },
-            BackgroundColor(GO),
-            BorderColor::all(GO_EDGE),
+            Skin(Look::Go),
         ));
         go.with_child(text(fonts, "Атаковать бурю", true, 18.0, Color::WHITE));
         pressable(&mut go);
