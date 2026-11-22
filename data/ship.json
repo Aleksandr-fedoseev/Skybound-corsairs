@@ -59,6 +59,13 @@
   ],
   "view": {
     "exterior": "ship/exterior.png",
+    "sails": {
+      "cycle": 20, "unfurl": 1.8, "open": 9, "stagger": 0.5,
+      "layers": [
+        { "furled": "ship/sail_1_furled.png", "open": "ship/sail_1_open.png", "rect": [136, 193, 212, 235] },
+        { "furled": "ship/sail_2_furled.png", "open": "ship/sail_2_open.png", "rect": [524, 274, 260, 179] }
+      ]
+    },
     "backdrop": { "image": "menu/sky_pano.jpg", "width": 1021, "speed": 9 },
     "birds": { "image": "fx/bird.png", "count": 5, "speed": 38, "every": 22, "top": 250 },
     "clouds": [

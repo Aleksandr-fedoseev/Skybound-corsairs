@@ -4,7 +4,7 @@
   python3 tools/sprites/ship_rooms.py
 
 art/2d/ship/: base_a.png — корабль-разрез на небе (первый облик всех комнат); exterior.png — он же
-снаружи, с закрытым бортом; up_<что>.png — тот же
+снаружи, с закрытым бортом; exterior_sails / exterior_bare — правки exterior: паруса распущены / голые реи; up_<что>.png — тот же
 рисунок, где правкой в Gemini улучшена одна комната; locked.png — правка с заколоченной комнатой;
 scaffold.png — леса на белом фоне; propeller.png — пропеллер анфас на белом (крутится в игре). Рамки комнат — в data/ship.json (view.rooms, пиксели 1024).
 Небо вырезается: заливка от краёв по цвету неба и крупные просветы выше корпуса.
@@ -87,13 +87,57 @@ def without_sky(img, sharpen=True):
     return out
 
 
+def sail_boxes(a, b, pad=6):
+    """Рамки, где рисунки a и b различаются (по пятнам), — x0, y0, x1, y1."""
+    diff = np.abs(a.astype(int) - b.astype(int)).max(axis=2) > 40
+    m = Image.fromarray(diff.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.MinFilter(5))
+    work = m.copy()
+    boxes = []
+    arr = np.asarray(m) > 0
+    for y, x in zip(*np.nonzero(arr[::4, ::4])):
+        x, y = int(x) * 4, int(y) * 4
+        if work.getpixel((x, y)) != 255:
+            continue
+        ImageDraw.floodfill(work, (x, y), 128)
+        blob = np.asarray(work) == 128
+        work = Image.fromarray(np.where(blob, 64, np.asarray(work)).astype(np.uint8)).copy()
+        ys, xs = np.nonzero(blob)
+        if len(xs) > 600:
+            boxes.append([xs.min() - pad, ys.min() - pad, xs.max() + pad, ys.max() + pad])
+    return boxes
+
+
+def sails():
+    """Корабль снаружи с живыми парусами. Три правки одного рисунка в Gemini: exterior (паруса
+    свёрнуты), exterior_sails (распущены), exterior_bare (голые реи). Основа — голые реи; поверх
+    у каждой мачты слой скатки и слой паруса (в игре парус раскатывается, скатка гаснет)."""
+    names = ("exterior", "exterior_sails", "exterior_bare")
+    src = {n: Image.open(ART / f"{n}.png").convert("RGB") for n in names}
+    arr = {n: np.asarray(img) for n, img in src.items()}
+    cut = {n: without_sky(img) for n, img in src.items()}
+    cut["exterior_bare"].save(OUT / "exterior.png", optimize=True)
+    boxes = sail_boxes(arr["exterior_sails"], arr["exterior_bare"]) + sail_boxes(arr["exterior"], arr["exterior_bare"])
+    # Парус и его скатка — одна рамка: сливаем пересекающиеся.
+    merged = []
+    for b in sorted(boxes):
+        for m in merged:
+            if b[0] < m[2] and m[0] < b[2] and b[1] < m[3] and m[1] < b[3]:
+                m[:] = [min(m[0], b[0]), min(m[1], b[1]), max(m[2], b[2]), max(m[3], b[3])]
+                break
+        else:
+            merged.append(list(b))
+    for i, (x0, y0, x1, y1) in enumerate(merged, 1):
+        cut["exterior"].crop((x0, y0, x1, y1)).save(OUT / f"sail_{i}_furled.png", optimize=True)
+        cut["exterior_sails"].crop((x0, y0, x1, y1)).save(OUT / f"sail_{i}_open.png", optimize=True)
+        print(f"парус {i}: rect [{x0}, {y0}, {x1 - x0}, {y1 - y0}]")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     view = json.loads((ROOT / "data" / "ship.json").read_text())["view"]
     rects = {r["id"]: r["rect"] for r in view["rooms"]}
     without_sky(Image.open(ART / "base_a.png").convert("RGB")).save(OUT / "hull.png", optimize=True)
-    # Тот же корабль снаружи (правка base_a в Gemini: борт закрыт) — на главной.
-    without_sky(Image.open(ART / "exterior.png").convert("RGB")).save(OUT / "exterior.png", optimize=True)
+    sails()
     for room, src in UPGRADES.items():
         x, y, w, h = rects[room]
         pic = without_sky(Image.open(ART / f"{src}.png").convert("RGB"))

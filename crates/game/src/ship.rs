@@ -40,6 +40,9 @@ pub struct ShipData {
 pub struct ShipView {
     /// Корабль снаружи — на главной; рисунок того же размера, что и разрез.
     pub exterior: String,
+    /// Паруса снаружи: то раскатываются, то сворачиваются.
+    #[serde(default)]
+    pub sails: Option<Sails>,
     /// Панорама неба за кораблём: едет влево по кругу.
     pub backdrop: Backdrop,
     /// Стайка птиц изредка обгоняет корабль.
@@ -72,6 +75,42 @@ pub struct CloudDef {
     /// Перед кораблём (иначе — за ним).
     #[serde(default)]
     pub front: bool,
+}
+
+/// Цикл парусов (с): свёрнуты → раскатываются за `unfurl` → стоят `open` → сворачиваются.
+/// Каждый следующий парус — на `stagger` позже.
+#[derive(Deserialize)]
+pub struct Sails {
+    pub cycle: f32,
+    pub unfurl: f32,
+    pub open: f32,
+    pub stagger: f32,
+    pub layers: Vec<SailLayer>,
+}
+
+impl Sails {
+    /// Насколько раскрыт парус `index` в момент `t`: 0 — свёрнут, 1 — раскрыт.
+    pub fn openness(&self, index: usize, t: f32) -> f32 {
+        let p = (t - index as f32 * self.stagger).rem_euclid(self.cycle);
+        let s = if p < self.unfurl {
+            p / self.unfurl
+        } else if p < self.unfurl + self.open {
+            1.0
+        } else if p < 2.0 * self.unfurl + self.open {
+            1.0 - (p - self.unfurl - self.open) / self.unfurl
+        } else {
+            0.0
+        };
+        s * s * (3.0 - 2.0 * s)
+    }
+}
+
+/// Парус: скатка и раскрытый парус в одной рамке (x, y, ширина, высота в px рисунка).
+#[derive(Deserialize)]
+pub struct SailLayer {
+    pub furled: String,
+    pub open: String,
+    pub rect: [f32; 4],
 }
 
 #[derive(Deserialize)]

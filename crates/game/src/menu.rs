@@ -41,11 +41,11 @@ const BOB_PERIOD: f32 = 4.0;
 const BOB_PX: f32 = 6.0;
 const BOB_TILT_DEG: f32 = 1.2;
 /// Корабль-разрез на главной: квадрат рисунка корпуса (логические px экрана 540×960).
-const SHIP_LEFT: f32 = -5.0;
+const SHIP_LEFT: f32 = 10.0;
 /// Ширина экрана в логических px.
 const SCREEN_W: f32 = 540.0;
 const SHIP_TOP: f32 = 190.0;
-const SHIP_SIDE: f32 = 555.0;
+const SHIP_SIDE: f32 = 520.0;
 const PRESSED_SCALE: f32 = 0.94;
 
 /// Данные меню: `data/menu.json`.
@@ -234,6 +234,7 @@ pub fn plugin(app: &mut App) {
                     spin_and_pulse,
                     drift_clouds,
                     scroll_backdrop,
+                    animate_sails,
                 ),
             )
                 .chain()
@@ -512,6 +513,60 @@ fn ship_outside(
                 },
                 ImageNode::new(assets.load(image.to_string())),
             ));
+        }
+        if let Some(sails) = &view.sails {
+            for (index, sail) in sails.layers.iter().enumerate() {
+                let [x, y, w, h] = sail.rect;
+                deck.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: pct(x),
+                        top: pct(y),
+                        width: pct(w),
+                        height: pct(h),
+                        ..default()
+                    },
+                    Pickable::IGNORE,
+                ))
+                .with_children(|frame| {
+                    frame.spawn((
+                        SailFurled(index),
+                        Node {
+                            position_type: PositionType::Absolute,
+                            width: percent(100),
+                            height: percent(100),
+                            ..default()
+                        },
+                        ImageNode::new(assets.load(sail.furled.clone())),
+                        Pickable::IGNORE,
+                    ));
+                    // Раскрытый парус показывается сверху вниз — раскатывается от реи.
+                    frame
+                        .spawn((
+                            SailOpen(index),
+                            Node {
+                                position_type: PositionType::Absolute,
+                                width: percent(100),
+                                height: percent(0),
+                                overflow: Overflow::clip(),
+                                ..default()
+                            },
+                            Pickable::IGNORE,
+                        ))
+                        .with_children(|clip| {
+                            clip.spawn((
+                                Node {
+                                    position_type: PositionType::Absolute,
+                                    width: percent(100),
+                                    height: px(SHIP_SIDE * h / view.size),
+                                    ..default()
+                                },
+                                ImageNode::new(assets.load(sail.open.clone())),
+                                Pickable::IGNORE,
+                            ));
+                        });
+                });
+            }
         }
         propeller(deck, assets, view);
     });
@@ -1505,6 +1560,33 @@ fn refresh_toast(
 /// Пропеллер: оборотов в секунду.
 #[derive(Component)]
 struct Spinner(f32);
+
+/// Скатка паруса и рамка раскрытого паруса (номер паруса в данных).
+#[derive(Component)]
+struct SailFurled(usize);
+
+#[derive(Component)]
+struct SailOpen(usize);
+
+fn animate_sails(
+    time: Res<Time>,
+    data: Res<ShipData>,
+    mut furled: Query<(&SailFurled, &mut ImageNode)>,
+    mut open: Query<(&SailOpen, &mut Node)>,
+) {
+    let Some(sails) = &data.view.sails else {
+        return;
+    };
+    let t = time.elapsed_secs();
+    for (sail, mut image) in &mut furled {
+        // Скатка гаснет в первой половине раскрытия: дальше её закрывает парус.
+        let s = sails.openness(sail.0, t);
+        image.color = Color::WHITE.with_alpha((1.0 - s * 2.0).clamp(0.0, 1.0));
+    }
+    for (sail, mut node) in &mut open {
+        node.height = percent(sails.openness(sail.0, t) * 100.0);
+    }
+}
 
 /// Комната отсека, открытого в панели.
 #[derive(Component)]
