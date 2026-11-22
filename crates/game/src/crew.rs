@@ -1053,8 +1053,6 @@ fn details(
     });
 }
 
-/// Характеристики сейчас и на следующем уровне — на пергаменте.
-
 fn tabs_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts, tab: CrewTab) {
     panel
         .spawn(Node {
