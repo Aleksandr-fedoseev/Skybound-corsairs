@@ -11,11 +11,6 @@
     { "level": 6, "seconds": 7200, "silver": 2800, "planks": 560, "ether": 180 },
     { "level": 7, "seconds": 21600, "silver": 5000, "planks": 1000, "ether": 350 }
   ],
-  "ship_art": [
-    { "from_hull": 1, "image": "menu/ship_lvl1.png" },
-    { "from_hull": 3, "image": "menu/ship_lvl3.png" },
-    { "from_hull": 5, "image": "menu/ship_lvl5.png" }
-  ],
   "compartments": [
     {
       "id": "hull", "name": "Корпус", "icon": "menu/ship_lvl1.png", "unlock_hull": 1, "start_level": 1,
@@ -61,5 +56,20 @@
     },
     { "id": "infirmary", "name": "Лазарет", "icon": "menu/module_infirmary.png", "unlock_hull": 6, "start_level": 0 },
     { "id": "lookout", "name": "Подзорная башня", "icon": "menu/module_lookout.png", "unlock_hull": 7, "start_level": 0 }
-  ]
+  ],
+  "view": {
+    "hull": "ship/hull.png",
+    "size": 1024,
+    "locked": "ship/locked.png",
+    "scaffold": "ship/scaffold.png",
+    "rooms": [
+      { "id": "tavern", "rect": [176, 490, 196, 150], "tiers": [{ "from": 2, "image": "ship/tavern_2.png" }] },
+      { "id": "cannon_deck", "rect": [390, 490, 188, 150], "tiers": [{ "from": 2, "image": "ship/cannon_deck_2.png" }] },
+      { "id": "training_deck", "rect": [592, 490, 190, 150], "tiers": [] },
+      { "id": "hold", "rect": [160, 648, 212, 168], "tiers": [{ "from": 2, "image": "ship/hold_2.png" }] },
+      { "id": "workshop", "rect": [390, 648, 188, 168], "tiers": [] },
+      { "id": "cabins", "rect": [592, 648, 190, 168], "tiers": [] },
+      { "id": "windcatchers", "rect": [21, 166, 452, 304], "tag": [0.17, 0.12], "tiers": [{ "from": 2, "image": "ship/windcatchers_2.png" }] }
+    ]
+  }
 }

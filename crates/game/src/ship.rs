@@ -31,8 +31,51 @@ pub struct ShipData {
     pub hull_cost_factor: f32,
     /// Цена и время перехода на уровень `level` (1 — постройка отсека).
     pub levels: Vec<LevelCost>,
-    pub ship_art: Vec<ShipArt>,
     pub compartments: Vec<Compartment>,
+    pub view: ShipView,
+}
+
+/// Корабль-разрез на главной: корпус и комнаты отсеков поверх него.
+#[derive(Deserialize)]
+pub struct ShipView {
+    pub hull: String,
+    /// Сторона рисунка корпуса (px): рамки комнат даны в его пикселях.
+    pub size: f32,
+    /// Заколоченная комната (отсек не построен) и леса (идёт стройка).
+    pub locked: String,
+    pub scaffold: String,
+    pub rooms: Vec<Room>,
+}
+
+/// Комната отсека: рамка на рисунке корпуса и облики по уровням.
+#[derive(Deserialize)]
+pub struct Room {
+    pub id: String,
+    /// x, y, ширина, высота — в пикселях рисунка корпуса.
+    pub rect: [f32; 4],
+    /// С какого уровня какой рисунок; ниже первого — то, что нарисовано на корпусе.
+    #[serde(default)]
+    pub tiers: Vec<RoomTier>,
+    /// Где плашка уровня — левый нижний угол в долях рамки; нет — внизу слева.
+    #[serde(default)]
+    pub tag: [f32; 2],
+}
+
+#[derive(Deserialize)]
+pub struct RoomTier {
+    pub from: u32,
+    pub image: String,
+}
+
+impl Room {
+    /// Рисунок комнаты на этом уровне; `None` — облик с корпуса.
+    pub fn image(&self, level: u32) -> Option<&str> {
+        self.tiers
+            .iter()
+            .filter(|t| level >= t.from)
+            .max_by_key(|t| t.from)
+            .map(|t| t.image.as_str())
+    }
 }
 
 #[derive(Deserialize, Clone, Copy)]
@@ -42,12 +85,6 @@ pub struct LevelCost {
     pub silver: u32,
     pub planks: u32,
     pub ether: u32,
-}
-
-#[derive(Deserialize)]
-pub struct ShipArt {
-    pub from_hull: u32,
-    pub image: String,
 }
 
 #[derive(Deserialize)]
@@ -134,14 +171,6 @@ impl ShipData {
 
     pub fn compartment(&self, id: &str) -> Option<&Compartment> {
         self.compartments.iter().find(|c| c.id == id)
-    }
-
-    pub fn ship_image(&self, hull: u32) -> &str {
-        self.ship_art
-            .iter()
-            .rfind(|art| art.from_hull <= hull)
-            .or(self.ship_art.first())
-            .map_or("", |art| art.image.as_str())
     }
 
     /// Цена перехода отсека `id` на уровень `to`.
@@ -331,6 +360,10 @@ pub struct OpenCompartment(pub Option<String>);
 #[derive(Component)]
 struct BuildTimer;
 
+/// Таймер стройки на комнате корабля: только время.
+#[derive(Component)]
+pub(crate) struct RoomTimer;
+
 pub fn plugin(app: &mut App) {
     let data = ShipData::bundled();
     app.insert_resource(Ship::new(&data))
@@ -393,12 +426,19 @@ fn income(
     }
 }
 
-fn refresh_timer(ship: Res<Ship>, mut texts: Query<&mut Text, With<BuildTimer>>) {
+fn refresh_timer(
+    ship: Res<Ship>,
+    mut texts: Query<&mut Text, (With<BuildTimer>, Without<RoomTimer>)>,
+    mut rooms: Query<&mut Text, With<RoomTimer>>,
+) {
     let Some(build) = &ship.build else {
         return;
     };
     for mut text in &mut texts {
         text.0 = format!("Строится: осталось {}", clock(build.left));
+    }
+    for mut text in &mut rooms {
+        text.0 = clock(build.left);
     }
 }
 

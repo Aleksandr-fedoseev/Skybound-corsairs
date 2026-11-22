@@ -16,7 +16,7 @@ use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
 use crate::contracts::{BoardOpen, ContractData, Contracts, Deed};
 use crate::convoys::Convoys;
 use crate::events::{EventData, StormEvent, WeekEvents};
-use crate::ship::{Compartment, OpenCompartment, Ship, ShipData};
+use crate::ship::{Compartment, OpenCompartment, RoomTimer, Ship, ShipData};
 use crate::story::{StoryQueue, VoyageRequest};
 use crate::view::{Fonts, ResultNote};
 
@@ -39,6 +39,10 @@ const TOAST_LONG_SECONDS: f32 = 6.0;
 /// Корабль покачивается на ветру: период (с) и размах (px).
 const BOB_PERIOD: f32 = 4.0;
 const BOB_PX: f32 = 6.0;
+/// Корабль-разрез на главной: квадрат рисунка корпуса (логические px экрана 540×960).
+const SHIP_LEFT: f32 = -15.0;
+const SHIP_TOP: f32 = 190.0;
+const SHIP_SIDE: f32 = 570.0;
 const PRESSED_SCALE: f32 = 0.94;
 
 /// Данные меню: `data/menu.json`.
@@ -399,65 +403,7 @@ fn build(commands: &mut Commands, view: &MenuView) {
                 ));
             });
 
-            // Корабль стоит на одной «ватерлинии», какого бы размера ни была картинка.
-            root.spawn((
-                ShipSprite,
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(80),
-                    bottom: px(268),
-                    width: px(380),
-                    ..default()
-                },
-                ImageNode::new(assets.load(ship_data.ship_image(ship.hull()).to_string())),
-                Pickable::IGNORE,
-            ));
-
-            // Ветроловы накопили эфир — тап собирает.
-            let mut bubble = root.spawn((
-                EtherBubble,
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(318),
-                    left: px(300),
-                    height: px(34),
-                    padding: UiRect::horizontal(px(14)),
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(px(2)),
-                    border_radius: BorderRadius::all(px(17)),
-                    ..default()
-                },
-                BackgroundColor(ETHER),
-                BorderColor::all(Color::WHITE),
-                Visibility::Hidden,
-            ));
-            bubble.with_child(text(fonts, "", true, 14.0, Color::WHITE));
-            pressable(&mut bubble);
-            bubble.observe(
-                |_: On<PointerClick>,
-                 mut profile: ResMut<Profile>,
-                 mut toast: ResMut<Toast>,
-                 ship: Res<Ship>,
-                 ship_data: Res<ShipData>,
-                 mut sfx: MessageWriter<Sfx>,
-                 mut deeds: MessageWriter<Deed>| {
-                    let room = ship
-                        .capacity(&ship_data)
-                        .ether
-                        .saturating_sub(profile.ether);
-                    let got = (profile.ether_pending.floor() as u32).min(room);
-                    if got == 0 && profile.ether_pending >= 1.0 {
-                        toast.show("Трюм полон: эфир некуда класть — улучшите Трюм");
-                    }
-                    if got > 0 {
-                        profile.ether += got;
-                        profile.ether_pending -= got as f32;
-                        sfx.write(Sfx("coin"));
-                        deeds.write(Deed("ether"));
-                        toast.show(&format!("Ветроловы: +{got} эфира"));
-                    }
-                },
-            );
+            ship_rooms(root, assets, fonts, ship_data, ship);
 
             compartments(root, assets, fonts, ship_data, ship, view.page.0);
             voyage(root, fonts, next, done);
@@ -483,6 +429,167 @@ fn build(commands: &mut Commands, view: &MenuView) {
             }
             spawn_toast(root, fonts);
         });
+}
+
+/// Корабль-разрез: корпус, поверх — комнаты отсеков. Комната показывает уровень (свой рисунок
+/// с нужного уровня), не построенная — заколочена, на стройке — леса и таймер. Тап — панель отсека.
+fn ship_rooms(
+    root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    ship_data: &ShipData,
+    ship: &Ship,
+) {
+    let view = &ship_data.view;
+    let pct = |v: f32| percent(v / view.size * 100.0);
+    root.spawn((
+        ShipSprite,
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(SHIP_LEFT),
+            top: px(SHIP_TOP),
+            width: px(SHIP_SIDE),
+            height: px(SHIP_SIDE),
+            ..default()
+        },
+        Pickable::IGNORE,
+    ))
+    .with_children(|deck| {
+        deck.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: percent(100),
+                height: percent(100),
+                ..default()
+            },
+            ImageNode::new(assets.load(view.hull.clone())),
+            Pickable::IGNORE,
+        ));
+        for room in &view.rooms {
+            let Some(compartment) = ship_data.compartment(&room.id) else {
+                continue;
+            };
+            let [x, y, w, h] = room.rect;
+            let level = ship.level(&room.id);
+            let building = ship.build.as_ref().is_some_and(|b| b.id == room.id);
+            let mut cell = deck.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: pct(x),
+                    top: pct(y),
+                    width: pct(w),
+                    height: pct(h),
+                    ..default()
+                },
+                UiTransform::default(),
+            ));
+            cell.with_children(|c| {
+                let fill = || Node {
+                    position_type: PositionType::Absolute,
+                    width: percent(100),
+                    height: percent(100),
+                    ..default()
+                };
+                if let Some(image) = room.image(level) {
+                    c.spawn((fill(), ImageNode::new(assets.load(image.to_string())), Pickable::IGNORE));
+                }
+                if building {
+                    c.spawn((fill(), ImageNode::new(assets.load(view.scaffold.clone())), Pickable::IGNORE));
+                    c.spawn((room_tag(room.tag), Pickable::IGNORE))
+                        .with_child((RoomTimer, text(fonts, "", true, 12.0, GOLD)));
+                } else if level == 0 {
+                    // Не построен: доски с замком и что нужно, чтобы открыть.
+                    c.spawn((fill(), ImageNode::new(assets.load(view.locked.clone())), Pickable::IGNORE));
+                    let need = if ship.hull() < compartment.unlock_hull {
+                        format!("Корпус {}", compartment.unlock_hull)
+                    } else {
+                        "Построить".to_string()
+                    };
+                    c.spawn((room_tag(room.tag), Pickable::IGNORE))
+                        .with_child(text(fonts, need, true, 11.0, GOLD));
+                } else {
+                    c.spawn((room_tag(room.tag), Pickable::IGNORE))
+                        .with_child(text(fonts, format!("ур. {level}"), true, 10.0, PARCHMENT));
+                }
+            });
+            let id = room.id.clone();
+            pressable(&mut cell);
+            cell.observe(
+                move |_: On<PointerClick>,
+                      mut opened: ResMut<OpenCompartment>,
+                      mut board: ResMut<BoardOpen>,
+                      mut rebuild: ResMut<MenuRebuild>| {
+                    board.0 = false;
+                    opened.0 = Some(id.clone());
+                    rebuild.0 = true;
+                },
+            );
+            // Ветроловы накопили эфир — пузырь над ними, тап собирает.
+            if room.id == "windcatchers" {
+                let mut bubble = deck.spawn((
+                    EtherBubble,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: pct(x + w * 0.3),
+                        top: pct(y - 10.0),
+                        height: px(34),
+                        padding: UiRect::horizontal(px(14)),
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(px(2)),
+                        border_radius: BorderRadius::all(px(17)),
+                        ..default()
+                    },
+                    BackgroundColor(ETHER),
+                    BorderColor::all(Color::WHITE),
+                    Visibility::Hidden,
+                ));
+                bubble.with_child(text(fonts, "", true, 14.0, Color::WHITE));
+                pressable(&mut bubble);
+    bubble.observe(
+                    |_: On<PointerClick>,
+                     mut profile: ResMut<Profile>,
+                     mut toast: ResMut<Toast>,
+                     ship: Res<Ship>,
+                     ship_data: Res<ShipData>,
+                     mut sfx: MessageWriter<Sfx>,
+                     mut deeds: MessageWriter<Deed>| {
+                        let room = ship
+                            .capacity(&ship_data)
+                            .ether
+                            .saturating_sub(profile.ether);
+                        let got = (profile.ether_pending.floor() as u32).min(room);
+                        if got == 0 && profile.ether_pending >= 1.0 {
+                            toast.show("Трюм полон: эфир некуда класть — улучшите Трюм");
+                        }
+                        if got > 0 {
+                            profile.ether += got;
+                            profile.ether_pending -= got as f32;
+                            sfx.write(Sfx("coin"));
+                            deeds.write(Deed("ether"));
+                            toast.show(&format!("Ветроловы: +{got} эфира"));
+                        }
+                    },
+                );
+            }
+        }
+    });
+}
+
+/// Плашка комнаты: уровень, таймер стройки или что нужно для постройки. `at` — левый нижний
+/// угол в долях комнаты (по умолчанию — внизу слева).
+fn room_tag(at: [f32; 2]) -> impl Bundle {
+    (
+        Node {
+            position_type: PositionType::Absolute,
+            left: percent(at[0] * 100.0),
+            bottom: percent(at[1] * 100.0),
+            margin: UiRect::all(px(4)),
+            padding: UiRect::axes(px(6), px(1)),
+            border_radius: BorderRadius::all(px(6)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.05, 0.04, 0.08, 0.7)),
+    )
 }
 
 /// Подсказка поверх всего экрана.
