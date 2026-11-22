@@ -22,11 +22,12 @@ use crate::menu::{
 use crate::style::{self, INK, INK_GOOD, INK_SOFT, Look, Skin};
 use crate::view::Fonts;
 
-const CARD_W: f32 = 164.0;
-const CARD_H: f32 = 150.0;
-const PORTRAIT: f32 = 78.0;
-/// Верх панели героя: под сеткой карточек.
-const DETAILS_TOP: f32 = 392.0;
+/// Медальон героя в ленте отряда.
+const CHIP: f32 = 54.0;
+/// Иконка умения в латунном кольце.
+const SKILL_RING: f32 = 70.0;
+/// Верх области героя: под заголовком экрана.
+const HERO_TOP: f32 = 108.0;
 const BRIGHT: Color = Color::srgb(1.0, 0.93, 0.78);
 const BETTER: Color = Color::srgb(0.55, 0.88, 0.55);
 
@@ -440,14 +441,6 @@ fn rarity_label(rarity: Rarity) -> &'static str {
     }
 }
 
-fn rarity_color(rarity: Rarity) -> Color {
-    match rarity {
-        Rarity::R => Color::srgb(0.70, 0.74, 0.80),
-        Rarity::Sr => Color::srgb(0.70, 0.55, 1.0),
-        Rarity::Ssr => GOLD,
-    }
-}
-
 fn role_label(role: Role) -> &'static str {
     match role {
         Role::Gunner => "Канонир",
@@ -659,41 +652,24 @@ fn build(
             BackgroundColor(Color::srgb(0.10, 0.07, 0.05)),
         ))
         .with_children(|root| {
-            // Кубрик «Ласточки» под лёгкой вуалью — экипаж живёт на корабле.
-            style::backdrop(root, assets, "backgrounds/crew.jpg", 0.35);
-            style::header(
+            // Кубрик «Ласточки» — экипаж живёт на корабле.
+            style::backdrop(root, assets, "backgrounds/crew.jpg", 0.15);
+            style::top_bar(
                 root,
                 assets,
                 fonts,
-                &format!("Экипаж · отряд {}/{}", roster.team.len(), crew.team_size),
                 &[
                     ("journals", profile.journals),
                     ("charts", profile.charts),
                     ("silver", profile.silver),
                 ],
             );
-            root.spawn(Node {
-                position_type: PositionType::Absolute,
-                top: px(70),
-                left: px(10),
-                width: px(520),
-                flex_wrap: FlexWrap::Wrap,
-                justify_content: JustifyContent::SpaceBetween,
-                row_gap: px(10),
-                ..default()
-            })
-            .with_children(|grid| {
-                for hero in &data.heroes {
-                    hero_card(
-                        grid,
-                        assets,
-                        fonts,
-                        hero,
-                        roster,
-                        selected == Some(hero.id.as_str()),
-                    );
-                }
-            });
+            style::title(
+                root,
+                fonts,
+                &format!("Экипаж · отряд {}/{}", roster.team.len(), crew.team_size),
+                56.0,
+            );
             if let Some(hero) = selected.and_then(|id| data.hero(id)) {
                 let plan = roster.merge_plan(data, crew, &hero.id);
                 let merge = (
@@ -708,15 +684,40 @@ fn build(
                     root, assets, fonts, crew, roster, profile, hero, merge, cabin, gear,
                 );
             }
+            // Лента героев над нижней панелью: тап — выбрать.
+            root.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    bottom: px(86),
+                    left: px(6),
+                    right: px(6),
+                    height: px(80),
+                    padding: UiRect::horizontal(px(48)),
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                Skin(Look::Plank),
+            ))
+            .with_children(|rail| {
+                for hero in &data.heroes {
+                    roster_chip(
+                        rail,
+                        assets,
+                        hero,
+                        roster,
+                        selected == Some(hero.id.as_str()),
+                    );
+                }
+            });
             bottom_nav(root, assets, fonts, Screen::Crew);
             spawn_toast(root, fonts);
         });
 }
 
-fn hero_card(
-    grid: &mut ChildSpawnerCommands,
+fn roster_chip(
+    rail: &mut ChildSpawnerCommands,
     assets: &AssetServer,
-    fonts: &Fonts,
     hero: &HeroDef,
     roster: &Roster,
     selected: bool,
@@ -724,74 +725,52 @@ fn hero_card(
     let in_team = roster.team.contains(&hero.id);
     let owned = roster.owns(&hero.id);
     let id = hero.id.clone();
-    let mut card = grid.spawn((
-        Node {
-            width: px(CARD_W),
-            height: px(CARD_H),
-            padding: UiRect::top(px(12)),
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            row_gap: px(1),
-            border_radius: BorderRadius::all(px(12)),
-            ..default()
-        },
-        Skin(Look::WoodSmall),
-    ));
-    if selected {
-        card.insert(Outline::new(px(3), px(1), GOLD));
-    }
-    card.with_children(|c| {
-        c.spawn(style::medallion(assets, &hero.id, PORTRAIT, !owned));
-        c.spawn(text(fonts, hero.name.clone(), true, 16.0, BRIGHT));
-        if owned {
-            stars_row(c, assets, roster.stars(&hero.id), 12.0);
-            c.spawn(text(
-                fonts,
-                format!("ур. {}", roster.level(&hero.id)),
-                false,
-                12.0,
-                rarity_color(hero.rarity),
-            ));
-        } else {
-            c.spawn(text(fonts, "в Таверне", false, 12.0, MUTED));
-        }
-        c.spawn((
+    let mut chip = rail.spawn(Node {
+        flex_direction: FlexDirection::Column,
+        align_items: AlignItems::Center,
+        row_gap: px(2),
+        ..default()
+    });
+    chip.with_children(|c| {
+        let mut medal = c.spawn((
             Node {
-                position_type: PositionType::Absolute,
-                top: px(8),
-                right: px(10),
+                width: px(CHIP),
+                height: px(CHIP),
+                border_radius: BorderRadius::MAX,
                 ..default()
             },
-            text(
-                fonts,
-                rarity_label(hero.rarity),
-                true,
-                13.0,
-                rarity_color(hero.rarity),
-            ),
+            Pickable::IGNORE,
         ));
-        if in_team {
-            c.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(8),
-                    left: px(8),
-                    padding: UiRect::axes(px(8), px(3)),
-                    ..default()
-                },
-                Skin(Look::Go),
-                Pickable::IGNORE,
-            ))
-            .with_child((
-                Text::new("в отряде"),
-                fonts.text(true, 11.0),
-                TextColor(Color::WHITE),
-                Pickable::IGNORE,
-            ));
+        if selected {
+            medal.insert(Outline::new(px(3), px(1), GOLD));
+        }
+        medal.with_children(|m| {
+            m.spawn(style::medallion(assets, &hero.id, CHIP, !owned));
+            if in_team {
+                // Метка «в отряде» — латунная бляшка в углу.
+                m.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        top: px(-2),
+                        right: px(-2),
+                        width: px(16),
+                        height: px(16),
+                        border: UiRect::all(px(2)),
+                        border_radius: BorderRadius::MAX,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.95, 0.62, 0.20)),
+                    BorderColor::all(Color::srgb(0.47, 0.32, 0.11)),
+                    Pickable::IGNORE,
+                ));
+            }
+        });
+        if owned {
+            stars_row(c, assets, roster.stars(&hero.id), 8.0);
         }
     });
-    pressable(&mut card);
-    card.observe(
+    pressable(&mut chip);
+    chip.observe(
         move |_: On<PointerClick>, mut selected: ResMut<Selected>, mut dirty: ResMut<CrewDirty>| {
             selected.0 = Some(id.clone());
             dirty.0 = true;
@@ -814,7 +793,8 @@ fn details(
 ) {
     let (merge_to, merge_info) = merge;
     let level = roster.level(&hero.id);
-    let cap = crew.level_cap(roster.stars(&hero.id));
+    let stars = roster.stars(&hero.id);
+    let cap = crew.level_cap(stars);
     let at_cap = level >= cap;
     let now = hero.to_unit(level).stats;
     let next = hero.to_unit(level + 1).stats;
@@ -824,180 +804,256 @@ fn details(
     let owned = roster.owns(&hero.id);
     let copies = roster.copies(&hero.id);
 
-    let show_gear = owned && gear.tab == CrewTab::Gear;
+    // Вкладка «Снаряжение»: панель на всю ширину вместо героя.
+    if owned && gear.tab == CrewTab::Gear {
+        root.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(HERO_TOP),
+                left: px(10),
+                right: px(10),
+                padding: UiRect::axes(px(32), px(30)),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(8),
+                ..default()
+            },
+            Skin(Look::Wood),
+        ))
+        .with_children(|panel| {
+            panel
+                .spawn(Node {
+                    column_gap: px(8),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    row.spawn(text(fonts, hero.name.clone(), true, 20.0, BRIGHT));
+                    row.spawn(text(fonts, hero.title.clone(), false, 13.0, MUTED));
+                });
+            tabs_row(panel, fonts, gear.tab);
+            gear_tab(panel, fonts, gear);
+            cabin_row(panel, fonts, cabin);
+        });
+        return;
+    }
+
+    // Герой во весь рост слева.
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
-            top: px(DETAILS_TOP),
-            left: px(8),
-            right: px(8),
-            padding: UiRect::axes(px(32), px(30)),
-            flex_direction: FlexDirection::Column,
-            row_gap: px(7),
+            top: px(HERO_TOP + 6.0),
+            left: px(6),
+            height: px(474),
             ..default()
         },
-        Skin(Look::Wood),
-    ))
-    .with_children(|panel| {
-        panel
-            .spawn(Node {
-                column_gap: px(8),
-                align_items: AlignItems::Center,
-                ..default()
-            })
-            .with_children(|row| {
-                row.spawn(text(fonts, hero.name.clone(), true, 22.0, BRIGHT));
-                row.spawn(text(fonts, hero.title.clone(), false, 14.0, MUTED));
-                if owned {
-                    stars_row(row, assets, roster.stars(&hero.id), 16.0);
-                }
-            });
-        if show_gear {
-            tabs_row(panel, fonts, gear.tab);
-            gear_tab(panel, fonts, gear);
-            return;
-        }
-        // Слева — вкладки, сведения и характеристики, справа — герой во весь рост.
-        panel
-            .spawn(Node {
-                column_gap: px(10),
-                ..default()
-            })
-            .with_children(|top| {
-                top.spawn(Node {
-                    flex_grow: 1.0,
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(7),
-                    ..default()
-                })
-                .with_children(|left| {
-                    if owned {
-                        tabs_row(left, fonts, gear.tab);
-                    }
-                    left.spawn(text(
-                        fonts,
-                        format!(
-                            "{} · {} · {}",
-                            rarity_label(hero.rarity),
-                            role_label(hero.role),
-                            element_label(hero.element),
-                        ),
-                        false,
-                        13.0,
-                        PARCHMENT,
-                    ));
-                    left.spawn(text(
-                        fonts,
-                        if owned {
-                            format!("Уровень {level} из {cap} · копий {copies}")
-                        } else {
-                            "Ещё не в команде".to_string()
-                        },
-                        true,
-                        13.0,
-                        rarity_color(hero.rarity),
-                    ));
-                    stats_card(left, fonts, now, next, owned && !at_cap);
-                });
-                top.spawn((
-                    Node {
-                        width: px(120),
-                        height: px(178),
-                        flex_shrink: 0.0,
-                        ..default()
-                    },
-                    ImageNode {
-                        image: assets.load(format!("ui/full_{}.png", hero.id)),
-                        image_mode: NodeImageMode::Auto,
-                        color: if owned {
-                            Color::WHITE
-                        } else {
-                            Color::srgba(0.4, 0.4, 0.45, 0.8)
-                        },
-                        ..default()
-                    },
-                    Pickable::IGNORE,
-                ));
-            });
+        ImageNode {
+            image: assets.load(format!("ui/full_{}.png", hero.id)),
+            color: if owned {
+                Color::WHITE
+            } else {
+                Color::srgba(0.35, 0.35, 0.4, 0.85)
+            },
+            ..default()
+        },
+        Pickable::IGNORE,
+    ));
 
-        skills_row(panel, assets, fonts, crew, roster, profile, hero, owned);
-        if owned {
-            let (line, color) = match &merge_info {
-                Ok(text) => (text.clone(), BETTER),
-                Err(reason) => (reason.clone(), MUTED),
-            };
-            panel.spawn(text(fonts, line, false, 12.0, color));
-        }
-
-        panel
-            .spawn(Node {
-                margin: UiRect::top(px(2)),
-                column_gap: px(8),
-                ..default()
-            })
-            .with_children(|buttons| {
-                if owned {
-                    level_button(buttons, assets, fonts, cost, at_cap, affordable, cap);
-                    merge_button(buttons, fonts, merge_to);
-                    team_button(buttons, fonts, &hero.id, in_team);
-                } else {
-                    to_tavern_button(buttons, fonts);
-                }
-            });
-        if owned {
-            cabin_row(panel, fonts, cabin);
-        }
-    });
-}
-
-/// Характеристики сейчас и на следующем уровне — на пергаменте.
-fn stats_card(
-    parent: &mut ChildSpawnerCommands,
-    fonts: &Fonts,
-    now: battle_core::Stats,
-    next: battle_core::Stats,
-    growing: bool,
-) {
-    parent
-        .spawn((
+    // Справа — пергамент с характеристиками и вкладки под ним.
+    root.spawn(Node {
+        position_type: PositionType::Absolute,
+        top: px(HERO_TOP + 6.0),
+        right: px(12),
+        width: px(232),
+        flex_direction: FlexDirection::Column,
+        row_gap: px(8),
+        ..default()
+    })
+    .with_children(|col| {
+        col.spawn((
             Node {
-                padding: UiRect::axes(px(16), px(12)),
-                flex_wrap: FlexWrap::Wrap,
+                padding: UiRect::new(px(18), px(18), px(16), px(16)),
+                flex_direction: FlexDirection::Column,
                 row_gap: px(4),
                 ..default()
             },
             Skin(Look::Parchment),
         ))
-        .with_children(|stats| {
-            for (name, a, b) in [
-                ("Здоровье", now.max_hp, next.max_hp),
-                ("Атака", now.atk, next.atk),
-                ("Защита", now.def, next.def),
-                ("Скорость", now.spd, next.spd),
-            ] {
-                stats
-                    .spawn(Node {
-                        width: percent(50),
-                        flex_direction: FlexDirection::Column,
+        .with_children(|card| {
+            card.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: px(-4),
+                    right: px(12),
+                    width: px(36),
+                    height: px(42),
+                    padding: UiRect::bottom(px(8)),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                ImageNode::new(assets.load(format!(
+                    "ui/badge_{}.png",
+                    rarity_label(hero.rarity).to_lowercase()
+                ))),
+            ))
+            .with_child(text(
+                fonts,
+                rarity_label(hero.rarity),
+                true,
+                12.0,
+                Color::WHITE,
+            ));
+            card.spawn((
+                Node {
+                    margin: UiRect::right(px(40)),
+                    ..default()
+                },
+                text(fonts, hero.name.clone(), true, 21.0, INK),
+            ));
+            card.spawn((
+                Node {
+                    margin: UiRect::right(px(40)),
+                    ..default()
+                },
+                text(fonts, hero.title.clone(), false, 13.0, INK_SOFT),
+            ));
+            stars_row(card, assets, if owned { stars } else { 0 }, 16.0);
+            if owned {
+                card.spawn(text(
+                    fonts,
+                    format!("Уровень {level} / {cap}"),
+                    true,
+                    14.0,
+                    INK,
+                ));
+                // Полоса уровня до потолка звёзд.
+                card.spawn((
+                    Node {
+                        height: px(8),
+                        margin: UiRect::bottom(px(4)),
+                        border_radius: BorderRadius::all(px(4)),
                         ..default()
-                    })
-                    .with_children(|cell| {
-                        cell.spawn(text(fonts, name, false, 12.0, INK_SOFT));
-                        cell.spawn(Node {
-                            column_gap: px(6),
-                            align_items: AlignItems::Baseline,
+                    },
+                    BackgroundColor(Color::srgba(0.27, 0.18, 0.11, 0.35)),
+                ))
+                .with_child((
+                    Node {
+                        width: percent(100.0 * level as f32 / cap.max(1) as f32),
+                        height: percent(100),
+                        border_radius: BorderRadius::all(px(4)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.85, 0.55, 0.18)),
+                ));
+            } else {
+                card.spawn(text(fonts, "Ещё не в команде", true, 14.0, INK_SOFT));
+            }
+            let growing = owned && !at_cap;
+            for (icon, name, a, b) in [
+                ("hp", "Здоровье", now.max_hp, next.max_hp),
+                ("atk", "Атака", now.atk, next.atk),
+                ("def", "Защита", now.def, next.def),
+                ("spd", "Скорость", now.spd, next.spd),
+            ] {
+                card.spawn(Node {
+                    column_gap: px(6),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    row.spawn((
+                        Node {
+                            width: px(20),
+                            height: px(20),
                             ..default()
-                        })
-                        .with_children(|row| {
-                            row.spawn(text(fonts, a.to_string(), true, 17.0, INK));
-                            if growing && b > a {
-                                row.spawn(text(fonts, format!("+{}", b - a), true, 13.0, INK_GOOD));
-                            }
-                        });
-                    });
+                        },
+                        ImageNode::new(assets.load(format!("ui/stat_{icon}.png"))),
+                    ));
+                    row.spawn((
+                        Node {
+                            flex_grow: 1.0,
+                            ..default()
+                        },
+                        text(fonts, name, false, 14.0, INK_SOFT),
+                    ));
+                    row.spawn(text(fonts, a.to_string(), true, 15.0, INK));
+                    if growing && b > a {
+                        row.spawn(text(fonts, format!("+{}", b - a), true, 11.0, INK_GOOD));
+                    }
+                });
+            }
+            card.spawn((
+                Node {
+                    margin: UiRect::top(px(4)),
+                    ..default()
+                },
+                text(
+                    fonts,
+                    format!(
+                        "{} · {}{}",
+                        role_label(hero.role),
+                        element_label(hero.element),
+                        if owned {
+                            format!(" · копий {copies}")
+                        } else {
+                            String::new()
+                        }
+                    ),
+                    false,
+                    12.0,
+                    INK_SOFT,
+                ),
+            ));
+        });
+        if owned {
+            tabs_row(col, fonts, gear.tab);
+        }
+    });
+
+    // Умения в латунных кольцах.
+    root.spawn(Node {
+        position_type: PositionType::Absolute,
+        top: px(590),
+        left: px(12),
+        column_gap: px(10),
+        ..default()
+    })
+    .with_children(|row| skills_row(row, assets, fonts, crew, roster, profile, hero, owned));
+
+    root.spawn(Node {
+        position_type: PositionType::Absolute,
+        top: px(704),
+        left: px(12),
+        right: px(12),
+        flex_direction: FlexDirection::Column,
+        row_gap: px(6),
+        ..default()
+    })
+    .with_children(|col| {
+        col.spawn(Node {
+            column_gap: px(8),
+            ..default()
+        })
+        .with_children(|buttons| {
+            if owned {
+                level_button(buttons, assets, fonts, cost, at_cap, affordable, cap);
+                merge_button(buttons, fonts, merge_to);
+                team_button(buttons, fonts, &hero.id, in_team);
+            } else {
+                to_tavern_button(buttons, fonts);
             }
         });
+        if owned {
+            let (line, color) = match &merge_info {
+                Ok(text) => (text.clone(), BETTER),
+                Err(reason) => (reason.clone(), PARCHMENT),
+            };
+            col.spawn(text(fonts, line, false, 12.0, color));
+        }
+    });
 }
+
+/// Характеристики сейчас и на следующем уровне — на пергаменте.
 
 fn tabs_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts, tab: CrewTab) {
     panel
@@ -1315,7 +1371,7 @@ fn level_button(
     let mut button = buttons.spawn((
         Node {
             flex_grow: 1.0,
-            height: px(60),
+            height: px(56),
             flex_direction: FlexDirection::Column,
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
@@ -1398,7 +1454,7 @@ fn level_up(
 /// Три умения героя: уровень, потолок от звёзд, цена следующего уровня; тап — повысить.
 #[allow(clippy::too_many_arguments)]
 fn skills_row(
-    panel: &mut ChildSpawnerCommands,
+    row: &mut ChildSpawnerCommands,
     assets: &AssetServer,
     fonts: &Fonts,
     crew: &CrewData,
@@ -1409,67 +1465,86 @@ fn skills_row(
 ) {
     let levels = roster.skills(&hero.id);
     let cap = crew.skill_cap(roster.stars(&hero.id));
-    let names = [&hero.basic.name, &hero.skill.name, &hero.ultimate.name];
-    let kinds = ["атака", "спецатака", "ульта"];
-    panel
-        .spawn(Node {
-            column_gap: px(8),
+    let icons = skill_icons(&hero.id);
+    for i in 0..3 {
+        let level = levels[i];
+        let (charts, silver) = crew.skill_cost(level);
+        let can = owned && level < cap && profile.charts >= charts && profile.silver >= silver;
+        let mut slot = row.spawn(Node {
+            width: px(84),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            row_gap: px(2),
             ..default()
-        })
-        .with_children(|row| {
-            for i in 0..3 {
-                let level = levels[i];
-                let (charts, silver) = crew.skill_cost(level);
-                let can =
-                    owned && level < cap && profile.charts >= charts && profile.silver >= silver;
-                let sub = if !owned {
-                    kinds[i].to_string()
-                } else if level >= cap {
-                    format!("ур. {level} · потолок")
+        });
+        slot.with_children(|c| {
+            let mut ring = c.spawn((
+                Node {
+                    width: px(SKILL_RING),
+                    height: px(SKILL_RING),
+                    border_radius: BorderRadius::MAX,
+                    ..default()
+                },
+                ImageNode::new(assets.load(format!("ui/skill_{}.png", icons[i]))),
+                Pickable::IGNORE,
+            ));
+            if can {
+                ring.insert(Outline::new(px(2), px(1), GOLD));
+            }
+            // Табличка уровня под кольцом.
+            c.spawn((
+                Node {
+                    margin: UiRect::top(px(-10)),
+                    padding: UiRect::axes(px(10), px(1)),
+                    border: UiRect::all(px(2)),
+                    border_radius: BorderRadius::all(px(10)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.16, 0.10, 0.06)),
+                BorderColor::all(Color::srgb(0.72, 0.55, 0.26)),
+                Pickable::IGNORE,
+            ))
+            .with_child(text(
+                fonts,
+                if level >= cap && owned {
+                    format!("ур. {level} · макс.")
                 } else {
                     format!("ур. {level}")
-                };
-                let mut chip = row.spawn((
-                    Node {
-                        flex_grow: 1.0,
-                        flex_basis: px(0),
-                        padding: UiRect::axes(px(6), px(6)),
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::Center,
-                        row_gap: px(1),
-                        border_radius: BorderRadius::all(px(12)),
-                        ..default()
-                    },
-                    Skin(Look::Parchment),
-                ));
-                if can {
-                    chip.insert(Outline::new(px(2), px(0), GOLD));
-                }
-                chip.with_children(|c| {
-                    c.spawn((
-                        text(fonts, names[i].clone(), true, 12.0, INK),
-                        TextLayout::justify(Justify::Center),
-                    ));
-                    c.spawn(text(fonts, sub, false, 11.0, INK_SOFT));
-                    if owned && level < cap {
-                        style::costs(
-                            c,
-                            assets,
-                            fonts,
-                            &[("charts", charts), ("silver", silver)],
-                            11.0,
-                            if can { INK_GOOD } else { INK_SOFT },
-                        );
-                    }
-                });
-                if owned {
-                    pressable(&mut chip);
-                    chip.observe(move |_: On<PointerClick>, mut commands: Commands| {
-                        commands.run_system_cached_with(upgrade_skill, i);
-                    });
-                }
+                },
+                true,
+                11.0,
+                BRIGHT,
+            ));
+            if owned && level < cap {
+                style::costs(
+                    c,
+                    assets,
+                    fonts,
+                    &[("charts", charts), ("silver", silver)],
+                    10.0,
+                    if can { BETTER } else { BRIGHT },
+                );
             }
         });
+        if owned {
+            pressable(&mut slot);
+            slot.observe(move |_: On<PointerClick>, mut commands: Commands| {
+                commands.run_system_cached_with(upgrade_skill, i);
+            });
+        }
+    }
+}
+
+/// Временные иконки умений (кольца из макетов) — пока нет своих рисунков на каждое умение.
+fn skill_icons(hero: &str) -> [&'static str; 3] {
+    match hero {
+        "ren" => ["blade", "swirl", "swirl"],
+        "sora" => ["wind", "wind", "swirl"],
+        "kaya" => ["musket", "pistol", "musket"],
+        "lira" => ["pistol", "wind", "spyglass"],
+        "mei" => ["blade", "swirl", "wind"],
+        _ => ["blade", "swirl", "blade"],
+    }
 }
 
 /// Повысить умение героя из карточки за лоции и серебро.
@@ -1558,14 +1633,14 @@ fn merge_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, to: Option<u3
     let ready = to.is_some();
     let mut button = buttons.spawn((
         Node {
-            width: px(112),
-            height: px(60),
+            width: px(108),
+            height: px(56),
             flex_direction: FlexDirection::Column,
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             ..default()
         },
-        Skin(if ready { Look::Go } else { Look::Off }),
+        Skin(if ready { Look::Go } else { Look::TabOff }),
     ));
     button.with_children(|b| {
         b.spawn(text(fonts, "Слияние", true, 15.0, Color::WHITE));
@@ -1620,7 +1695,7 @@ fn to_tavern_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts) {
     let mut button = buttons.spawn((
         Node {
             flex_grow: 1.0,
-            height: px(60),
+            height: px(56),
             flex_direction: FlexDirection::Column,
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
@@ -1648,8 +1723,8 @@ fn team_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, id: &str, in_t
     let id = id.to_string();
     let mut button = buttons.spawn((
         Node {
-            width: px(112),
-            height: px(60),
+            width: px(108),
+            height: px(56),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             ..default()

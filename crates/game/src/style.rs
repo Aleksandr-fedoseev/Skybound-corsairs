@@ -20,8 +20,6 @@ pub const INK_GOOD: Color = Color::srgb(0.16, 0.45, 0.20);
 pub enum Look {
     /// Доски с латунной окантовкой — большие панели.
     Wood,
-    /// Та же панель с тонкой рамкой — маленькие карточки.
-    WoodSmall,
     /// Пергамент — карточки внутри панелей.
     Parchment,
     /// Латунная кнопка главного действия.
@@ -40,7 +38,6 @@ impl Look {
     fn file(self) -> &'static str {
         match self {
             Look::Wood => "ui/panel.png",
-            Look::WoodSmall => "ui/panel_small.png",
             Look::Parchment => "ui/card.png",
             Look::Go => "ui/button.png",
             Look::Dark => "ui/button_dark.png",
@@ -57,7 +54,6 @@ impl Look {
         let (x, y) = match self {
             // Угловые накладки с заклёпками не растягиваются.
             Look::Wood => (36.0, 36.0),
-            Look::WoodSmall => (22.0, 22.0),
             Look::Parchment => (16.0, 16.0),
             // Болты на концах доски не растягиваются.
             Look::Plank => (58.0, 16.0),
@@ -203,56 +199,100 @@ pub fn backdrop(root: &mut ChildSpawnerCommands, assets: &AssetServer, image: &s
     ));
 }
 
-/// Шапка экрана: доска с названием слева и ресурсами экрана справа.
-pub fn header(
+/// Полоса ресурсов вверху экрана: тёмные плашки с иконкой слева.
+pub fn top_bar(
     root: &mut ChildSpawnerCommands,
     assets: &AssetServer,
     fonts: &Fonts,
-    title: &str,
     resources: &[(&str, u32)],
 ) {
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
-            top: px(6),
-            left: px(8),
-            right: px(8),
-            height: px(54),
-            // Болты на концах доски остаются открытыми.
-            padding: UiRect::horizontal(px(44)),
-            justify_content: JustifyContent::SpaceBetween,
+            top: px(0),
+            left: px(0),
+            right: px(0),
+            height: px(50),
+            padding: UiRect::axes(px(14), px(8)),
+            column_gap: px(14),
+            justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
+            border: UiRect::bottom(px(2)),
             ..default()
         },
-        skin(assets, Look::Plank),
+        BackgroundColor(Color::srgba(0.09, 0.06, 0.04, 0.92)),
+        BorderColor::all(Color::srgb(0.62, 0.46, 0.20)),
     ))
     .with_children(|bar| {
-        bar.spawn((
-            Text::new(title),
-            fonts.text(true, 22.0),
+        for (kind, n) in resources {
+            bar.spawn(Node {
+                flex_grow: 1.0,
+                flex_basis: px(0),
+                height: px(32),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|slot| {
+                slot.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: px(12),
+                        right: px(0),
+                        top: px(2),
+                        bottom: px(2),
+                        padding: UiRect::right(px(12)),
+                        justify_content: JustifyContent::FlexEnd,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    ImageNode {
+                        image: assets.load("ui/pill.png"),
+                        image_mode: NodeImageMode::Sliced(TextureSlicer {
+                            border: BorderRect::all(20.0),
+                            ..default()
+                        }),
+                        ..default()
+                    },
+                ))
+                .with_child((
+                    Text::new(n.to_string()),
+                    fonts.text(true, 15.0),
+                    TextColor(Color::srgb(1.0, 0.93, 0.78)),
+                ));
+                slot.spawn(icon(assets, kind, 30.0));
+            });
+        }
+    });
+}
+
+/// Доска-заголовок экрана по центру.
+pub fn title(root: &mut ChildSpawnerCommands, fonts: &Fonts, label: &str, top: f32) {
+    root.spawn(Node {
+        position_type: PositionType::Absolute,
+        top: px(top),
+        left: px(0),
+        right: px(0),
+        justify_content: JustifyContent::Center,
+        ..default()
+    })
+    .with_children(|row| {
+        row.spawn((
+            Node {
+                height: px(44),
+                padding: UiRect::horizontal(px(64)),
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            Skin(Look::Plank),
+        ))
+        .with_child((
+            Text::new(label),
+            fonts.text(true, 20.0),
             TextColor(Color::srgb(1.0, 0.93, 0.78)),
             TextShadow {
                 offset: Vec2::new(0.0, 2.0),
                 color: Color::srgba(0.0, 0.0, 0.0, 0.7),
             },
         ));
-        bar.spawn((
-            Node {
-                padding: UiRect::axes(px(10), px(4)),
-                border_radius: BorderRadius::all(px(14)),
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.35)),
-        ))
-        .with_children(|pill| {
-            costs(
-                pill,
-                assets,
-                fonts,
-                resources,
-                14.0,
-                Color::srgb(1.0, 0.93, 0.78),
-            );
-        });
     });
 }

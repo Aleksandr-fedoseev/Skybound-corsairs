@@ -340,6 +340,75 @@ def biggest_blob_box(solid):
     return (int(cols.min()), int(rows.min()), int(cols.max()) + 1, int(rows.max()) + 1)
 
 
+# Временные иконки умений — кольца, вырезанные из макетов Gemini: (макет, центр x, y, радиус).
+SKILL_RINGS = {
+    "pistol": ("crew", 78, 624, 40),
+    "wind": ("crew", 178, 624, 40),
+    "spyglass": ("crew", 278, 624, 40),
+    "blade": ("crew_alt", 82, 636, 44),
+    "swirl": ("crew_alt", 190, 636, 44),
+    "musket": ("crew_alt", 298, 636, 44),
+}
+
+
+def skill_ring(mockup, cx, cy, r, size=96):
+    src = Image.open(SRC / "mockups" / f"{mockup}.png").convert("RGBA")
+    im = src.crop((cx - r, cy - r, cx + r, cy + r)).resize((size * 2, size * 2), Image.LANCZOS)
+    mask = Image.new("L", im.size, 0)
+    ImageDraw.Draw(mask).ellipse((6, 6, size * 2 - 7, size * 2 - 7), fill=255)
+    im.putalpha(mask)
+    return im.resize((size, size), Image.LANCZOS)
+
+
+def ink_icon(kind, size=48):
+    """Иконки характеристик тёмными чернилами — для пергамента."""
+    s = size * 4
+    im = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    ink = (74, 46, 28, 255)
+    if kind == "hp":
+        d.ellipse((s * .1, s * .18, s * .52, s * .58), fill=ink)
+        d.ellipse((s * .48, s * .18, s * .9, s * .58), fill=ink)
+        d.polygon([(s * .12, s * .45), (s * .88, s * .45), (s * .5, s * .9)], fill=ink)
+    elif kind == "atk":
+        d.polygon([(s * .82, s * .08), (s * .92, s * .18), (s * .4, s * .7), (s * .3, s * .6)], fill=ink)
+        d.polygon([(s * .18, s * .56), (s * .44, s * .82), (s * .38, s * .88), (s * .12, s * .62)], fill=ink)
+        d.line((s * .3, s * .7, s * .1, s * .9), fill=ink, width=s // 12)
+    elif kind == "def":
+        d.polygon([(s * .5, s * .06), (s * .88, s * .2), (s * .82, s * .6), (s * .5, s * .94), (s * .18, s * .6), (s * .12, s * .2)], fill=ink)
+        d.polygon([(s * .5, s * .2), (s * .74, s * .29), (s * .7, s * .56), (s * .5, s * .78)], fill=(120, 84, 52, 255))
+    elif kind == "spd":
+        d.polygon([(s * .3, s * .08), (s * .56, s * .08), (s * .56, s * .58), (s * .9, s * .7), (s * .9, s * .9), (s * .3, s * .9)], fill=ink)
+        for y in (.3, .5, .7):
+            d.line((s * .02, s * y, s * .22, s * y), fill=ink, width=s // 16)
+    return im.resize((size, size), Image.LANCZOS)
+
+
+def badge(rarity, w=96, h=112):
+    """Флажок редкости: щиток цвета редкости в латунной кайме."""
+    s = 4
+    im = Image.new("RGBA", (w * s, h * s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    W, H = w * s, h * s
+    shape = [(0, 0), (W, 0), (W, H * .78), (W / 2, H), (0, H * .78)]
+    d.polygon(shape, fill=BRASS_DARK)
+    inset = 7 * s
+    inner = [(inset, inset), (W - inset, inset), (W - inset, H * .76), (W / 2, H - inset * 1.4), (inset, H * .76)]
+    col = {"R": (70, 130, 80), "SR": (52, 82, 150), "SSR": (150, 70, 160)}[rarity]
+    d.polygon(inner, fill=col)
+    d.line(inner + [inner[0]], fill=(240, 205, 120), width=2 * s)
+    return im.resize((w, h), Image.LANCZOS)
+
+
+def pill(w=192, h=48):
+    """Плашка счётчика ресурса: тёмная, в тонкой латунной кайме."""
+    im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    d.rounded_rectangle((1, 1, w - 2, h - 2), h // 2 - 1, fill=(28, 18, 12, 235), outline=BRASS_DARK, width=3)
+    d.rounded_rectangle((4, 4, w - 5, h - 5), h // 2 - 4, outline=(200, 150, 70, 160), width=1)
+    return im
+
+
 def save(name, im):
     src = SRC / name
     base = name.removesuffix(".png")
@@ -348,9 +417,6 @@ def save(name, im):
     elif base in ENAMEL and (SRC / "button_dark.png").exists():
         # Нет своей картинки — перекрашиваем рисованную тёмную кнопку: форма у всех одна.
         im = recolor_enamel(from_source(SRC / "button_dark.png", im.size), *ENAMEL[base])
-    elif base == "panel_small" and (SRC / "panel.png").exists():
-        # Маленькие карточки: та же панель, рамка тоньше.
-        im = from_source(SRC / "panel.png", im.size)
     elif base == "icon_silver" and (SRC / "icon_doubloons.png").exists():
         im = silver_from_gold(from_source(SRC / "icon_doubloons.png", im.size))
     im.save(OUT / name)
@@ -360,7 +426,6 @@ def save(name, im):
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     save("panel.png", panel())
-    save("panel_small.png", panel().resize((112, 112), Image.LANCZOS))
     save("card.png", parchment())
     save("button.png", button((236, 160, 70), (176, 96, 30), (255, 226, 160)))
     save("button_pressed.png", button((176, 96, 30), (136, 70, 20), (220, 180, 110)))
@@ -371,6 +436,14 @@ def main():
     save("plank.png", plank())
     for kind in ("silver", "planks", "ether", "journals", "doubloons", "charts", "details"):
         save(f"icon_{kind}.png", icon(kind))
+    save("pill.png", pill())
+    for kind in ("hp", "atk", "def", "spd"):
+        save(f"stat_{kind}.png", ink_icon(kind))
+    for rarity in ("R", "SR", "SSR"):
+        save(f"badge_{rarity.lower()}.png", badge(rarity))
+    if (SRC / "mockups").exists():
+        for kind, ring in SKILL_RINGS.items():
+            save(f"skill_{kind}.png", skill_ring(*ring))
     heroes = json.load(open("data/heroes.json"))
     anim = json.load(open("data/animated.json"))
     for h in heroes:
