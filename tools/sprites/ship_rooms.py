@@ -3,7 +3,8 @@
 
   python3 tools/sprites/ship_rooms.py
 
-art/2d/ship/: base_a.png — корабль-разрез на небе (первый облик всех комнат); up_<что>.png — тот же
+art/2d/ship/: base_a.png — корабль-разрез на небе (первый облик всех комнат); exterior.png — он же
+снаружи, с закрытым бортом; up_<что>.png — тот же
 рисунок, где правкой в Gemini улучшена одна комната; locked.png — правка с заколоченной комнатой;
 scaffold.png — леса на белом фоне; propeller.png — пропеллер анфас на белом (крутится в игре). Рамки комнат — в data/ship.json (view.rooms, пиксели 1024).
 Небо вырезается: заливка от краёв по цвету неба и крупные просветы выше корпуса.
@@ -57,6 +58,8 @@ def main():
     view = json.loads((ROOT / "data" / "ship.json").read_text())["view"]
     rects = {r["id"]: r["rect"] for r in view["rooms"]}
     without_sky(Image.open(ART / "base_a.png").convert("RGB")).save(OUT / "hull.png", optimize=True)
+    # Тот же корабль снаружи (правка base_a в Gemini: борт закрыт) — на главной.
+    without_sky(Image.open(ART / "exterior.png").convert("RGB")).save(OUT / "exterior.png", optimize=True)
     for room, src in UPGRADES.items():
         x, y, w, h = rects[room]
         pic = without_sky(Image.open(ART / f"{src}.png").convert("RGB"))

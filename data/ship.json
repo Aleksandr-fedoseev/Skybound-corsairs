@@ -58,13 +58,15 @@
     { "id": "lookout", "name": "Подзорная башня", "icon": "menu/module_lookout.png", "unlock_hull": 7, "start_level": 0 }
   ],
   "view": {
-    "exterior": "menu/ship_lvl1.png",
+    "exterior": "ship/exterior.png",
+    "backdrop": { "image": "menu/sky_pano.jpg", "width": 1021, "speed": 9 },
+    "birds": { "image": "fx/bird.png", "count": 5, "speed": 38, "every": 22, "top": 250 },
     "clouds": [
-      { "image": "fx/cloud_1.png", "top": 150, "width": 170, "speed": 7, "phase": 0.1, "alpha": 0.7 },
-      { "image": "fx/cloud_2.png", "top": 250, "width": 230, "speed": 10, "phase": 0.55, "alpha": 0.75 },
-      { "image": "fx/cloud_3.png", "top": 420, "width": 200, "speed": 8, "phase": 0.85, "alpha": 0.7 },
-      { "image": "fx/cloud_2.png", "top": 630, "width": 340, "speed": 26, "phase": 0.3, "alpha": 0.9, "front": true },
-      { "image": "fx/cloud_1.png", "top": 590, "width": 260, "speed": 20, "phase": 0.8, "alpha": 0.85, "front": true }
+      { "image": "menu/cloud_1.png", "top": 150, "width": 190, "speed": 14, "phase": 0.1, "alpha": 0.9 },
+      { "image": "menu/cloud_2.png", "top": 270, "width": 150, "speed": 18, "phase": 0.55, "alpha": 0.9 },
+      { "image": "menu/cloud_3.png", "top": 430, "width": 170, "speed": 16, "phase": 0.85, "alpha": 0.9 },
+      { "image": "menu/cloud_4.png", "top": 610, "width": 560, "speed": 34, "phase": 0.3, "alpha": 1.0, "front": true },
+      { "image": "menu/cloud_2.png", "top": 650, "width": 260, "speed": 28, "phase": 0.8, "alpha": 1.0, "front": true }
     ],
     "hull": "ship/hull.png",
     "size": 1024,
@@ -78,7 +80,7 @@
       { "id": "hold", "rect": [160, 648, 212, 168], "tiers": [{ "from": 2, "image": "ship/hold_2.png" }] },
       { "id": "workshop", "rect": [390, 648, 188, 168], "tiers": [] },
       { "id": "cabins", "rect": [592, 648, 190, 168], "tiers": [] },
-      { "id": "windcatchers", "rect": [21, 166, 452, 304], "tag": [0.17, 0.12], "tiers": [{ "from": 2, "image": "ship/windcatchers_2.png" }] }
+      { "id": "windcatchers", "rect": [21, 166, 452, 304], "tag": [0.17, 0.12], "outside": true, "tiers": [{ "from": 2, "image": "ship/windcatchers_2.png" }] }
     ]
   }
 }

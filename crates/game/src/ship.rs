@@ -38,8 +38,13 @@ pub struct ShipData {
 /// Корабль-разрез на главной: корпус и комнаты отсеков поверх него.
 #[derive(Deserialize)]
 pub struct ShipView {
-    /// Корабль снаружи — на главной.
+    /// Корабль снаружи — на главной; рисунок того же размера, что и разрез.
     pub exterior: String,
+    /// Панорама неба за кораблём: едет влево по кругу.
+    pub backdrop: Backdrop,
+    /// Стайка птиц изредка обгоняет корабль.
+    #[serde(default)]
+    pub birds: Option<Birds>,
     /// Облака фона главной: плывут мимо корабля.
     #[serde(default)]
     pub clouds: Vec<CloudDef>,
@@ -70,6 +75,24 @@ pub struct CloudDef {
 }
 
 #[derive(Deserialize)]
+pub struct Backdrop {
+    pub image: String,
+    /// Ширина кольца панорамы (логические px при высоте экрана) и скорость (px/с).
+    pub width: f32,
+    pub speed: f32,
+}
+
+#[derive(Deserialize)]
+pub struct Birds {
+    pub image: String,
+    pub count: usize,
+    /// Скорость (px/с), раз в сколько секунд пролетает стайка, высота полёта (px от верха).
+    pub speed: f32,
+    pub every: f32,
+    pub top: f32,
+}
+
+#[derive(Deserialize)]
 pub struct Propeller {
     pub image: String,
     /// Центр втулки и размах — в пикселях рисунка корпуса.
@@ -90,6 +113,9 @@ pub struct Room {
     /// Где плашка уровня — левый нижний угол в долях рамки; нет — внизу слева.
     #[serde(default)]
     pub tag: [f32; 2],
+    /// Комната видна и снаружи (над палубой): её облик рисуется и на главной.
+    #[serde(default)]
+    pub outside: bool,
 }
 
 #[derive(Deserialize)]

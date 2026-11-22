@@ -39,6 +39,7 @@ const TOAST_LONG_SECONDS: f32 = 6.0;
 /// Корабль покачивается на ветру: период (с) и размах (px).
 const BOB_PERIOD: f32 = 4.0;
 const BOB_PX: f32 = 6.0;
+const BOB_TILT_DEG: f32 = 1.2;
 /// Корабль-разрез на главной: квадрат рисунка корпуса (логические px экрана 540×960).
 const SHIP_LEFT: f32 = -5.0;
 /// Ширина экрана в логических px.
@@ -226,7 +227,14 @@ pub fn plugin(app: &mut App) {
             // После пересборки — сразу качка: иначе новый корабль кадр стоит на месте и дёргается.
             (
                 rebuild_menu,
-                (refresh_values, refresh_ether_bubble, bob_ship, spin_and_pulse, drift_clouds),
+                (
+                    refresh_values,
+                    refresh_ether_bubble,
+                    bob_ship,
+                    spin_and_pulse,
+                    drift_clouds,
+                    scroll_backdrop,
+                ),
             )
                 .chain()
                 .run_if(in_state(Screen::Menu)),
@@ -373,13 +381,11 @@ fn build(commands: &mut Commands, view: &MenuView) {
                 height: percent(100),
                 ..default()
             },
-            ImageNode {
-                image_mode: NodeImageMode::Stretch,
-                ..ImageNode::new(assets.load("menu/island.jpg"))
-            },
+            BackgroundColor(Color::srgb_u8(62, 104, 178)),
         ))
         .with_children(|root| {
             let open_ship = view.ship_open.0;
+            backdrop(root, assets, &ship_data.view);
             clouds(root, assets, &ship_data.view, false);
             top_bar(root, fonts, profile);
             if !open_ship {
@@ -425,7 +431,7 @@ fn build(commands: &mut Commands, view: &MenuView) {
                 ship_rooms(root, assets, fonts, ship_data, ship, view.open.0.as_deref());
                 back_button(root, fonts);
             } else {
-                ship_outside(root, assets, fonts, ship_data);
+                ship_outside(root, assets, fonts, ship_data, ship);
             }
             if !open_ship {
                 // Передние облака — только на главной: в полном виде закрывали бы комнаты.
@@ -457,20 +463,58 @@ fn build(commands: &mut Commands, view: &MenuView) {
         });
 }
 
-/// Корабль снаружи (главная): тап открывает полный вид с комнатами.
-fn ship_outside(root: &mut ChildSpawnerCommands, assets: &AssetServer, fonts: &Fonts, ship_data: &ShipData) {
+/// Корабль снаружи (главная) — в той же рамке, что и разрез: тап открывает полный вид с комнатами.
+fn ship_outside(
+    root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    ship_data: &ShipData,
+    ship: &Ship,
+) {
+    let view = &ship_data.view;
+    let pct = |v: f32| percent(v / view.size * 100.0);
     let mut outside = root.spawn((
         ShipSprite,
         Node {
             position_type: PositionType::Absolute,
-            left: px(80),
-            bottom: px(268),
-            width: px(380),
+            left: px(SHIP_LEFT),
+            top: px(SHIP_TOP),
+            width: px(SHIP_SIDE),
+            height: px(SHIP_SIDE),
             ..default()
         },
-        ImageNode::new(assets.load(ship_data.view.exterior.clone())),
         UiTransform::default(),
     ));
+    outside.with_children(|deck| {
+        deck.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: percent(100),
+                height: percent(100),
+                ..default()
+            },
+            ImageNode::new(assets.load(view.exterior.clone())),
+        ));
+        // Улучшения над палубой (ветроловы) видны и снаружи.
+        for room in view.rooms.iter().filter(|r| r.outside) {
+            let Some(image) = room.image(ship.level(&room.id)) else {
+                continue;
+            };
+            let [x, y, w, h] = room.rect;
+            deck.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: pct(x),
+                    top: pct(y),
+                    width: pct(w),
+                    height: pct(h),
+                    ..default()
+                },
+                ImageNode::new(assets.load(image.to_string())),
+            ));
+        }
+        propeller(deck, assets, view);
+    });
     outside.observe(
         |_: On<PointerClick>,
          mut open: ResMut<ShipOpen>,
@@ -481,7 +525,29 @@ fn ship_outside(root: &mut ChildSpawnerCommands, assets: &AssetServer, fonts: &F
             rebuild.0 = true;
         },
     );
-    ether_bubble(root, fonts, px(300), px(318));
+    ether_bubble(root, fonts, px(60), px(300));
+}
+
+/// Пропеллер на корме, поверх руля: крутится всегда.
+fn propeller(ship: &mut ChildSpawnerCommands, assets: &AssetServer, view: &crate::ship::ShipView) {
+    let Some(prop) = &view.propeller else {
+        return;
+    };
+    let pct = |v: f32| percent(v / view.size * 100.0);
+    ship.spawn((
+        Spinner(prop.turns_per_second),
+        Node {
+            position_type: PositionType::Absolute,
+            left: pct(prop.at[0] - prop.size / 2.0),
+            top: pct(prop.at[1] - prop.size / 2.0),
+            width: pct(prop.size),
+            height: pct(prop.size),
+            ..default()
+        },
+        ImageNode::new(assets.load(prop.image.clone())),
+        UiTransform::default(),
+        Pickable::IGNORE,
+    ));
 }
 
 /// Назад из полного вида корабля.
@@ -556,23 +622,7 @@ fn ship_rooms(
             ImageNode::new(assets.load(view.hull.clone())),
             Pickable::IGNORE,
         ));
-        // Пропеллер на корме, поверх руля.
-        if let Some(prop) = &view.propeller {
-            deck.spawn((
-                Spinner(prop.turns_per_second),
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: pct(prop.at[0] - prop.size / 2.0),
-                    top: pct(prop.at[1] - prop.size / 2.0),
-                    width: pct(prop.size),
-                    height: pct(prop.size),
-                    ..default()
-                },
-                ImageNode::new(assets.load(prop.image.clone())),
-                UiTransform::default(),
-                Pickable::IGNORE,
-            ));
-        }
+        propeller(deck, assets, view);
         for room in &view.rooms {
             let Some(compartment) = ship_data.compartment(&room.id) else {
                 continue;
@@ -603,15 +653,27 @@ fn ship_rooms(
                     ..default()
                 };
                 if let Some(image) = room.image(level) {
-                    c.spawn((fill(), ImageNode::new(assets.load(image.to_string())), Pickable::IGNORE));
+                    c.spawn((
+                        fill(),
+                        ImageNode::new(assets.load(image.to_string())),
+                        Pickable::IGNORE,
+                    ));
                 }
                 if building {
-                    c.spawn((fill(), ImageNode::new(assets.load(view.scaffold.clone())), Pickable::IGNORE));
+                    c.spawn((
+                        fill(),
+                        ImageNode::new(assets.load(view.scaffold.clone())),
+                        Pickable::IGNORE,
+                    ));
                     c.spawn((room_tag(room.tag), Pickable::IGNORE))
                         .with_child((RoomTimer, text(fonts, "", true, 12.0, GOLD)));
                 } else if level == 0 {
                     // Не построен: доски с замком и что нужно, чтобы открыть.
-                    c.spawn((fill(), ImageNode::new(assets.load(view.locked.clone())), Pickable::IGNORE));
+                    c.spawn((
+                        fill(),
+                        ImageNode::new(assets.load(view.locked.clone())),
+                        Pickable::IGNORE,
+                    ));
                     let need = if ship.hull() < compartment.unlock_hull {
                         format!("Корпус {}", compartment.unlock_hull)
                     } else {
@@ -694,7 +756,12 @@ fn ether_bubble(parent: &mut ChildSpawnerCommands, fonts: &Fonts, left: Val, top
 
 /// Облака плывут влево — корабль летит вправо. Положение — от часов, поэтому после
 /// пересборки меню облака не прыгают.
-fn clouds(root: &mut ChildSpawnerCommands, assets: &AssetServer, view: &crate::ship::ShipView, front: bool) {
+fn clouds(
+    root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    view: &crate::ship::ShipView,
+    front: bool,
+) {
     for cloud in view.clouds.iter().filter(|c| c.front == front) {
         root.spawn((
             Cloud {
@@ -707,7 +774,6 @@ fn clouds(root: &mut ChildSpawnerCommands, assets: &AssetServer, view: &crate::s
                 left: px(0),
                 top: px(cloud.top),
                 width: px(cloud.width),
-                height: px(cloud.width / 2.0),
                 ..default()
             },
             ImageNode {
@@ -717,6 +783,94 @@ fn clouds(root: &mut ChildSpawnerCommands, assets: &AssetServer, view: &crate::s
             UiTransform::default(),
             Pickable::IGNORE,
         ));
+    }
+}
+
+/// Панорама неба за кораблём (два куска встык едут влево) и стайка птиц.
+fn backdrop(root: &mut ChildSpawnerCommands, assets: &AssetServer, view: &crate::ship::ShipView) {
+    let sky = &view.backdrop;
+    for copy in 0..2 {
+        root.spawn((
+            Backdrop {
+                copy: copy as f32,
+                width: sky.width,
+                speed: sky.speed,
+            },
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0),
+                top: px(0),
+                width: px(sky.width),
+                height: percent(100),
+                ..default()
+            },
+            ImageNode::new(assets.load(sky.image.clone())),
+            UiTransform::default(),
+            Pickable::IGNORE,
+        ));
+    }
+    if let Some(birds) = &view.birds {
+        for i in 0..birds.count {
+            // Клин: первая впереди, остальные позади и попеременно выше-ниже.
+            let back = i.div_ceil(2) as f32;
+            let side = if i % 2 == 0 { 1.0 } else { -1.0 };
+            let size = 22.0 - back * 2.0;
+            root.spawn((
+                Bird {
+                    offset: Vec2::new(-back * 34.0, side * back * 16.0),
+                    phase: i as f32 * 1.7,
+                },
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(0),
+                    top: px(birds.top),
+                    width: px(size),
+                    height: px(size / 2.0),
+                    ..default()
+                },
+                ImageNode::new(assets.load(birds.image.clone())),
+                UiTransform::default(),
+                Pickable::IGNORE,
+            ));
+        }
+    }
+}
+
+#[derive(Component)]
+struct Backdrop {
+    copy: f32,
+    width: f32,
+    speed: f32,
+}
+
+#[derive(Component)]
+struct Bird {
+    offset: Vec2,
+    phase: f32,
+}
+
+/// Фон едет от часов: после пересборки меню не прыгает.
+fn scroll_backdrop(
+    time: Res<Time>,
+    data: Res<ShipData>,
+    mut skies: Query<(&Backdrop, &mut UiTransform), Without<Bird>>,
+    mut birds: Query<(&Bird, &mut UiTransform), Without<Backdrop>>,
+) {
+    let t = time.elapsed_secs();
+    for (sky, mut transform) in &mut skies {
+        let x = -(t * sky.speed).rem_euclid(sky.width) + sky.copy * sky.width;
+        transform.translation = Val2::px(x, 0.0);
+    }
+    let Some(flock) = &data.view.birds else {
+        return;
+    };
+    // Стайка обгоняет корабль слева направо раз в `every` секунд, остальное время — за экраном.
+    let x = (t % flock.every) * flock.speed - 60.0;
+    let drift = (t * 0.7).sin() * 10.0;
+    for (bird, mut transform) in &mut birds {
+        let flap = (t * 7.0 + bird.phase).sin();
+        transform.translation = Val2::px(x + bird.offset.x, bird.offset.y + drift);
+        transform.scale = Vec2::new(1.0, 0.35 + 0.65 * flap.abs()) * Vec2::new(1.0, flap.signum());
     }
 }
 
@@ -1375,6 +1529,8 @@ fn bob_ship(time: Res<Time>, mut ships: Query<&mut UiTransform, With<ShipSprite>
     let t = time.elapsed_secs() / BOB_PERIOD * std::f32::consts::TAU;
     for mut transform in &mut ships {
         transform.translation = Val2::px(0.0, BOB_PX * t.sin());
+        // Нос чуть клюёт вслед за качкой.
+        transform.rotation = Rot2::degrees(BOB_TILT_DEG * t.cos());
     }
 }
 

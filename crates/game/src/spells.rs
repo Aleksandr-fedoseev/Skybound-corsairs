@@ -559,8 +559,20 @@ pub fn spawn_spells(
                                 flip: false,
                             },
                         ),
-                        (windup, Piece::Glow { at: hit, size: first_h * 0.9 }),
-                        (windup, Piece::Arcs { at: hit, radius: first_h * 0.35 }),
+                        (
+                            windup,
+                            Piece::Glow {
+                                at: hit,
+                                size: first_h * 0.9,
+                            },
+                        ),
+                        (
+                            windup,
+                            Piece::Arcs {
+                                at: hit,
+                                radius: first_h * 0.35,
+                            },
+                        ),
                     ],
                     &time,
                 ));
@@ -583,8 +595,20 @@ pub fn spawn_spells(
                 let mut steps = vec![
                     (windup - gap.max(0.1), cut(0.25, 0.8)),
                     (windup, cut(-0.2, 1.0)),
-                    (windup, Piece::Glow { at: hit, size: first_h * 1.2 }),
-                    (windup, Piece::Arcs { at: hit, radius: first_h * 0.45 }),
+                    (
+                        windup,
+                        Piece::Glow {
+                            at: hit,
+                            size: first_h * 1.2,
+                        },
+                    ),
+                    (
+                        windup,
+                        Piece::Arcs {
+                            at: hit,
+                            radius: first_h * 0.45,
+                        },
+                    ),
                 ];
                 // Кольцо — по росту рисунка (рисованный боец бывает выше своего слота).
                 let stature = screen
@@ -620,17 +644,71 @@ pub fn spawn_spells(
                 };
                 commands.spawn(blades(
                     vec![
-                        (0.05, Piece::SkyBolt { to: sabers, width: 0.9 }),
-                        (0.05, Piece::Glow { at: sabers, size: height * 0.9 }),
-                        (0.05, Piece::Arcs { at: sabers, radius: height * 0.3 }),
-                        (0.35, Piece::SkyBolt { to: sabers, width: 0.6 }),
-                        (0.35, Piece::Arcs { at: sabers, radius: height * 0.25 }),
-                        (windup - 0.12, Piece::SkyBolt { to: hit, width: 1.4 }),
-                        (windup - 0.12, Piece::Glow { at: hit, size: first_h * 1.2 }),
+                        (
+                            0.05,
+                            Piece::SkyBolt {
+                                to: sabers,
+                                width: 0.9,
+                            },
+                        ),
+                        (
+                            0.05,
+                            Piece::Glow {
+                                at: sabers,
+                                size: height * 0.9,
+                            },
+                        ),
+                        (
+                            0.05,
+                            Piece::Arcs {
+                                at: sabers,
+                                radius: height * 0.3,
+                            },
+                        ),
+                        (
+                            0.35,
+                            Piece::SkyBolt {
+                                to: sabers,
+                                width: 0.6,
+                            },
+                        ),
+                        (
+                            0.35,
+                            Piece::Arcs {
+                                at: sabers,
+                                radius: height * 0.25,
+                            },
+                        ),
+                        (
+                            windup - 0.12,
+                            Piece::SkyBolt {
+                                to: hit,
+                                width: 1.4,
+                            },
+                        ),
+                        (
+                            windup - 0.12,
+                            Piece::Glow {
+                                at: hit,
+                                size: first_h * 1.2,
+                            },
+                        ),
                         (windup, cut(-0.75)),
                         (windup, cut(0.75)),
-                        (windup, Piece::Glow { at: hit, size: first_h * 1.8 }),
-                        (windup, Piece::Arcs { at: hit, radius: first_h * 0.6 }),
+                        (
+                            windup,
+                            Piece::Glow {
+                                at: hit,
+                                size: first_h * 1.8,
+                            },
+                        ),
+                        (
+                            windup,
+                            Piece::Arcs {
+                                at: hit,
+                                radius: first_h * 0.6,
+                            },
+                        ),
                         (windup, Piece::Flash),
                     ],
                     &time,
@@ -686,7 +764,11 @@ pub fn animate_blades(
                     thrust,
                     flip,
                 } => {
-                    let image = if thrust { "fx/thrust.png" } else { "fx/slash.png" };
+                    let image = if thrust {
+                        "fx/thrust.png"
+                    } else {
+                        "fx/slash.png"
+                    };
                     commands.spawn((
                         SpellRoot,
                         SlashFx {
@@ -721,9 +803,8 @@ pub fn animate_blades(
                 Piece::Arcs { at, radius } => {
                     let lines: Vec<Vec<Vec2>> = (0..4)
                         .map(|i| {
-                            let dir = Vec2::from_angle(
-                                i as f32 * TAU / 4.0 + next(&mut seed) * 1.2,
-                            );
+                            let dir =
+                                Vec2::from_angle(i as f32 * TAU / 4.0 + next(&mut seed) * 1.2);
                             let mut p = at + dir * radius * 0.3;
                             let mut line = vec![p];
                             for _ in 0..3 {
