@@ -5,7 +5,7 @@
 
 art/2d/ship/: base_a.png — корабль-разрез на небе (первый облик всех комнат); up_<что>.png — тот же
 рисунок, где правкой в Gemini улучшена одна комната; locked.png — правка с заколоченной комнатой;
-scaffold.png — леса на белом фоне. Рамки комнат — в data/ship.json (view.rooms, пиксели 1024).
+scaffold.png — леса на белом фоне; propeller.png — пропеллер анфас на белом (крутится в игре). Рамки комнат — в data/ship.json (view.rooms, пиксели 1024).
 Небо вырезается: заливка от краёв по цвету неба и крупные просветы выше корпуса.
 Нужны Pillow и numpy.
 """
@@ -68,6 +68,14 @@ def main():
     rgba = scaffold.convert("RGBA")
     rgba.putalpha(mask_of(scaffold))
     rgba.crop(rgba.getbbox()).save(OUT / "scaffold.png", optimize=True)
+    # Пропеллер: квадрат вокруг центра рисунка — вращается вокруг втулки.
+    prop = Image.open(ART / "propeller.png").convert("RGB")
+    rgba = prop.convert("RGBA")
+    rgba.putalpha(mask_of(prop))
+    x0, y0, x1, y1 = rgba.getbbox()
+    cx, cy = prop.width / 2, prop.height / 2
+    r = max(cx - x0, x1 - cx, cy - y0, y1 - cy)
+    rgba.crop((round(cx - r), round(cy - r), round(cx + r), round(cy + r))).resize((256, 256), Image.Resampling.LANCZOS).save(OUT / "propeller.png", optimize=True)
     for f in sorted(OUT.glob("*.png")):
         print(f.relative_to(ROOT), Image.open(f).size)
 

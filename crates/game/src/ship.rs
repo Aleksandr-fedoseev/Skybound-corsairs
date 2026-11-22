@@ -44,7 +44,19 @@ pub struct ShipView {
     /// Заколоченная комната (отсек не построен) и леса (идёт стройка).
     pub locked: String,
     pub scaffold: String,
+    /// Пропеллер на корме: крутится всегда.
+    #[serde(default)]
+    pub propeller: Option<Propeller>,
     pub rooms: Vec<Room>,
+}
+
+#[derive(Deserialize)]
+pub struct Propeller {
+    pub image: String,
+    /// Центр втулки и размах — в пикселях рисунка корпуса.
+    pub at: [f32; 2],
+    pub size: f32,
+    pub turns_per_second: f32,
 }
 
 /// Комната отсека: рамка на рисунке корпуса и облики по уровням.
@@ -499,12 +511,12 @@ pub fn panel(
         Node {
             position_type: PositionType::Absolute,
             left: px(10),
-            // Над рядом отсеков, чтобы можно было переключаться между ними.
-            bottom: px(272),
+            // Внизу, поверх ряда отсеков и похода: корабль над панелью остаётся виден.
+            bottom: px(86),
             width: px(520),
-            padding: UiRect::all(px(14)),
+            padding: UiRect::axes(px(14), px(10)),
             flex_direction: FlexDirection::Column,
-            row_gap: px(6),
+            row_gap: px(4),
             border: UiRect::all(px(2)),
             border_radius: BorderRadius::all(px(14)),
             ..default()

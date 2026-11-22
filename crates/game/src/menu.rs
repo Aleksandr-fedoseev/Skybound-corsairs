@@ -40,9 +40,9 @@ const TOAST_LONG_SECONDS: f32 = 6.0;
 const BOB_PERIOD: f32 = 4.0;
 const BOB_PX: f32 = 6.0;
 /// Корабль-разрез на главной: квадрат рисунка корпуса (логические px экрана 540×960).
-const SHIP_LEFT: f32 = -15.0;
+const SHIP_LEFT: f32 = -5.0;
 const SHIP_TOP: f32 = 190.0;
-const SHIP_SIDE: f32 = 570.0;
+const SHIP_SIDE: f32 = 555.0;
 const PRESSED_SCALE: f32 = 0.94;
 
 /// Данные меню: `data/menu.json`.
@@ -220,7 +220,12 @@ pub fn plugin(app: &mut App) {
         .add_systems(OnEnter(Screen::Menu), spawn_menu)
         .add_systems(
             Update,
-            (rebuild_menu, refresh_values, refresh_ether_bubble, bob_ship)
+            // После пересборки — сразу качка: иначе новый корабль кадр стоит на месте и дёргается.
+            (
+                rebuild_menu,
+                (refresh_values, refresh_ether_bubble, bob_ship, spin_and_pulse),
+            )
+                .chain()
                 .run_if(in_state(Screen::Menu)),
         )
         .add_systems(
@@ -403,7 +408,7 @@ fn build(commands: &mut Commands, view: &MenuView) {
                 ));
             });
 
-            ship_rooms(root, assets, fonts, ship_data, ship);
+            ship_rooms(root, assets, fonts, ship_data, ship, view.open.0.as_deref());
 
             compartments(root, assets, fonts, ship_data, ship, view.page.0);
             voyage(root, fonts, next, done);
@@ -439,6 +444,7 @@ fn ship_rooms(
     fonts: &Fonts,
     ship_data: &ShipData,
     ship: &Ship,
+    selected: Option<&str>,
 ) {
     let view = &ship_data.view;
     let pct = |v: f32| percent(v / view.size * 100.0);
@@ -465,6 +471,23 @@ fn ship_rooms(
             ImageNode::new(assets.load(view.hull.clone())),
             Pickable::IGNORE,
         ));
+        // Пропеллер на корме, поверх руля.
+        if let Some(prop) = &view.propeller {
+            deck.spawn((
+                Spinner(prop.turns_per_second),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: pct(prop.at[0] - prop.size / 2.0),
+                    top: pct(prop.at[1] - prop.size / 2.0),
+                    width: pct(prop.size),
+                    height: pct(prop.size),
+                    ..default()
+                },
+                ImageNode::new(assets.load(prop.image.clone())),
+                UiTransform::default(),
+                Pickable::IGNORE,
+            ));
+        }
         for room in &view.rooms {
             let Some(compartment) = ship_data.compartment(&room.id) else {
                 continue;
@@ -483,6 +506,10 @@ fn ship_rooms(
                 },
                 UiTransform::default(),
             ));
+            // Открытый в панели отсек — в пульсирующей золотой рамке.
+            if selected == Some(room.id.as_str()) {
+                cell.insert((SelectedRoom, Outline::new(px(3), px(1), GOLD)));
+            }
             cell.with_children(|c| {
                 let fill = || Node {
                     position_type: PositionType::Absolute,
@@ -1182,6 +1209,29 @@ fn refresh_toast(
                 text.0 = toast.text.clone();
             }
         }
+    }
+}
+
+/// Пропеллер: оборотов в секунду.
+#[derive(Component)]
+struct Spinner(f32);
+
+/// Комната отсека, открытого в панели.
+#[derive(Component)]
+struct SelectedRoom;
+
+fn spin_and_pulse(
+    time: Res<Time>,
+    mut spinners: Query<(&Spinner, &mut UiTransform)>,
+    mut selected: Query<&mut Outline, With<SelectedRoom>>,
+) {
+    let t = time.elapsed_secs();
+    for (spinner, mut transform) in &mut spinners {
+        transform.rotation = Rot2::radians(-t * spinner.0 * std::f32::consts::TAU);
+    }
+    let glow = 0.55 + 0.45 * (t * 5.0).sin().abs();
+    for mut outline in &mut selected {
+        outline.color = GOLD.with_alpha(glow);
     }
 }
 
