@@ -23,9 +23,9 @@ use crate::style::{self, INK, INK_GOOD, INK_SOFT, Look, Skin};
 use crate::view::Fonts;
 
 /// Медальон героя в ленте отряда.
-const CHIP: f32 = 54.0;
+const CHIP: f32 = 60.0;
 /// Иконка умения в латунном кольце.
-const SKILL_RING: f32 = 70.0;
+const SKILL_RING: f32 = 76.0;
 /// Верх области героя: под заголовком экрана.
 const HERO_TOP: f32 = 108.0;
 const BRIGHT: Color = Color::srgb(1.0, 0.93, 0.78);
@@ -766,7 +766,7 @@ fn roster_chip(
             }
         });
         if owned {
-            stars_row(c, assets, roster.stars(&hero.id), 8.0);
+            stars_row(c, assets, roster.stars(&hero.id), 9.0);
         }
     });
     pressable(&mut chip);
@@ -802,7 +802,6 @@ fn details(
     let affordable = profile.journals >= cost.journals && profile.silver >= cost.silver;
     let in_team = roster.team.contains(&hero.id);
     let owned = roster.owns(&hero.id);
-    let copies = roster.copies(&hero.id);
 
     // Вкладка «Снаряжение»: панель на всю ширину вместо героя.
     if owned && gear.tab == CrewTab::Gear {
@@ -827,7 +826,7 @@ fn details(
                     ..default()
                 })
                 .with_children(|row| {
-                    row.spawn(text(fonts, hero.name.clone(), true, 20.0, BRIGHT));
+                    row.spawn(style::heading(fonts, hero.name.clone(), 24.0, BRIGHT));
                     row.spawn(text(fonts, hero.title.clone(), false, 13.0, MUTED));
                 });
             tabs_row(panel, fonts, gear.tab);
@@ -863,7 +862,7 @@ fn details(
         position_type: PositionType::Absolute,
         top: px(HERO_TOP + 6.0),
         right: px(12),
-        width: px(232),
+        width: px(254),
         flex_direction: FlexDirection::Column,
         row_gap: px(8),
         ..default()
@@ -896,11 +895,10 @@ fn details(
                     rarity_label(hero.rarity).to_lowercase()
                 ))),
             ))
-            .with_child(text(
+            .with_child(style::heading(
                 fonts,
                 rarity_label(hero.rarity),
-                true,
-                12.0,
+                14.0,
                 Color::WHITE,
             ));
             card.spawn((
@@ -908,22 +906,21 @@ fn details(
                     margin: UiRect::right(px(40)),
                     ..default()
                 },
-                text(fonts, hero.name.clone(), true, 21.0, INK),
+                style::ink(fonts, hero.name.clone(), 30.0, INK),
             ));
             card.spawn((
                 Node {
                     margin: UiRect::right(px(40)),
                     ..default()
                 },
-                text(fonts, hero.title.clone(), false, 13.0, INK_SOFT),
+                style::ink(fonts, hero.title.clone(), 16.0, INK_SOFT),
             ));
             stars_row(card, assets, if owned { stars } else { 0 }, 16.0);
             if owned {
-                card.spawn(text(
+                card.spawn(style::ink(
                     fonts,
                     format!("Уровень {level} / {cap}"),
-                    true,
-                    14.0,
+                    20.0,
                     INK,
                 ));
                 // Полоса уровня до потолка звёзд.
@@ -946,7 +943,7 @@ fn details(
                     BackgroundColor(Color::srgb(0.85, 0.55, 0.18)),
                 ));
             } else {
-                card.spawn(text(fonts, "Ещё не в команде", true, 14.0, INK_SOFT));
+                card.spawn(style::ink(fonts, "Ещё не в команде", 17.0, INK_SOFT));
             }
             let growing = owned && !at_cap;
             for (icon, name, a, b) in [
@@ -963,8 +960,8 @@ fn details(
                 .with_children(|row| {
                     row.spawn((
                         Node {
-                            width: px(20),
-                            height: px(20),
+                            width: px(24),
+                            height: px(24),
                             ..default()
                         },
                         ImageNode::new(assets.load(format!("ui/stat_{icon}.png"))),
@@ -974,11 +971,11 @@ fn details(
                             flex_grow: 1.0,
                             ..default()
                         },
-                        text(fonts, name, false, 14.0, INK_SOFT),
+                        style::ink(fonts, name, 19.0, INK_SOFT),
                     ));
-                    row.spawn(text(fonts, a.to_string(), true, 15.0, INK));
+                    row.spawn(style::ink(fonts, a.to_string(), 21.0, INK));
                     if growing && b > a {
-                        row.spawn(text(fonts, format!("+{}", b - a), true, 11.0, INK_GOOD));
+                        row.spawn(style::ink(fonts, format!("+{}", b - a), 14.0, INK_GOOD));
                     }
                 });
             }
@@ -990,17 +987,12 @@ fn details(
                 text(
                     fonts,
                     format!(
-                        "{} · {}{}",
+                        "{} · {}",
                         role_label(hero.role),
-                        element_label(hero.element),
-                        if owned {
-                            format!(" · копий {copies}")
-                        } else {
-                            String::new()
-                        }
+                        element_label(hero.element)
                     ),
                     false,
-                    12.0,
+                    13.0,
                     INK_SOFT,
                 ),
             ));
@@ -1072,11 +1064,10 @@ fn tabs_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts, tab: CrewTab) {
                     },
                     Skin(if active { Look::TabOn } else { Look::TabOff }),
                 ));
-                button.with_child(text(
+                button.with_child(style::heading(
                     fonts,
                     label,
-                    true,
-                    13.0,
+                    15.0,
                     if active { Color::WHITE } else { MUTED },
                 ));
                 pressable(&mut button);
@@ -1380,16 +1371,20 @@ fn level_button(
     ));
     button.with_children(|b| {
         if at_cap {
-            b.spawn(text(
+            b.spawn(style::heading(
                 fonts,
                 format!("Потолок: уровень {cap}"),
-                true,
                 18.0,
                 Color::WHITE,
             ));
             b.spawn(text(fonts, "дальше — звёзды героя", false, 12.0, PARCHMENT));
         } else {
-            b.spawn(text(fonts, "Повысить уровень", true, 17.0, Color::WHITE));
+            b.spawn(style::heading(
+                fonts,
+                "Повысить уровень",
+                20.0,
+                Color::WHITE,
+            ));
             style::costs(
                 b,
                 assets,
@@ -1502,15 +1497,14 @@ fn skills_row(
                 BorderColor::all(Color::srgb(0.72, 0.55, 0.26)),
                 Pickable::IGNORE,
             ))
-            .with_child(text(
+            .with_child(style::heading(
                 fonts,
                 if level >= cap && owned {
                     format!("ур. {level} · макс.")
                 } else {
                     format!("ур. {level}")
                 },
-                true,
-                11.0,
+                13.0,
                 BRIGHT,
             ));
             if owned && level < cap {
@@ -1641,7 +1635,7 @@ fn merge_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, to: Option<u3
         Skin(if ready { Look::Go } else { Look::TabOff }),
     ));
     button.with_children(|b| {
-        b.spawn(text(fonts, "Слияние", true, 15.0, Color::WHITE));
+        b.spawn(style::heading(fonts, "Слияние", 18.0, Color::WHITE));
         b.spawn(text(
             fonts,
             to.map_or("звезда".to_string(), |t| format!("до {t} звёзд")),
@@ -1702,7 +1696,12 @@ fn to_tavern_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts) {
         Skin(Look::Go),
     ));
     button.with_children(|b| {
-        b.spawn(text(fonts, "Нанять в Таверне", true, 18.0, Color::WHITE));
+        b.spawn(style::heading(
+            fonts,
+            "Нанять в Таверне",
+            20.0,
+            Color::WHITE,
+        ));
         b.spawn(text(
             fonts,
             "герой выпадает при найме",
@@ -1729,16 +1728,15 @@ fn team_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, id: &str, in_t
         },
         Skin(Look::Dark),
     ));
-    button.with_child(text(
+    button.with_child(style::heading(
         fonts,
         if in_team {
             "Из отряда"
         } else {
             "В отряд"
         },
-        true,
-        16.0,
-        PARCHMENT,
+        18.0,
+        BRIGHT,
     ));
     pressable(&mut button);
     button.observe(

@@ -164,7 +164,7 @@ pub fn costs(
                         ..default()
                     },
                     Text::new(n.to_string()),
-                    fonts.text(true, size),
+                    fonts.serif(size + 3.0),
                     TextColor(color),
                     Pickable::IGNORE,
                 ));
@@ -212,8 +212,8 @@ pub fn top_bar(
             top: px(0),
             left: px(0),
             right: px(0),
-            height: px(50),
-            padding: UiRect::axes(px(14), px(8)),
+            height: px(54),
+            padding: UiRect::axes(px(12), px(7)),
             column_gap: px(14),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
@@ -228,7 +228,7 @@ pub fn top_bar(
             bar.spawn(Node {
                 flex_grow: 1.0,
                 flex_basis: px(0),
-                height: px(32),
+                height: px(40),
                 align_items: AlignItems::Center,
                 ..default()
             })
@@ -236,12 +236,12 @@ pub fn top_bar(
                 slot.spawn((
                     Node {
                         position_type: PositionType::Absolute,
-                        left: px(12),
+                        left: px(16),
                         right: px(0),
-                        top: px(2),
-                        bottom: px(2),
-                        padding: UiRect::right(px(12)),
-                        justify_content: JustifyContent::FlexEnd,
+                        top: px(4),
+                        bottom: px(4),
+                        padding: UiRect::left(px(22)),
+                        justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         ..default()
                     },
@@ -254,12 +254,13 @@ pub fn top_bar(
                         ..default()
                     },
                 ))
-                .with_child((
-                    Text::new(n.to_string()),
-                    fonts.text(true, 15.0),
-                    TextColor(Color::srgb(1.0, 0.93, 0.78)),
+                .with_child(heading(
+                    fonts,
+                    n.to_string(),
+                    18.0,
+                    Color::srgb(1.0, 0.93, 0.78),
                 ));
-                slot.spawn(icon(assets, kind, 30.0));
+                slot.spawn(icon(assets, kind, 38.0));
             });
         }
     });
@@ -278,21 +279,37 @@ pub fn title(root: &mut ChildSpawnerCommands, fonts: &Fonts, label: &str, top: f
     .with_children(|row| {
         row.spawn((
             Node {
-                height: px(44),
+                height: px(48),
                 padding: UiRect::horizontal(px(64)),
                 align_items: AlignItems::Center,
                 ..default()
             },
             Skin(Look::Plank),
         ))
-        .with_child((
-            Text::new(label),
-            fonts.text(true, 20.0),
-            TextColor(Color::srgb(1.0, 0.93, 0.78)),
-            TextShadow {
-                offset: Vec2::new(0.0, 2.0),
-                color: Color::srgba(0.0, 0.0, 0.0, 0.7),
-            },
-        ));
+        .with_child(heading(fonts, label, 24.0, Color::srgb(1.0, 0.93, 0.78)));
     });
+}
+
+/// Заголовок, надпись на кнопке, крупная цифра: засечка с тенью.
+pub fn heading(fonts: &Fonts, value: impl Into<String>, size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(value),
+        fonts.display(size),
+        TextColor(color),
+        TextShadow {
+            offset: Vec2::new(0.0, 2.0),
+            color: Color::srgba(0.0, 0.0, 0.0, 0.75),
+        },
+        Pickable::IGNORE,
+    )
+}
+
+/// Надпись чернилами на пергаменте: засечка без тени.
+pub fn ink(fonts: &Fonts, value: impl Into<String>, size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(value),
+        fonts.serif(size),
+        TextColor(color),
+        Pickable::IGNORE,
+    )
 }

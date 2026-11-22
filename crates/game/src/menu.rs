@@ -1421,17 +1421,12 @@ pub(crate) fn bottom_nav(
     fonts: &Fonts,
     active: Screen,
 ) {
-    // Вкладка ведёт на экран или пока только показывает подсказку.
-    let tabs: [(&str, &str, Result<Screen, &'static str>); 5] = [
-        ("Корабль", "menu/ship_lvl1.png", Ok(Screen::Menu)),
-        ("Экипаж", "menu/module_training_deck.png", Ok(Screen::Crew)),
-        ("Карта", "menu/module_navigation.png", Ok(Screen::Map)),
-        ("Таверна", "menu/module_tavern.png", Ok(Screen::Tavern)),
-        (
-            "Активности",
-            "menu/module_lookout.png",
-            Ok(Screen::Activities),
-        ),
+    let tabs: [(&str, &str, Screen); 5] = [
+        ("Корабль", "ship", Screen::Menu),
+        ("Экипаж", "crew", Screen::Crew),
+        ("Карта", "map", Screen::Map),
+        ("Таверна", "tavern", Screen::Tavern),
+        ("Активности", "activities", Screen::Activities),
     ];
     root.spawn((
         Node {
@@ -1439,9 +1434,8 @@ pub(crate) fn bottom_nav(
             bottom: px(0),
             left: px(0),
             width: percent(100),
-            height: px(82),
-            padding: UiRect::vertical(px(6)),
-            border: UiRect::top(px(2)),
+            height: px(86),
+            border: UiRect::top(px(3)),
             ..default()
         },
         BackgroundColor(DARK_WOOD),
@@ -1449,46 +1443,60 @@ pub(crate) fn bottom_nav(
         GlobalZIndex(5),
     ))
     .with_children(|nav| {
-        for (name, icon, target) in tabs {
-            let here = target == Ok(active);
-            let mut tab = nav.spawn(Node {
-                flex_grow: 1.0,
-                flex_basis: px(0),
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                row_gap: px(2),
-                ..default()
-            });
+        for (i, (name, icon, screen)) in tabs.into_iter().enumerate() {
+            let here = screen == active;
+            // Плитки из тёмного дерева с латунными разделителями; текущая — светлее,
+            // с золотой полосой сверху.
+            let mut tab = nav.spawn((
+                Node {
+                    flex_grow: 1.0,
+                    flex_basis: px(0),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::new(
+                        px(if i == 0 { 0.0 } else { 1.0 }),
+                        px(0),
+                        px(if here { 3.0 } else { 0.0 }),
+                        px(0),
+                    ),
+                    ..default()
+                },
+                BackgroundColor(if here {
+                    Color::srgb(0.36, 0.25, 0.12)
+                } else {
+                    Color::srgb(0.16, 0.10, 0.06)
+                }),
+                BorderColor {
+                    left: Color::srgb(0.47, 0.34, 0.16),
+                    top: GOLD,
+                    ..BorderColor::all(Color::NONE)
+                },
+            ));
             tab.with_children(|t| {
                 t.spawn((
                     Node {
-                        width: px(52),
-                        height: px(44),
+                        width: px(if here { 54.0 } else { 48.0 }),
+                        height: px(if here { 54.0 } else { 48.0 }),
                         ..default()
                     },
-                    ImageNode::new(assets.load(icon)),
+                    ImageNode::new(assets.load(format!("ui/nav_{icon}.png"))),
                     Pickable::IGNORE,
                 ));
-                t.spawn(text(
+                t.spawn(crate::style::heading(
                     fonts,
                     name,
-                    here,
-                    12.0,
+                    15.0,
                     if here { GOLD } else { PARCHMENT },
                 ));
             });
-            match target {
-                Ok(screen) if !here => {
-                    pressable(&mut tab);
-                    tab.observe(
-                        move |_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
-                            next.set(screen);
-                        },
-                    );
-                }
-                Ok(_) => {}
-                Err(message) => later(&mut tab, message),
+            if !here {
+                pressable(&mut tab);
+                tab.observe(
+                    move |_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
+                        next.set(screen);
+                    },
+                );
             }
         }
     });

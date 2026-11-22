@@ -378,7 +378,7 @@ fn poster(
                     Skin(Look::Parchment),
                 ))
                 .with_children(|paper| {
-                    paper.spawn(text(fonts, "РАЗЫСКИВАЕТСЯ", true, 26.0, INK));
+                    paper.spawn(style::ink(fonts, "Разыскивается", 32.0, INK));
                     paper.spawn((
                         Node {
                             height: px(228),
@@ -406,19 +406,18 @@ fn poster(
                     Skin(Look::Go),
                 ))
                 .with_children(|ribbon| {
-                    ribbon.spawn(text(
+                    ribbon.spawn(style::heading(
                         fonts,
-                        format!("SSR · {} — {}", hero.name, hero.title),
-                        true,
-                        15.0,
+                        format!("{} — {}", hero.name, hero.title),
+                        18.0,
                         Color::WHITE,
                     ));
                     ribbon.spawn(text(
                         fonts,
                         if roster.owns(&hero.id) {
-                            "уже в команде — копия даст звезду".to_string()
+                            "SSR · уже в команде".to_string()
                         } else {
-                            format!("шанс SSR {}%", (cfg.rates.ssr * 1000.0).round() / 10.0)
+                            format!("SSR · шанс {}%", (cfg.rates.ssr * 1000.0).round() / 10.0)
                         },
                         false,
                         12.0,
@@ -517,11 +516,10 @@ fn pity_panel(
         Skin(Look::Parchment),
     ))
     .with_children(|panel| {
-        panel.spawn(text(
+        panel.spawn(style::ink(
             fonts,
-            format!("До гарантированного SSR: {done} / {}", cfg.ssr_pity),
-            true,
-            14.0,
+            format!("Гарантированный SSR: {done} / {}", cfg.ssr_pity),
+            18.0,
             INK,
         ));
         panel
@@ -554,7 +552,7 @@ fn pity_panel(
             },
             Skin(Look::TabOff),
         ));
-        rates.with_child(text(fonts, "Шансы и гарант", true, 12.0, BRIGHT));
+        rates.with_child(style::heading(fonts, "Шансы и гарант", 14.0, BRIGHT));
         pressable(&mut rates);
         rates.observe(move |_: On<PointerClick>, mut toast: ResMut<Toast>| {
             toast.show_long(&odds);
@@ -611,14 +609,11 @@ fn hire_buttons(
                     fonts,
                     hire,
                     title,
-                    Some(price),
+                    Some((price, profile.doubloons >= price)),
                     String::new(),
-                    if profile.doubloons >= price {
-                        Look::Go
-                    } else {
-                        Look::Off
-                    },
-                    72.0,
+                    // Кнопка найма всегда янтарная; не хватает дублонов — цена красная.
+                    Look::Go,
+                    74.0,
                 );
             }
         });
@@ -632,7 +627,7 @@ fn hire_button(
     fonts: &Fonts,
     hire: Hire,
     title: &str,
-    price: Option<u32>,
+    price: Option<(u32, bool)>,
     sub: String,
     look: Look,
     height: f32,
@@ -650,15 +645,25 @@ fn hire_button(
         Skin(look),
     ));
     button.with_children(|b| {
-        b.spawn(text(
+        b.spawn(style::heading(
             fonts,
             title,
-            true,
-            if price.is_some() { 21.0 } else { 15.0 },
+            if price.is_some() { 26.0 } else { 18.0 },
             Color::WHITE,
         ));
         match price {
-            Some(price) => style::costs(b, assets, fonts, &[("doubloons", price)], 15.0, BRIGHT),
+            Some((price, affordable)) => style::costs(
+                b,
+                assets,
+                fonts,
+                &[("doubloons", price)],
+                16.0,
+                if affordable {
+                    BRIGHT
+                } else {
+                    Color::srgb(0.50, 0.07, 0.04)
+                },
+            ),
             None => {
                 b.spawn(text(fonts, sub, false, 11.0, PARCHMENT));
             }

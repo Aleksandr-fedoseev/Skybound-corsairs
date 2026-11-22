@@ -44,9 +44,29 @@ pub fn element_color(element: Element) -> Color {
 pub struct Fonts {
     pub regular: Handle<Font>,
     pub bold: Handle<Font>,
+    /// Засечка Alegreya (цифры по высоте прописных): заголовки, кнопки, крупные цифры.
+    pub display: Handle<Font>,
+    /// Засечка потоньше: имена, подписи и числа на пергаменте.
+    pub serif: Handle<Font>,
 }
 
 impl Fonts {
+    pub fn display(&self, size: f32) -> TextFont {
+        TextFont {
+            font: self.display.clone().into(),
+            font_size: FontSize::Px(size),
+            ..default()
+        }
+    }
+
+    pub fn serif(&self, size: f32) -> TextFont {
+        TextFont {
+            font: self.serif.clone().into(),
+            font_size: FontSize::Px(size),
+            ..default()
+        }
+    }
+
     pub fn text(&self, bold: bool, size: f32) -> TextFont {
         TextFont {
             font: if bold { &self.bold } else { &self.regular }.clone().into(),
@@ -134,6 +154,8 @@ impl FromWorld for Fonts {
         Self {
             regular: assets.load("fonts/NotoSans-Regular.ttf"),
             bold: assets.load("fonts/NotoSans-Bold.ttf"),
+            display: assets.load("fonts/Alegreya-ExtraBold-Lining.ttf"),
+            serif: assets.load("fonts/Alegreya-Bold-Lining.ttf"),
         }
     }
 }

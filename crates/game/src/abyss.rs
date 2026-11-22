@@ -422,8 +422,8 @@ fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
                     ..default()
                 })
                 .with_children(|c| {
-                    c.spawn(text(fonts, title, true, 16.0, INK));
-                    c.spawn(text(fonts, sub, false, 12.0, INK_SOFT));
+                    c.spawn(style::ink(fonts, title, 19.0, INK));
+                    c.spawn(text(fonts, sub, false, 13.0, INK_SOFT));
                     c.spawn(Node {
                         justify_content: JustifyContent::SpaceBetween,
                         align_items: AlignItems::Center,
@@ -440,7 +440,7 @@ fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
                             },
                             BackgroundColor(Color::srgb(0.24, 0.15, 0.09)),
                         ))
-                        .with_child(text(fonts, status, false, 11.0, BRIGHT));
+                        .with_child(style::heading(fonts, status, 12.0, BRIGHT));
                         go_button(row, fonts, go);
                     });
                 });
@@ -486,7 +486,7 @@ fn go_button(row: &mut ChildSpawnerCommands, fonts: &Fonts, go: Go) {
         },
         Skin(Look::Go),
     ));
-    button.with_child(text(fonts, "В путь »", true, 14.0, Color::WHITE));
+    button.with_child(style::heading(fonts, "В путь »", 16.0, Color::WHITE));
     pressable(&mut button);
     button.observe(
         move |_: On<PointerClick>,
@@ -521,7 +521,7 @@ fn back_button(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
         Skin(Look::Dark),
         GlobalZIndex(2),
     ));
-    button.with_child(text(fonts, "« Назад", true, 14.0, BRIGHT));
+    button.with_child(style::heading(fonts, "« Назад", 15.0, BRIGHT));
     pressable(&mut button);
     button.observe(
         |_: On<PointerClick>,

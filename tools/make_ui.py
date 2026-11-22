@@ -365,6 +365,36 @@ def activity_art(mockup, box, size=(160, 152)):
     return src.crop(box).resize(size, Image.LANCZOS)
 
 
+# Иконки нижней панели — из макета Экипажа: (рамка, допуск по цвету фона плитки).
+NAV_ICONS = {
+    "ship": ((14, 944, 104, 994), 48),
+    "crew": ((134, 934, 208, 992), 40),
+    "map": ((248, 944, 334, 994), 48),
+    "tavern": ((362, 940, 446, 994), 48),
+    "activities": ((474, 940, 560, 994), 48),
+}
+
+
+def nav_icon(box, tol, size=72):
+    """Иконка с плитки макета: фон плитки, связанный с краем, — прозрачный."""
+    im = Image.open(SRC / "mockups" / "crew.png").convert("RGBA").crop(box)
+    a = np.asarray(im).astype(int)
+    h, w = a.shape[:2]
+    edge = np.concatenate([a[0, :, :3], a[-1, :, :3], a[:, 0, :3], a[:, -1, :3]])
+    near = np.abs(a[:, :, :3] - np.median(edge, axis=0)).sum(axis=2) < tol
+    mask = Image.fromarray((near * 255).astype(np.uint8)).copy()
+    seeds = [(x, y) for x in range(0, w, 3) for y in (0, h - 1)] + [(x, y) for y in range(0, h, 3) for x in (0, w - 1)]
+    for x, y in seeds:
+        if mask.getpixel((x, y)) == 255:
+            ImageDraw.floodfill(mask, (x, y), 128)
+    alpha = np.where(np.asarray(mask) == 128, 0, 255).astype(np.uint8)
+    alpha = np.asarray(Image.fromarray(alpha).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.8)))
+    a[:, :, 3] = alpha
+    icon = Image.fromarray(a.astype(np.uint8))
+    icon = icon.crop(icon.getbbox())
+    return fit(icon.resize((icon.width * 2, icon.height * 2), Image.LANCZOS), (size, size))
+
+
 def skill_ring(mockup, cx, cy, r, size=96):
     src = Image.open(SRC / "mockups" / f"{mockup}.png").convert("RGBA")
     im = src.crop((cx - r, cy - r, cx + r, cy + r)).resize((size * 2, size * 2), Image.LANCZOS)
@@ -458,6 +488,8 @@ def main():
     if (SRC / "mockups").exists():
         for kind, ring in SKILL_RINGS.items():
             save(f"skill_{kind}.png", skill_ring(*ring))
+        for kind, (box, tol) in NAV_ICONS.items():
+            save(f"nav_{kind}.png", nav_icon(box, tol))
         for kind, (mockup, box) in ACTIVITY_ART.items():
             save(f"act_{kind}.png", activity_art(mockup, box))
     heroes = json.load(open("data/heroes.json"))
