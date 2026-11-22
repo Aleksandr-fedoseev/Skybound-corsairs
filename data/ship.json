@@ -59,8 +59,15 @@
   ],
   "view": {
     "exterior": "ship/exterior.png",
+    "look": {
+      "seconds": 0.75,
+      "bounds": [21, 67, 1005, 851],
+      "viewport": [0, 120, 540, 880],
+      "outside": { "side": 450, "focus": [513, 459], "center": [270, 445] },
+      "inside": { "side": 990, "focus": [513, 459], "center": [270, 500] }
+    },
     "sails": {
-      "cycle": 20, "unfurl": 1.8, "open": 9, "stagger": 0.5,
+      "unfurl": 2.4, "furl": 1.0, "stagger": 0.45, "slices": 16, "ripple": 0.035,
       "layers": [
         { "furled": "ship/sail_1_furled.png", "open": "ship/sail_1_open.png", "rect": [136, 193, 212, 235] },
         { "furled": "ship/sail_2_furled.png", "open": "ship/sail_2_open.png", "rect": [524, 274, 260, 179] }

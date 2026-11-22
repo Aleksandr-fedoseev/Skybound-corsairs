@@ -40,9 +40,10 @@ pub struct ShipData {
 pub struct ShipView {
     /// Корабль снаружи — на главной; рисунок того же размера, что и разрез.
     pub exterior: String,
-    /// Паруса снаружи: то раскатываются, то сворачиваются.
+    /// Паруса снаружи: раскатываются, когда корабль идёт в полёт.
     #[serde(default)]
     pub sails: Option<Sails>,
+    pub look: Look,
     /// Панорама неба за кораблём: едет влево по кругу.
     pub backdrop: Backdrop,
     /// Стайка птиц изредка обгоняет корабль.
@@ -77,32 +78,40 @@ pub struct CloudDef {
     pub front: bool,
 }
 
-/// Цикл парусов (с): свёрнуты → раскатываются за `unfurl` → стоят `open` → сворачиваются.
-/// Каждый следующий парус — на `stagger` позже.
+/// Паруса снаружи: падают с рей и наполняются ветром, когда корабль снова идёт в полёт (при
+/// старте и после осмотра), а на осмотре сворачиваются. Каждый следующий — на `stagger` позже.
 #[derive(Deserialize)]
 pub struct Sails {
-    pub cycle: f32,
+    /// Сколько секунд парус раскатывается и сворачивается.
     pub unfurl: f32,
-    pub open: f32,
+    pub furl: f32,
     pub stagger: f32,
+    /// На сколько полос резать парус: каждая колышется сама, волна бежит вниз по полотну.
+    pub slices: usize,
+    /// Размах ряби у нижней кромки — доля ширины полосы.
+    pub ripple: f32,
     pub layers: Vec<SailLayer>,
 }
 
-impl Sails {
-    /// Насколько раскрыт парус `index` в момент `t`: 0 — свёрнут, 1 — раскрыт.
-    pub fn openness(&self, index: usize, t: f32) -> f32 {
-        let p = (t - index as f32 * self.stagger).rem_euclid(self.cycle);
-        let s = if p < self.unfurl {
-            p / self.unfurl
-        } else if p < self.unfurl + self.open {
-            1.0
-        } else if p < 2.0 * self.unfurl + self.open {
-            1.0 - (p - self.unfurl - self.open) / self.unfurl
-        } else {
-            0.0
-        };
-        s * s * (3.0 - 2.0 * s)
-    }
+/// Как корабль стоит на экране: снаружи (главная) и на осмотре (крупно, двигается пальцем).
+#[derive(Deserialize)]
+pub struct Look {
+    /// Сколько секунд длится приближение и отдаление.
+    pub seconds: f32,
+    /// Где на рисунке корабль (x0, y0, x1, y1 в px рисунка) и куда его можно сдвигать
+    /// на осмотре (рамка экрана в логических px).
+    pub bounds: [f32; 4],
+    pub viewport: [f32; 4],
+    pub outside: Shot,
+    pub inside: Shot,
+}
+
+/// Сторона рисунка на экране (px) и в какую точку экрана `center` попадает точка рисунка `focus`.
+#[derive(Deserialize)]
+pub struct Shot {
+    pub side: f32,
+    pub focus: [f32; 2],
+    pub center: [f32; 2],
 }
 
 /// Парус: скатка и раскрытый парус в одной рамке (x, y, ширина, высота в px рисунка).
