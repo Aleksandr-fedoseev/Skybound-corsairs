@@ -7,6 +7,7 @@
 - gust.png — серп порыва ветра из art/2d/fx/gust.png (тоже на чёрном).
 - storm_cloud.png — грозовая туча (шум), рисуется здесь же.
 - slash.png, thrust.png — разрез саблей (серп) и укол (веретено): белая сердцевина, голубое свечение.
+- cloud_1..3.png — пухлые облака для фона главной (плывут мимо корабля).
 - whirl.png — круговой взмах: кольцо-комета, голова справа, хвост гаснет по часовой стрелке.
 Нужны Pillow и numpy.
 """
@@ -149,9 +150,41 @@ def whirl():
     Image.fromarray((out * 255).astype(np.uint8), "RGBA").save(OUT / "whirl.png", optimize=True)
 
 
+def cloud(seed):
+    """Облако: груда мягких шаров с плоским низом. У каждого шара светлая макушка (свет сверху),
+    в складках между ними — голубоватая тень."""
+    w, h = 512, 256
+    rng = np.random.default_rng(seed)
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    dens = np.zeros((h, w), np.float32)
+    light = np.zeros((h, w), np.float32)
+    base = h * 0.8
+    for _ in range(16):
+        cx = rng.uniform(0.15, 0.85) * w
+        r = rng.uniform(0.09, 0.2) * w * (1.15 - abs(cx / w - 0.5))
+        cy = base - r * rng.uniform(0.1, 1.0)
+        d = 1 - ((x - cx) ** 2 + (y - cy) ** 2) / (r * r)
+        # Освещённость шара: сверху-слева светлее, к низу темнее.
+        lit = np.clip(1 - ((x - cx + 0.3 * r) ** 2 + (y - cy + 0.55 * r) ** 2) / (1.3 * r * r), 0, 1)
+        top = d > dens
+        light = np.where(top & (d > 0), lit, light)
+        dens = np.maximum(dens, d)
+    dens *= np.clip((base + 4 - y) / 14, 0, 1)            # плоский низ
+    a = np.clip(dens * 3.5, 0, 1)
+    # Свет размыт: швы между шарами мягкие, без «пузырчатой плёнки».
+    light = np.asarray(Image.fromarray((light * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(9))) / 255.0
+    k = np.clip(light ** 0.7 * 0.85 + 0.15 * (1 - (y / base)), 0, 1)[..., None]
+    lit_c, shadow_c = np.array([1.0, 0.98, 0.95]), np.array([0.66, 0.74, 0.90])
+    rgb = shadow_c * (1 - k) + lit_c * k
+    img = Image.fromarray((np.dstack([rgb, a]) * 255).astype(np.uint8), "RGBA")
+    img.filter(ImageFilter.GaussianBlur(1.6)).save(OUT / f"cloud_{seed}.png", optimize=True)
+
+
 tornado()
 gust()
 whirl()
+for i in (1, 2, 3):
+    cloud(i)
 slash()
 thrust()
 glow()

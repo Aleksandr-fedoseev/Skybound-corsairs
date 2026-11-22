@@ -41,6 +41,8 @@ const BOB_PERIOD: f32 = 4.0;
 const BOB_PX: f32 = 6.0;
 /// Корабль-разрез на главной: квадрат рисунка корпуса (логические px экрана 540×960).
 const SHIP_LEFT: f32 = -5.0;
+/// Ширина экрана в логических px.
+const SCREEN_W: f32 = 540.0;
 const SHIP_TOP: f32 = 190.0;
 const SHIP_SIDE: f32 = 555.0;
 const PRESSED_SCALE: f32 = 0.94;
@@ -217,13 +219,14 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Voyage>()
         .init_resource::<MenuRebuild>()
         .init_resource::<TilePage>()
+        .init_resource::<ShipOpen>()
         .add_systems(OnEnter(Screen::Menu), spawn_menu)
         .add_systems(
             Update,
             // После пересборки — сразу качка: иначе новый корабль кадр стоит на месте и дёргается.
             (
                 rebuild_menu,
-                (refresh_values, refresh_ether_bubble, bob_ship, spin_and_pulse),
+                (refresh_values, refresh_ether_bubble, bob_ship, spin_and_pulse, drift_clouds),
             )
                 .chain()
                 .run_if(in_state(Screen::Menu)),
@@ -261,6 +264,7 @@ struct MenuView<'w> {
     gear_data: Res<'w, crate::gear::GearData>,
     gear: Res<'w, crate::gear::Gear>,
     page: Res<'w, TilePage>,
+    ship_open: Res<'w, ShipOpen>,
 }
 
 fn spawn_menu(mut commands: Commands, view: MenuView) {
@@ -375,8 +379,12 @@ fn build(commands: &mut Commands, view: &MenuView) {
             },
         ))
         .with_children(|root| {
+            let open_ship = view.ship_open.0;
+            clouds(root, assets, &ship_data.view, false);
             top_bar(root, fonts, profile);
-            side_buttons(root, fonts, view.contracts.claimable(&view.contract_data));
+            if !open_ship {
+                side_buttons(root, fonts, view.contracts.claimable(&view.contract_data));
+            }
 
             // Имя корабля над ним.
             root.spawn((
@@ -401,17 +409,30 @@ fn build(commands: &mut Commands, view: &MenuView) {
                 ));
                 title.spawn(text(
                     fonts,
-                    format!("Корпус · ур. {}", ship.hull()),
+                    if open_ship {
+                        "Нажмите на отсек — улучшить"
+                    } else {
+                        "Нажмите на корабль — осмотреть"
+                    },
                     false,
                     13.0,
                     PARCHMENT,
                 ));
             });
 
-            ship_rooms(root, assets, fonts, ship_data, ship, view.open.0.as_deref());
-
-            compartments(root, assets, fonts, ship_data, ship, view.page.0);
-            voyage(root, fonts, next, done);
+            if open_ship {
+                // Полный вид: разрез со всеми комнатами, назад — к главной.
+                ship_rooms(root, assets, fonts, ship_data, ship, view.open.0.as_deref());
+                back_button(root, fonts);
+            } else {
+                ship_outside(root, assets, fonts, ship_data);
+            }
+            if !open_ship {
+                // Передние облака — только на главной: в полном виде закрывали бы комнаты.
+                clouds(root, assets, &ship_data.view, true);
+                compartments(root, assets, fonts, ship_data, ship, view.page.0);
+                voyage(root, fonts, next, done);
+            }
             bottom_nav(root, assets, fonts, Screen::Menu);
             if view.board_open.0 {
                 crate::contracts::board(root, fonts, &view.contract_data, &view.contracts);
@@ -435,6 +456,70 @@ fn build(commands: &mut Commands, view: &MenuView) {
             spawn_toast(root, fonts);
         });
 }
+
+/// Корабль снаружи (главная): тап открывает полный вид с комнатами.
+fn ship_outside(root: &mut ChildSpawnerCommands, assets: &AssetServer, fonts: &Fonts, ship_data: &ShipData) {
+    let mut outside = root.spawn((
+        ShipSprite,
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(80),
+            bottom: px(268),
+            width: px(380),
+            ..default()
+        },
+        ImageNode::new(assets.load(ship_data.view.exterior.clone())),
+        UiTransform::default(),
+    ));
+    outside.observe(
+        |_: On<PointerClick>,
+         mut open: ResMut<ShipOpen>,
+         mut sfx: MessageWriter<Sfx>,
+         mut rebuild: ResMut<MenuRebuild>| {
+            open.0 = true;
+            sfx.write(Sfx("click"));
+            rebuild.0 = true;
+        },
+    );
+    ether_bubble(root, fonts, px(300), px(318));
+}
+
+/// Назад из полного вида корабля.
+fn back_button(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
+    let mut back = root.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(76),
+            left: px(10),
+            width: px(92),
+            height: px(48),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: UiRect::all(px(2)),
+            border_radius: BorderRadius::all(px(12)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.08, 0.06, 0.05, 0.85)),
+        BorderColor::all(GOLD),
+        UiTransform::default(),
+    ));
+    back.with_child(text(fonts, "Назад", true, 16.0, PARCHMENT));
+    pressable(&mut back);
+    back.observe(
+        |_: On<PointerClick>,
+         mut ship_open: ResMut<ShipOpen>,
+         mut opened: ResMut<OpenCompartment>,
+         mut rebuild: ResMut<MenuRebuild>| {
+            ship_open.0 = false;
+            opened.0 = None;
+            rebuild.0 = true;
+        },
+    );
+}
+
+/// Открыт полный вид корабля (разрез с комнатами).
+#[derive(Resource, Default)]
+pub(crate) struct ShipOpen(pub bool);
 
 /// Корабль-разрез: корпус, поверх — комнаты отсеков. Комната показывает уровень (свой рисунок
 /// с нужного уровня), не построенная — заколочена, на стройке — леса и таймер. Тап — панель отсека.
@@ -553,53 +638,104 @@ fn ship_rooms(
             );
             // Ветроловы накопили эфир — пузырь над ними, тап собирает.
             if room.id == "windcatchers" {
-                let mut bubble = deck.spawn((
-                    EtherBubble,
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: pct(x + w * 0.3),
-                        top: pct(y - 10.0),
-                        height: px(34),
-                        padding: UiRect::horizontal(px(14)),
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(px(2)),
-                        border_radius: BorderRadius::all(px(17)),
-                        ..default()
-                    },
-                    BackgroundColor(ETHER),
-                    BorderColor::all(Color::WHITE),
-                    Visibility::Hidden,
-                ));
-                bubble.with_child(text(fonts, "", true, 14.0, Color::WHITE));
-                pressable(&mut bubble);
-    bubble.observe(
-                    |_: On<PointerClick>,
-                     mut profile: ResMut<Profile>,
-                     mut toast: ResMut<Toast>,
-                     ship: Res<Ship>,
-                     ship_data: Res<ShipData>,
-                     mut sfx: MessageWriter<Sfx>,
-                     mut deeds: MessageWriter<Deed>| {
-                        let room = ship
-                            .capacity(&ship_data)
-                            .ether
-                            .saturating_sub(profile.ether);
-                        let got = (profile.ether_pending.floor() as u32).min(room);
-                        if got == 0 && profile.ether_pending >= 1.0 {
-                            toast.show("Трюм полон: эфир некуда класть — улучшите Трюм");
-                        }
-                        if got > 0 {
-                            profile.ether += got;
-                            profile.ether_pending -= got as f32;
-                            sfx.write(Sfx("coin"));
-                            deeds.write(Deed("ether"));
-                            toast.show(&format!("Ветроловы: +{got} эфира"));
-                        }
-                    },
-                );
+                ether_bubble(deck, fonts, pct(x + w * 0.3), pct(y - 10.0));
             }
         }
     });
+}
+
+/// Пузырь накопленного эфира: тап собирает в запас (с потолком Трюма).
+fn ether_bubble(parent: &mut ChildSpawnerCommands, fonts: &Fonts, left: Val, top: Val) {
+    let mut bubble = parent.spawn((
+        EtherBubble,
+        Node {
+            position_type: PositionType::Absolute,
+            left,
+            top,
+            height: px(34),
+            padding: UiRect::horizontal(px(14)),
+            align_items: AlignItems::Center,
+            border: UiRect::all(px(2)),
+            border_radius: BorderRadius::all(px(17)),
+            ..default()
+        },
+        BackgroundColor(ETHER),
+        BorderColor::all(Color::WHITE),
+        Visibility::Hidden,
+    ));
+    bubble.with_child(text(fonts, "", true, 14.0, Color::WHITE));
+    pressable(&mut bubble);
+    bubble.observe(
+        |_: On<PointerClick>,
+         mut profile: ResMut<Profile>,
+         mut toast: ResMut<Toast>,
+         ship: Res<Ship>,
+         ship_data: Res<ShipData>,
+         mut sfx: MessageWriter<Sfx>,
+         mut deeds: MessageWriter<Deed>| {
+            let room = ship
+                .capacity(&ship_data)
+                .ether
+                .saturating_sub(profile.ether);
+            let got = (profile.ether_pending.floor() as u32).min(room);
+            if got == 0 && profile.ether_pending >= 1.0 {
+                toast.show("Трюм полон: эфир некуда класть — улучшите Трюм");
+            }
+            if got > 0 {
+                profile.ether += got;
+                profile.ether_pending -= got as f32;
+                sfx.write(Sfx("coin"));
+                deeds.write(Deed("ether"));
+                toast.show(&format!("Ветроловы: +{got} эфира"));
+            }
+        },
+    );
+}
+
+/// Облака плывут влево — корабль летит вправо. Положение — от часов, поэтому после
+/// пересборки меню облака не прыгают.
+fn clouds(root: &mut ChildSpawnerCommands, assets: &AssetServer, view: &crate::ship::ShipView, front: bool) {
+    for cloud in view.clouds.iter().filter(|c| c.front == front) {
+        root.spawn((
+            Cloud {
+                speed: cloud.speed,
+                phase: cloud.phase,
+                width: cloud.width,
+            },
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0),
+                top: px(cloud.top),
+                width: px(cloud.width),
+                height: px(cloud.width / 2.0),
+                ..default()
+            },
+            ImageNode {
+                color: Color::WHITE.with_alpha(cloud.alpha),
+                ..ImageNode::new(assets.load(cloud.image.clone()))
+            },
+            UiTransform::default(),
+            Pickable::IGNORE,
+        ));
+    }
+}
+
+/// Облако фона главной.
+#[derive(Component)]
+struct Cloud {
+    speed: f32,
+    phase: f32,
+    width: f32,
+}
+
+fn drift_clouds(time: Res<Time>, mut clouds: Query<(&Cloud, &mut UiTransform)>) {
+    let t = time.elapsed_secs();
+    for (cloud, mut transform) in &mut clouds {
+        // Путь — ширина экрана и самого облака; облако уходит за левый край и выходит справа.
+        let path = SCREEN_W + cloud.width;
+        let x = SCREEN_W - (cloud.phase * path + t * cloud.speed).rem_euclid(path);
+        transform.translation = Val2::px(x, 0.0);
+    }
 }
 
 /// Плашка комнаты: уровень, таймер стройки или что нужно для постройки. `at` — левый нижний

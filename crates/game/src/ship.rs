@@ -38,6 +38,11 @@ pub struct ShipData {
 /// Корабль-разрез на главной: корпус и комнаты отсеков поверх него.
 #[derive(Deserialize)]
 pub struct ShipView {
+    /// Корабль снаружи — на главной.
+    pub exterior: String,
+    /// Облака фона главной: плывут мимо корабля.
+    #[serde(default)]
+    pub clouds: Vec<CloudDef>,
     pub hull: String,
     /// Сторона рисунка корпуса (px): рамки комнат даны в его пикселях.
     pub size: f32,
@@ -48,6 +53,20 @@ pub struct ShipView {
     #[serde(default)]
     pub propeller: Option<Propeller>,
     pub rooms: Vec<Room>,
+}
+
+#[derive(Deserialize)]
+pub struct CloudDef {
+    pub image: String,
+    /// Высота над верхом экрана и ширина (логические px), скорость (px/с), где на пути в начале (0–1).
+    pub top: f32,
+    pub width: f32,
+    pub speed: f32,
+    pub phase: f32,
+    pub alpha: f32,
+    /// Перед кораблём (иначе — за ним).
+    #[serde(default)]
+    pub front: bool,
 }
 
 #[derive(Deserialize)]

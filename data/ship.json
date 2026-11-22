@@ -58,6 +58,14 @@
     { "id": "lookout", "name": "Подзорная башня", "icon": "menu/module_lookout.png", "unlock_hull": 7, "start_level": 0 }
   ],
   "view": {
+    "exterior": "menu/ship_lvl1.png",
+    "clouds": [
+      { "image": "fx/cloud_1.png", "top": 150, "width": 170, "speed": 7, "phase": 0.1, "alpha": 0.7 },
+      { "image": "fx/cloud_2.png", "top": 250, "width": 230, "speed": 10, "phase": 0.55, "alpha": 0.75 },
+      { "image": "fx/cloud_3.png", "top": 420, "width": 200, "speed": 8, "phase": 0.85, "alpha": 0.7 },
+      { "image": "fx/cloud_2.png", "top": 630, "width": 340, "speed": 26, "phase": 0.3, "alpha": 0.9, "front": true },
+      { "image": "fx/cloud_1.png", "top": 590, "width": 260, "speed": 20, "phase": 0.8, "alpha": 0.85, "front": true }
+    ],
     "hull": "ship/hull.png",
     "size": 1024,
     "locked": "ship/locked.png",
