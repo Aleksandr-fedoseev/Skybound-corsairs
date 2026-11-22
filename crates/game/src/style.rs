@@ -20,6 +20,8 @@ pub const INK_GOOD: Color = Color::srgb(0.16, 0.45, 0.20);
 pub enum Look {
     /// Доски с латунной окантовкой — большие панели.
     Wood,
+    /// Та же панель с тонкой рамкой — маленькие карточки.
+    WoodSmall,
     /// Пергамент — карточки внутри панелей.
     Parchment,
     /// Латунная кнопка главного действия.
@@ -38,6 +40,7 @@ impl Look {
     fn file(self) -> &'static str {
         match self {
             Look::Wood => "ui/panel.png",
+            Look::WoodSmall => "ui/panel_small.png",
             Look::Parchment => "ui/card.png",
             Look::Go => "ui/button.png",
             Look::Dark => "ui/button_dark.png",
@@ -52,7 +55,9 @@ impl Look {
     /// Неизменяемая рамка картинки (по горизонтали, по вертикали) в пикселях.
     fn border(self) -> BorderRect {
         let (x, y) = match self {
-            Look::Wood => (26.0, 26.0),
+            // Угловые накладки с заклёпками не растягиваются.
+            Look::Wood => (36.0, 36.0),
+            Look::WoodSmall => (22.0, 22.0),
             Look::Parchment => (16.0, 16.0),
             // Болты на концах доски не растягиваются.
             Look::Plank => (58.0, 16.0),

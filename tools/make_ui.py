@@ -271,13 +271,17 @@ def from_source(path, size):
     out = Image.fromarray(a.astype(np.uint8), "RGBA")
     # Водяной знак Gemini в углу — отдельное пятнышко: берём самый большой кусок рисунка.
     box = biggest_blob_box(np.asarray(out)[:, :, 3] > 128)
-    return fit(out.crop(box), size)
+    return fit(out.crop(box), size, sliced=Path(path).stem in SLICED)
 
 
-def fit(im, size):
+def fit(im, size, sliced=False):
     """Пропорции рисунка сохраняются. Квадратная цель (иконки, панели) — вписать в квадрат
     с прозрачными полями; вытянутая (кнопки, доска) — по высоте цели, ширина по рисунку."""
     tw, th = size
+    if sliced:
+        # Деталь режется на 9 частей: без прозрачных полей, по высоте цели.
+        k = th / im.height
+        return im.resize((max(1, round(im.width * k)), th), Image.LANCZOS)
     if tw == th:
         k = min(tw / im.width, th / im.height)
         small = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS)
@@ -287,6 +291,9 @@ def fit(im, size):
     k = th / im.height
     return im.resize((max(1, round(im.width * k)), th), Image.LANCZOS)
 
+
+# Детали, которые тянутся нарезкой на 9 частей.
+SLICED = {"panel", "card", "plank", "button", "button_dark", "button_off", "button_pressed", "tab_on", "tab_off"}
 
 # Перекраска эмали кнопки: тёмный и светлый тон новой эмали.
 ENAMEL = {
@@ -341,6 +348,9 @@ def save(name, im):
     elif base in ENAMEL and (SRC / "button_dark.png").exists():
         # Нет своей картинки — перекрашиваем рисованную тёмную кнопку: форма у всех одна.
         im = recolor_enamel(from_source(SRC / "button_dark.png", im.size), *ENAMEL[base])
+    elif base == "panel_small" and (SRC / "panel.png").exists():
+        # Маленькие карточки: та же панель, рамка тоньше.
+        im = from_source(SRC / "panel.png", im.size)
     elif base == "icon_silver" and (SRC / "icon_doubloons.png").exists():
         im = silver_from_gold(from_source(SRC / "icon_doubloons.png", im.size))
     im.save(OUT / name)
@@ -350,6 +360,7 @@ def save(name, im):
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     save("panel.png", panel())
+    save("panel_small.png", panel().resize((112, 112), Image.LANCZOS))
     save("card.png", parchment())
     save("button.png", button((236, 160, 70), (176, 96, 30), (255, 226, 160)))
     save("button_pressed.png", button((176, 96, 30), (136, 70, 20), (220, 180, 110)))

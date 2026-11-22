@@ -24,7 +24,7 @@ use crate::view::Fonts;
 
 const CARD_W: f32 = 164.0;
 const CARD_H: f32 = 150.0;
-const PORTRAIT: f32 = 86.0;
+const PORTRAIT: f32 = 78.0;
 /// Верх панели героя: под сеткой карточек.
 const DETAILS_TOP: f32 = 392.0;
 const BRIGHT: Color = Color::srgb(1.0, 0.93, 0.78);
@@ -728,14 +728,14 @@ fn hero_card(
         Node {
             width: px(CARD_W),
             height: px(CARD_H),
-            padding: UiRect::top(px(10)),
+            padding: UiRect::top(px(12)),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
-            row_gap: px(2),
-            border_radius: BorderRadius::all(px(18)),
+            row_gap: px(1),
+            border_radius: BorderRadius::all(px(12)),
             ..default()
         },
-        Skin(Look::Wood),
+        Skin(Look::WoodSmall),
     ));
     if selected {
         card.insert(Outline::new(px(3), px(1), GOLD));
@@ -831,7 +831,7 @@ fn details(
             top: px(DETAILS_TOP),
             left: px(8),
             right: px(8),
-            padding: UiRect::axes(px(28), px(22)),
+            padding: UiRect::axes(px(32), px(30)),
             flex_direction: FlexDirection::Column,
             row_gap: px(7),
             ..default()
