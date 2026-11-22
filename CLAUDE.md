@@ -27,6 +27,11 @@
 2. Изменил бой или данные — `cargo run -p game-data --example simulate --release`.
 3. Изменил экран — `SKYBOUND_SCREENSHOT=<путь>.png cargo run -p game` и посмотри кадр.
 
+## Коммиты
+
+- Без строки `Co-Authored-By: Claude …` и любых упоминаний Claude в сообщениях коммитов и PR.
+- Коммитить обычным `git commit`.
+
 ## Шрифты
 
 Стандартный шрифт Bevy не содержит кириллицу. Используй Noto Sans из
