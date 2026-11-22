@@ -29,3 +29,4 @@
 .studioigor/autopilot/runner.log
 .studioigor/autopilot/LOG.md
 # <<< studioigor:base
+__pycache__/

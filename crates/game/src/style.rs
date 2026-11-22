@@ -49,12 +49,18 @@ impl Look {
     }
 
     /// Ширина неизменяемой рамки картинки в пикселях.
-    fn border(self) -> f32 {
-        match self {
-            Look::Wood => 26.0,
-            Look::Parchment => 16.0,
-            Look::Plank => 20.0,
-            _ => 16.0,
+    /// Неизменяемая рамка картинки (по горизонтали, по вертикали) в пикселях.
+    fn border(self) -> BorderRect {
+        let (x, y) = match self {
+            Look::Wood => (26.0, 26.0),
+            Look::Parchment => (16.0, 16.0),
+            // Болты на концах доски не растягиваются.
+            Look::Plank => (58.0, 16.0),
+            _ => (18.0, 18.0),
+        };
+        BorderRect {
+            min_inset: Vec2::new(x, y),
+            max_inset: Vec2::new(x, y),
         }
     }
 }
@@ -83,7 +89,7 @@ pub fn skin(assets: &AssetServer, look: Look) -> ImageNode {
     ImageNode {
         image: assets.load(look.file()),
         image_mode: NodeImageMode::Sliced(TextureSlicer {
-            border: BorderRect::all(look.border()),
+            border: look.border(),
             center_scale_mode: SliceScaleMode::Stretch,
             sides_scale_mode: SliceScaleMode::Stretch,
             max_corner_scale: 1.0,
@@ -207,7 +213,8 @@ pub fn header(
             left: px(8),
             right: px(8),
             height: px(54),
-            padding: UiRect::horizontal(px(18)),
+            // Болты на концах доски остаются открытыми.
+            padding: UiRect::horizontal(px(44)),
             justify_content: JustifyContent::SpaceBetween,
             align_items: AlignItems::Center,
             ..default()

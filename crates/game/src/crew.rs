@@ -659,8 +659,8 @@ fn build(
             BackgroundColor(Color::srgb(0.10, 0.07, 0.05)),
         ))
         .with_children(|root| {
-            // Палуба «Ласточки» под тёмной вуалью — экипаж живёт на корабле.
-            style::backdrop(root, assets, "battle/deck.jpg", 0.55);
+            // Кубрик «Ласточки» под лёгкой вуалью — экипаж живёт на корабле.
+            style::backdrop(root, assets, "backgrounds/crew.jpg", 0.35);
             style::header(
                 root,
                 assets,

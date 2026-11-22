@@ -260,13 +260,66 @@ def from_source(path, size):
     # Мягкий край: полупрозрачность по близости к цвету фона на границе.
     soft = np.clip((dist - 30) / 60, 0, 1)
     edge_zone = np.asarray(Image.fromarray(outside.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(5))) > 0
+    edge_zone = np.asarray(Image.fromarray(outside.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(9))) > 0
     alpha = np.where(outside, 0, np.where(edge_zone, soft * 255, 255))
+    # Кайма цвета фона по краю рисунка (пурпурная или белая) — прозрачная.
+    rgb = a[:, :, :3]
+    tint = np.abs(rgb - bg).sum(axis=2) < 140
+    magenta = (rgb[:, :, 0] > rgb[:, :, 1] + 40) & (rgb[:, :, 2] > rgb[:, :, 1] + 40)
+    alpha = np.where(edge_zone & (tint | magenta), 0, alpha)
     a[:, :, 3] = alpha
     out = Image.fromarray(a.astype(np.uint8), "RGBA")
     # Водяной знак Gemini в углу — отдельное пятнышко: берём самый большой кусок рисунка.
     box = biggest_blob_box(np.asarray(out)[:, :, 3] > 128)
-    out = out.crop(box)
-    return out.resize(size, Image.LANCZOS)
+    return fit(out.crop(box), size)
+
+
+def fit(im, size):
+    """Пропорции рисунка сохраняются. Квадратная цель (иконки, панели) — вписать в квадрат
+    с прозрачными полями; вытянутая (кнопки, доска) — по высоте цели, ширина по рисунку."""
+    tw, th = size
+    if tw == th:
+        k = min(tw / im.width, th / im.height)
+        small = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS)
+        canvas = Image.new("RGBA", size, (0, 0, 0, 0))
+        canvas.alpha_composite(small, ((tw - small.width) // 2, (th - small.height) // 2))
+        return canvas
+    k = th / im.height
+    return im.resize((max(1, round(im.width * k)), th), Image.LANCZOS)
+
+
+# Перекраска эмали кнопки: тёмный и светлый тон новой эмали.
+ENAMEL = {
+    "button": ((150, 66, 16), (255, 186, 88)),
+    "button_pressed": ((104, 44, 12), (196, 112, 44)),
+    "button_off": ((66, 68, 74), (168, 170, 176)),
+    "tab_on": ((150, 66, 16), (255, 186, 88)),
+    "tab_off": ((44, 28, 18), (118, 82, 52)),
+}
+
+
+def recolor_enamel(im, dark, light):
+    """Синяя эмаль кнопки → другой цвет; латунь и блики остаются как есть."""
+    a = np.asarray(im).astype(float)
+    r, g, b = a[:, :, 0], a[:, :, 1], a[:, :, 2]
+    enamel = (b > r + 25) & (b > g + 8) & (a[:, :, 3] > 0)
+    lum = 0.3 * r + 0.59 * g + 0.11 * b
+    lo, hi = np.percentile(lum[enamel], 2), np.percentile(lum[enamel], 98)
+    t = np.clip((lum - lo) / max(hi - lo, 1), 0, 1)[:, :, None]
+    col = np.array(dark, float) * (1 - t) + np.array(light, float) * t
+    a[:, :, :3] = np.where(enamel[:, :, None], col, a[:, :, :3])
+    return Image.fromarray(a.astype(np.uint8), "RGBA")
+
+
+def silver_from_gold(im):
+    """Серебряная монета из золотого дублона: обесцветить и чуть охладить."""
+    a = np.asarray(im).astype(float)
+    lum = 0.3 * a[:, :, 0] + 0.59 * a[:, :, 1] + 0.11 * a[:, :, 2]
+    lum = np.clip(lum * 1.12 + 10, 0, 255)
+    a[:, :, 0] = lum * 0.94
+    a[:, :, 1] = lum * 0.98
+    a[:, :, 2] = np.clip(lum * 1.06, 0, 255)
+    return Image.fromarray(a.astype(np.uint8), "RGBA")
 
 
 def biggest_blob_box(solid):
@@ -282,10 +335,16 @@ def biggest_blob_box(solid):
 
 def save(name, im):
     src = SRC / name
+    base = name.removesuffix(".png")
     if src.exists():
         im = from_source(src, im.size)
+    elif base in ENAMEL and (SRC / "button_dark.png").exists():
+        # Нет своей картинки — перекрашиваем рисованную тёмную кнопку: форма у всех одна.
+        im = recolor_enamel(from_source(SRC / "button_dark.png", im.size), *ENAMEL[base])
+    elif base == "icon_silver" and (SRC / "icon_doubloons.png").exists():
+        im = silver_from_gold(from_source(SRC / "icon_doubloons.png", im.size))
     im.save(OUT / name)
-    print("  ", name, "(рисунок)" if src.exists() else "")
+    print("  ", name, im.size)
 
 
 def main():
