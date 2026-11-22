@@ -17,18 +17,19 @@ use crate::cabins::{CabinData, Cabins};
 use crate::contracts::Deed;
 use crate::gear::{Gear, GearData};
 use crate::menu::{
-    BRASS, GO, GO_EDGE, GOLD, MUTED, PARCHMENT, Profile, Toast, WOOD, bottom_nav, pressable,
-    spawn_toast, text,
+    GOLD, MUTED, PARCHMENT, Profile, Toast, bottom_nav, pressable, spawn_toast, text,
 };
-use crate::view::{Fonts, element_color};
+use crate::style::{self, INK, INK_GOOD, INK_SOFT, Look, Skin};
+use crate::view::Fonts;
 
-const CARD_W: f32 = 164.0;
-const CARD_H: f32 = 182.0;
-const PORTRAIT: f32 = 72.0;
-const DISABLED: Color = Color::srgb(0.36, 0.38, 0.43);
-const STAR_FILL: Color = Color::srgb(0.62, 0.42, 0.10);
+/// Медальон героя в ленте отряда.
+const CHIP: f32 = 54.0;
+/// Иконка умения в латунном кольце.
+const SKILL_RING: f32 = 70.0;
+/// Верх области героя: под заголовком экрана.
+const HERO_TOP: f32 = 108.0;
+const BRIGHT: Color = Color::srgb(1.0, 0.93, 0.78);
 const BETTER: Color = Color::srgb(0.55, 0.88, 0.55);
-const DARK_TEXT: Color = Color::srgb(0.08, 0.10, 0.16);
 
 /// Настройки экипажа: `data/crew.json`.
 #[derive(Resource, Deserialize, Clone)]
@@ -440,14 +441,6 @@ fn rarity_label(rarity: Rarity) -> &'static str {
     }
 }
 
-fn rarity_color(rarity: Rarity) -> Color {
-    match rarity {
-        Rarity::R => Color::srgb(0.70, 0.74, 0.80),
-        Rarity::Sr => Color::srgb(0.70, 0.55, 1.0),
-        Rarity::Ssr => GOLD,
-    }
-}
-
 fn role_label(role: Role) -> &'static str {
     match role {
         Role::Gunner => "Канонир",
@@ -656,33 +649,27 @@ fn build(
                 height: percent(100),
                 ..default()
             },
-            // Каюты экипажа — тёмное дерево.
-            BackgroundColor(Color::srgb(0.17, 0.12, 0.08)),
+            BackgroundColor(Color::srgb(0.10, 0.07, 0.05)),
         ))
         .with_children(|root| {
-            header(root, fonts, profile, roster.team.len(), crew.team_size);
-            root.spawn(Node {
-                position_type: PositionType::Absolute,
-                top: px(66),
-                left: px(10),
-                width: px(520),
-                flex_wrap: FlexWrap::Wrap,
-                justify_content: JustifyContent::SpaceBetween,
-                row_gap: px(10),
-                ..default()
-            })
-            .with_children(|grid| {
-                for hero in &data.heroes {
-                    hero_card(
-                        grid,
-                        assets,
-                        fonts,
-                        hero,
-                        roster,
-                        selected == Some(hero.id.as_str()),
-                    );
-                }
-            });
+            // Кубрик «Ласточки» — экипаж живёт на корабле.
+            style::backdrop(root, assets, "backgrounds/crew.jpg", 0.15);
+            style::top_bar(
+                root,
+                assets,
+                fonts,
+                &[
+                    ("journals", profile.journals),
+                    ("charts", profile.charts),
+                    ("silver", profile.silver),
+                ],
+            );
+            style::title(
+                root,
+                fonts,
+                &format!("Экипаж · отряд {}/{}", roster.team.len(), crew.team_size),
+                56.0,
+            );
             if let Some(hero) = selected.and_then(|id| data.hero(id)) {
                 let plan = roster.merge_plan(data, crew, &hero.id);
                 let merge = (
@@ -697,59 +684,40 @@ fn build(
                     root, assets, fonts, crew, roster, profile, hero, merge, cabin, gear,
                 );
             }
+            // Лента героев над нижней панелью: тап — выбрать.
+            root.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    bottom: px(86),
+                    left: px(6),
+                    right: px(6),
+                    height: px(80),
+                    padding: UiRect::horizontal(px(48)),
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                Skin(Look::Plank),
+            ))
+            .with_children(|rail| {
+                for hero in &data.heroes {
+                    roster_chip(
+                        rail,
+                        assets,
+                        hero,
+                        roster,
+                        selected == Some(hero.id.as_str()),
+                    );
+                }
+            });
             bottom_nav(root, assets, fonts, Screen::Crew);
             spawn_toast(root, fonts);
         });
 }
 
-fn header(
-    root: &mut ChildSpawnerCommands,
-    fonts: &Fonts,
-    profile: &Profile,
-    in_team: usize,
-    team_size: usize,
-) {
-    root.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(0),
-            left: px(0),
-            width: percent(100),
-            height: px(56),
-            padding: UiRect::horizontal(px(16)),
-            justify_content: JustifyContent::SpaceBetween,
-            align_items: AlignItems::Center,
-            border: UiRect::bottom(px(2)),
-            ..default()
-        },
-        BackgroundColor(WOOD),
-        BorderColor::all(BRASS),
-    ))
-    .with_children(|bar| {
-        bar.spawn(text(
-            fonts,
-            format!("Экипаж · отряд {in_team}/{team_size}"),
-            true,
-            19.0,
-            PARCHMENT,
-        ));
-        bar.spawn(text(
-            fonts,
-            format!(
-                "журналы {} · лоции {} · серебро {}",
-                profile.journals, profile.charts, profile.silver
-            ),
-            false,
-            14.0,
-            MUTED,
-        ));
-    });
-}
-
-fn hero_card(
-    grid: &mut ChildSpawnerCommands,
+fn roster_chip(
+    rail: &mut ChildSpawnerCommands,
     assets: &AssetServer,
-    fonts: &Fonts,
     hero: &HeroDef,
     roster: &Roster,
     selected: bool,
@@ -757,95 +725,52 @@ fn hero_card(
     let in_team = roster.team.contains(&hero.id);
     let owned = roster.owns(&hero.id);
     let id = hero.id.clone();
-    let mut card = grid.spawn((
-        Node {
-            width: px(CARD_W),
-            height: px(CARD_H),
-            padding: UiRect::top(px(24)),
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            row_gap: px(1),
-            border: UiRect::all(px(if selected { 3.0 } else { 1.0 })),
-            border_radius: BorderRadius::all(px(14)),
-            ..default()
-        },
-        BackgroundColor(WOOD),
-        BorderColor::all(if selected { GOLD } else { BRASS }),
-    ));
-    card.with_children(|c| {
-        c.spawn((
+    let mut chip = rail.spawn(Node {
+        flex_direction: FlexDirection::Column,
+        align_items: AlignItems::Center,
+        row_gap: px(2),
+        ..default()
+    });
+    chip.with_children(|c| {
+        let mut medal = c.spawn((
             Node {
-                width: px(PORTRAIT),
-                height: px(PORTRAIT),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(px(3)),
+                width: px(CHIP),
+                height: px(CHIP),
                 border_radius: BorderRadius::MAX,
                 ..default()
             },
-            BackgroundColor(if owned {
-                element_color(hero.element)
-            } else {
-                element_color(hero.element).with_alpha(0.3)
-            }),
-            BorderColor::all(rarity_color(hero.rarity)),
-            Pickable::IGNORE,
-        ))
-        .with_child((
-            Text::new(
-                hero.name
-                    .chars()
-                    .next()
-                    .map(String::from)
-                    .unwrap_or_default(),
-            ),
-            fonts.text(true, 36.0),
-            TextColor(DARK_TEXT),
             Pickable::IGNORE,
         ));
-        c.spawn(text(fonts, hero.name.clone(), true, 16.0, PARCHMENT));
-        if owned {
-            stars_row(c, assets, roster.stars(&hero.id), 12.0);
+        if selected {
+            medal.insert(Outline::new(px(3), px(1), GOLD));
         }
-        c.spawn(text(
-            fonts,
-            if owned {
-                format!(
-                    "ур. {} · {}",
-                    roster.level(&hero.id),
-                    rarity_label(hero.rarity)
-                )
-            } else {
-                format!("в Таверне · {}", rarity_label(hero.rarity))
-            },
-            false,
-            13.0,
-            rarity_color(hero.rarity),
-        ));
-        c.spawn(text(fonts, role_label(hero.role), false, 12.0, MUTED));
-        if in_team {
-            c.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(5),
-                    left: px(5),
-                    padding: UiRect::axes(px(6), px(1)),
-                    border_radius: BorderRadius::all(px(6)),
-                    ..default()
-                },
-                BackgroundColor(GOLD),
-                Pickable::IGNORE,
-            ))
-            .with_child((
-                Text::new("в отряде"),
-                fonts.text(true, 11.0),
-                TextColor(DARK_TEXT),
-                Pickable::IGNORE,
-            ));
+        medal.with_children(|m| {
+            m.spawn(style::medallion(assets, &hero.id, CHIP, !owned));
+            if in_team {
+                // Метка «в отряде» — латунная бляшка в углу.
+                m.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        top: px(-2),
+                        right: px(-2),
+                        width: px(16),
+                        height: px(16),
+                        border: UiRect::all(px(2)),
+                        border_radius: BorderRadius::MAX,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.95, 0.62, 0.20)),
+                    BorderColor::all(Color::srgb(0.47, 0.32, 0.11)),
+                    Pickable::IGNORE,
+                ));
+            }
+        });
+        if owned {
+            stars_row(c, assets, roster.stars(&hero.id), 8.0);
         }
     });
-    pressable(&mut card);
-    card.observe(
+    pressable(&mut chip);
+    chip.observe(
         move |_: On<PointerClick>, mut selected: ResMut<Selected>, mut dirty: ResMut<CrewDirty>| {
             selected.0 = Some(id.clone());
             dirty.0 = true;
@@ -868,7 +793,8 @@ fn details(
 ) {
     let (merge_to, merge_info) = merge;
     let level = roster.level(&hero.id);
-    let cap = crew.level_cap(roster.stars(&hero.id));
+    let stars = roster.stars(&hero.id);
+    let cap = crew.level_cap(stars);
     let at_cap = level >= cap;
     let now = hero.to_unit(level).stats;
     let next = hero.to_unit(level + 1).stats;
@@ -878,129 +804,251 @@ fn details(
     let owned = roster.owns(&hero.id);
     let copies = roster.copies(&hero.id);
 
+    // Вкладка «Снаряжение»: панель на всю ширину вместо героя.
+    if owned && gear.tab == CrewTab::Gear {
+        root.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(HERO_TOP),
+                left: px(10),
+                right: px(10),
+                padding: UiRect::axes(px(32), px(30)),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(8),
+                ..default()
+            },
+            Skin(Look::Wood),
+        ))
+        .with_children(|panel| {
+            panel
+                .spawn(Node {
+                    column_gap: px(8),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    row.spawn(text(fonts, hero.name.clone(), true, 20.0, BRIGHT));
+                    row.spawn(text(fonts, hero.title.clone(), false, 13.0, MUTED));
+                });
+            tabs_row(panel, fonts, gear.tab);
+            gear_tab(panel, fonts, gear);
+            cabin_row(panel, fonts, cabin);
+        });
+        return;
+    }
+
+    // Герой во весь рост слева.
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
-            top: px(456),
-            left: px(10),
-            width: px(520),
-            padding: UiRect::all(px(14)),
-            flex_direction: FlexDirection::Column,
-            row_gap: px(6),
-            border: UiRect::all(px(2)),
-            border_radius: BorderRadius::all(px(14)),
+            top: px(HERO_TOP + 6.0),
+            left: px(6),
+            height: px(474),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.11, 0.075, 0.05, 0.96)),
-        BorderColor::all(BRASS),
-    ))
-    .with_children(|panel| {
-        panel
-            .spawn(Node {
-                column_gap: px(8),
-                align_items: AlignItems::Baseline,
-                ..default()
-            })
-            .with_children(|row| {
-                row.spawn(text(fonts, hero.name.clone(), true, 22.0, PARCHMENT));
-                row.spawn(text(fonts, hero.title.clone(), false, 15.0, MUTED));
-                if owned {
-                    stars_row(row, assets, roster.stars(&hero.id), 16.0);
-                }
-            });
-        if owned {
-            tabs_row(panel, fonts, gear.tab);
-        }
-        if owned && gear.tab == CrewTab::Gear {
-            gear_tab(panel, fonts, gear);
-            return;
-        }
-        panel.spawn(text(
-            fonts,
-            format!(
-                "{} · {} · стихия: {} · {}",
-                rarity_label(hero.rarity),
-                role_label(hero.role),
-                element_label(hero.element),
-                if owned {
-                    format!("уровень {level} из {cap} · копий {copies}")
-                } else {
-                    "ещё не в команде".to_string()
-                }
-            ),
-            false,
-            13.0,
-            PARCHMENT,
-        ));
+        ImageNode {
+            image: assets.load(format!("ui/full_{}.png", hero.id)),
+            color: if owned {
+                Color::WHITE
+            } else {
+                Color::srgba(0.35, 0.35, 0.4, 0.85)
+            },
+            ..default()
+        },
+        Pickable::IGNORE,
+    ));
 
-        // Характеристики сейчас и на следующем уровне.
-        panel
-            .spawn(Node {
-                margin: UiRect::vertical(px(4)),
+    // Справа — пергамент с характеристиками и вкладки под ним.
+    root.spawn(Node {
+        position_type: PositionType::Absolute,
+        top: px(HERO_TOP + 6.0),
+        right: px(12),
+        width: px(232),
+        flex_direction: FlexDirection::Column,
+        row_gap: px(8),
+        ..default()
+    })
+    .with_children(|col| {
+        col.spawn((
+            Node {
+                padding: UiRect::new(px(18), px(18), px(16), px(16)),
                 flex_direction: FlexDirection::Column,
-                row_gap: px(3),
+                row_gap: px(4),
                 ..default()
-            })
-            .with_children(|stats| {
-                for (name, a, b) in [
-                    ("Здоровье", now.max_hp, next.max_hp),
-                    ("Атака", now.atk, next.atk),
-                    ("Защита", now.def, next.def),
-                    ("Скорость", now.spd, next.spd),
-                ] {
-                    stats
-                        .spawn(Node {
-                            column_gap: px(10),
+            },
+            Skin(Look::Parchment),
+        ))
+        .with_children(|card| {
+            card.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: px(-4),
+                    right: px(12),
+                    width: px(36),
+                    height: px(42),
+                    padding: UiRect::bottom(px(8)),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                ImageNode::new(assets.load(format!(
+                    "ui/badge_{}.png",
+                    rarity_label(hero.rarity).to_lowercase()
+                ))),
+            ))
+            .with_child(text(
+                fonts,
+                rarity_label(hero.rarity),
+                true,
+                12.0,
+                Color::WHITE,
+            ));
+            card.spawn((
+                Node {
+                    margin: UiRect::right(px(40)),
+                    ..default()
+                },
+                text(fonts, hero.name.clone(), true, 21.0, INK),
+            ));
+            card.spawn((
+                Node {
+                    margin: UiRect::right(px(40)),
+                    ..default()
+                },
+                text(fonts, hero.title.clone(), false, 13.0, INK_SOFT),
+            ));
+            stars_row(card, assets, if owned { stars } else { 0 }, 16.0);
+            if owned {
+                card.spawn(text(
+                    fonts,
+                    format!("Уровень {level} / {cap}"),
+                    true,
+                    14.0,
+                    INK,
+                ));
+                // Полоса уровня до потолка звёзд.
+                card.spawn((
+                    Node {
+                        height: px(8),
+                        margin: UiRect::bottom(px(4)),
+                        border_radius: BorderRadius::all(px(4)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.27, 0.18, 0.11, 0.35)),
+                ))
+                .with_child((
+                    Node {
+                        width: percent(100.0 * level as f32 / cap.max(1) as f32),
+                        height: percent(100),
+                        border_radius: BorderRadius::all(px(4)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.85, 0.55, 0.18)),
+                ));
+            } else {
+                card.spawn(text(fonts, "Ещё не в команде", true, 14.0, INK_SOFT));
+            }
+            let growing = owned && !at_cap;
+            for (icon, name, a, b) in [
+                ("hp", "Здоровье", now.max_hp, next.max_hp),
+                ("atk", "Атака", now.atk, next.atk),
+                ("def", "Защита", now.def, next.def),
+                ("spd", "Скорость", now.spd, next.spd),
+            ] {
+                card.spawn(Node {
+                    column_gap: px(6),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    row.spawn((
+                        Node {
+                            width: px(20),
+                            height: px(20),
                             ..default()
-                        })
-                        .with_children(|row| {
-                            row.spawn((
-                                Node {
-                                    width: px(110),
-                                    ..default()
-                                },
-                                text(fonts, name, false, 14.0, MUTED),
-                            ));
-                            row.spawn(text(fonts, a.to_string(), true, 14.0, PARCHMENT));
-                            if owned && !at_cap && b > a {
-                                row.spawn(text(
-                                    fonts,
-                                    format!("» {b}  (+{})", b - a),
-                                    false,
-                                    14.0,
-                                    Color::srgb(0.55, 0.88, 0.55),
-                                ));
-                            }
-                        });
-                }
-            });
+                        },
+                        ImageNode::new(assets.load(format!("ui/stat_{icon}.png"))),
+                    ));
+                    row.spawn((
+                        Node {
+                            flex_grow: 1.0,
+                            ..default()
+                        },
+                        text(fonts, name, false, 14.0, INK_SOFT),
+                    ));
+                    row.spawn(text(fonts, a.to_string(), true, 15.0, INK));
+                    if growing && b > a {
+                        row.spawn(text(fonts, format!("+{}", b - a), true, 11.0, INK_GOOD));
+                    }
+                });
+            }
+            card.spawn((
+                Node {
+                    margin: UiRect::top(px(4)),
+                    ..default()
+                },
+                text(
+                    fonts,
+                    format!(
+                        "{} · {}{}",
+                        role_label(hero.role),
+                        element_label(hero.element),
+                        if owned {
+                            format!(" · копий {copies}")
+                        } else {
+                            String::new()
+                        }
+                    ),
+                    false,
+                    12.0,
+                    INK_SOFT,
+                ),
+            ));
+        });
+        if owned {
+            tabs_row(col, fonts, gear.tab);
+        }
+    });
 
-        skills_row(panel, fonts, crew, roster, profile, hero, owned);
+    // Умения в латунных кольцах.
+    root.spawn(Node {
+        position_type: PositionType::Absolute,
+        top: px(590),
+        left: px(12),
+        column_gap: px(10),
+        ..default()
+    })
+    .with_children(|row| skills_row(row, assets, fonts, crew, roster, profile, hero, owned));
+
+    root.spawn(Node {
+        position_type: PositionType::Absolute,
+        top: px(704),
+        left: px(12),
+        right: px(12),
+        flex_direction: FlexDirection::Column,
+        row_gap: px(6),
+        ..default()
+    })
+    .with_children(|col| {
+        col.spawn(Node {
+            column_gap: px(8),
+            ..default()
+        })
+        .with_children(|buttons| {
+            if owned {
+                level_button(buttons, assets, fonts, cost, at_cap, affordable, cap);
+                merge_button(buttons, fonts, merge_to);
+                team_button(buttons, fonts, &hero.id, in_team);
+            } else {
+                to_tavern_button(buttons, fonts);
+            }
+        });
         if owned {
             let (line, color) = match &merge_info {
                 Ok(text) => (text.clone(), BETTER),
-                Err(reason) => (reason.clone(), MUTED),
+                Err(reason) => (reason.clone(), PARCHMENT),
             };
-            panel.spawn(text(fonts, line, false, 13.0, color));
-        }
-
-        panel
-            .spawn(Node {
-                margin: UiRect::top(px(10)),
-                column_gap: px(10),
-                ..default()
-            })
-            .with_children(|buttons| {
-                if owned {
-                    level_button(buttons, fonts, cost, at_cap, affordable, cap);
-                    merge_button(buttons, fonts, merge_to);
-                    team_button(buttons, fonts, &hero.id, in_team);
-                } else {
-                    to_tavern_button(buttons, fonts);
-                }
-            });
-        if owned {
-            cabin_row(panel, fonts, cabin);
+            col.spawn(text(fonts, line, false, 12.0, color));
         }
     });
 }
@@ -1017,19 +1065,20 @@ fn tabs_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts, tab: CrewTab) {
                 let active = t == tab;
                 let mut button = row.spawn((
                     Node {
-                        padding: UiRect::axes(px(14), px(5)),
-                        border: UiRect::all(px(1)),
-                        border_radius: BorderRadius::all(px(8)),
+                        min_height: px(34),
+                        padding: UiRect::axes(px(16), px(6)),
+                        align_items: AlignItems::Center,
                         ..default()
                     },
-                    BackgroundColor(if active {
-                        STAR_FILL
-                    } else {
-                        Color::srgba(1.0, 1.0, 1.0, 0.05)
-                    }),
-                    BorderColor::all(if active { GOLD } else { MUTED }),
+                    Skin(if active { Look::TabOn } else { Look::TabOff }),
                 ));
-                button.with_child(text(fonts, label, true, 13.0, PARCHMENT));
+                button.with_child(text(
+                    fonts,
+                    label,
+                    true,
+                    13.0,
+                    if active { Color::WHITE } else { MUTED },
+                ));
                 pressable(&mut button);
                 button.observe(
                     move |_: On<PointerClick>,
@@ -1059,13 +1108,12 @@ fn gear_tab(panel: &mut ChildSpawnerCommands, fonts: &Fonts, info: GearInfo) {
         panel
             .spawn((
                 Node {
-                    padding: UiRect::axes(px(10), px(6)),
+                    padding: UiRect::axes(px(12), px(6)),
                     column_gap: px(8),
                     align_items: AlignItems::Center,
-                    border_radius: BorderRadius::all(px(8)),
                     ..default()
                 },
-                BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.05)),
+                Skin(Look::Parchment),
             ))
             .with_children(|row| {
                 row.spawn(Node {
@@ -1075,7 +1123,7 @@ fn gear_tab(panel: &mut ChildSpawnerCommands, fonts: &Fonts, info: GearInfo) {
                     ..default()
                 })
                 .with_children(|c| {
-                    c.spawn(text(fonts, name, true, 13.0, PARCHMENT));
+                    c.spawn(text(fonts, name, true, 13.0, INK));
                     let line = item
                         .as_ref()
                         .map_or("пусто".to_string(), |(_, d, _, _)| d.clone());
@@ -1084,7 +1132,7 @@ fn gear_tab(panel: &mut ChildSpawnerCommands, fonts: &Fonts, info: GearInfo) {
                         line,
                         false,
                         12.0,
-                        if item.is_some() { BETTER } else { MUTED },
+                        if item.is_some() { INK_GOOD } else { INK_SOFT },
                     ));
                 });
                 if let Some((id, _, (silver, details), maxed)) = item {
@@ -1125,13 +1173,12 @@ fn gear_hero_button(
 ) {
     let mut button = row.spawn((
         Node {
-            padding: UiRect::axes(px(12), px(8)),
-            border: UiRect::all(px(1)),
-            border_radius: BorderRadius::all(px(8)),
+            min_height: px(34),
+            padding: UiRect::axes(px(12), px(6)),
+            align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(if active { GO } else { DISABLED }),
-        BorderColor::all(if active { GO_EDGE } else { MUTED }),
+        Skin(if active { Look::Go } else { Look::Off }),
     ));
     button.with_child(text(fonts, label, true, 12.0, Color::WHITE));
     if active {
@@ -1260,17 +1307,12 @@ fn cabin_button(
 ) {
     let mut button = row.spawn((
         Node {
-            padding: UiRect::axes(px(10), px(5)),
-            border: UiRect::all(px(1)),
-            border_radius: BorderRadius::all(px(8)),
+            min_height: px(34),
+            padding: UiRect::axes(px(12), px(6)),
+            align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(if active {
-            Color::srgba(0.85, 0.51, 0.17, 0.85)
-        } else {
-            DISABLED
-        }),
-        BorderColor::all(if active { GO_EDGE } else { MUTED }),
+        Skin(if active { Look::Go } else { Look::Off }),
     ));
     button.with_child(text(fonts, label, true, 12.0, Color::WHITE));
     if active {
@@ -1316,6 +1358,7 @@ fn cabin_act(
 
 fn level_button(
     buttons: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     cost: LevelCost,
     at_cap: bool,
@@ -1326,16 +1369,14 @@ fn level_button(
     let mut button = buttons.spawn((
         Node {
             flex_grow: 1.0,
-            height: px(64),
+            height: px(56),
             flex_direction: FlexDirection::Column,
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            border: UiRect::all(px(2)),
-            border_radius: BorderRadius::all(px(12)),
+            row_gap: px(2),
             ..default()
         },
-        BackgroundColor(if ready { GO } else { DISABLED }),
-        BorderColor::all(if ready { GO_EDGE } else { MUTED }),
+        Skin(if ready { Look::Go } else { Look::Off }),
     ));
     button.with_children(|b| {
         if at_cap {
@@ -1348,14 +1389,15 @@ fn level_button(
             ));
             b.spawn(text(fonts, "дальше — звёзды героя", false, 12.0, PARCHMENT));
         } else {
-            b.spawn(text(fonts, "Повысить уровень", true, 18.0, Color::WHITE));
-            b.spawn(text(
+            b.spawn(text(fonts, "Повысить уровень", true, 17.0, Color::WHITE));
+            style::costs(
+                b,
+                assets,
                 fonts,
-                format!("{} журналов · {} серебра", cost.journals, cost.silver),
-                false,
+                &[("journals", cost.journals), ("silver", cost.silver)],
                 12.0,
-                PARCHMENT,
-            ));
+                Color::WHITE,
+            );
         }
     });
     pressable(&mut button);
@@ -1408,8 +1450,10 @@ fn level_up(
 }
 
 /// Три умения героя: уровень, потолок от звёзд, цена следующего уровня; тап — повысить.
+#[allow(clippy::too_many_arguments)]
 fn skills_row(
-    panel: &mut ChildSpawnerCommands,
+    row: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     crew: &CrewData,
     roster: &Roster,
@@ -1419,65 +1463,86 @@ fn skills_row(
 ) {
     let levels = roster.skills(&hero.id);
     let cap = crew.skill_cap(roster.stars(&hero.id));
-    let names = [&hero.basic.name, &hero.skill.name, &hero.ultimate.name];
-    let kinds = ["атака", "спецатака", "ульта"];
-    panel
-        .spawn(Node {
-            column_gap: px(8),
+    let icons = skill_icons(&hero.id);
+    for i in 0..3 {
+        let level = levels[i];
+        let (charts, silver) = crew.skill_cost(level);
+        let can = owned && level < cap && profile.charts >= charts && profile.silver >= silver;
+        let mut slot = row.spawn(Node {
+            width: px(84),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            row_gap: px(2),
             ..default()
-        })
-        .with_children(|row| {
-            for i in 0..3 {
-                let level = levels[i];
-                let (charts, silver) = crew.skill_cost(level);
-                let can =
-                    owned && level < cap && profile.charts >= charts && profile.silver >= silver;
-                let sub = if !owned {
-                    kinds[i].to_string()
-                } else if level >= cap {
-                    format!("ур. {level} · потолок")
+        });
+        slot.with_children(|c| {
+            let mut ring = c.spawn((
+                Node {
+                    width: px(SKILL_RING),
+                    height: px(SKILL_RING),
+                    border_radius: BorderRadius::MAX,
+                    ..default()
+                },
+                ImageNode::new(assets.load(format!("ui/skill_{}.png", icons[i]))),
+                Pickable::IGNORE,
+            ));
+            if can {
+                ring.insert(Outline::new(px(2), px(1), GOLD));
+            }
+            // Табличка уровня под кольцом.
+            c.spawn((
+                Node {
+                    margin: UiRect::top(px(-10)),
+                    padding: UiRect::axes(px(10), px(1)),
+                    border: UiRect::all(px(2)),
+                    border_radius: BorderRadius::all(px(10)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.16, 0.10, 0.06)),
+                BorderColor::all(Color::srgb(0.72, 0.55, 0.26)),
+                Pickable::IGNORE,
+            ))
+            .with_child(text(
+                fonts,
+                if level >= cap && owned {
+                    format!("ур. {level} · макс.")
                 } else {
-                    format!("ур. {level} · {charts} лоц., {silver} сер.")
-                };
-                let mut chip = row.spawn((
-                    Node {
-                        flex_grow: 1.0,
-                        flex_basis: px(0),
-                        padding: UiRect::axes(px(6), px(5)),
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(px(1)),
-                        border_radius: BorderRadius::all(px(10)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.05)),
-                    BorderColor::all(if can {
-                        GOLD
-                    } else {
-                        Color::srgba(1.0, 1.0, 1.0, 0.15)
-                    }),
-                ));
-                chip.with_children(|c| {
-                    c.spawn((
-                        text(fonts, names[i].clone(), true, 12.0, PARCHMENT),
-                        TextLayout::justify(Justify::Center),
-                    ));
-                    c.spawn(text(
-                        fonts,
-                        sub,
-                        false,
-                        11.0,
-                        if can { BETTER } else { MUTED },
-                    ));
-                });
-                if owned {
-                    pressable(&mut chip);
-                    chip.observe(move |_: On<PointerClick>, mut commands: Commands| {
-                        commands.run_system_cached_with(upgrade_skill, i);
-                    });
-                }
+                    format!("ур. {level}")
+                },
+                true,
+                11.0,
+                BRIGHT,
+            ));
+            if owned && level < cap {
+                style::costs(
+                    c,
+                    assets,
+                    fonts,
+                    &[("charts", charts), ("silver", silver)],
+                    10.0,
+                    if can { BETTER } else { BRIGHT },
+                );
             }
         });
+        if owned {
+            pressable(&mut slot);
+            slot.observe(move |_: On<PointerClick>, mut commands: Commands| {
+                commands.run_system_cached_with(upgrade_skill, i);
+            });
+        }
+    }
+}
+
+/// Временные иконки умений (кольца из макетов) — пока нет своих рисунков на каждое умение.
+fn skill_icons(hero: &str) -> [&'static str; 3] {
+    match hero {
+        "ren" => ["blade", "swirl", "swirl"],
+        "sora" => ["wind", "wind", "swirl"],
+        "kaya" => ["musket", "pistol", "musket"],
+        "lira" => ["pistol", "wind", "spyglass"],
+        "mei" => ["blade", "swirl", "wind"],
+        _ => ["blade", "swirl", "blade"],
+    }
 }
 
 /// Повысить умение героя из карточки за лоции и серебро.
@@ -1566,17 +1631,14 @@ fn merge_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, to: Option<u3
     let ready = to.is_some();
     let mut button = buttons.spawn((
         Node {
-            width: px(120),
-            height: px(64),
+            width: px(108),
+            height: px(56),
             flex_direction: FlexDirection::Column,
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            border: UiRect::all(px(2)),
-            border_radius: BorderRadius::all(px(12)),
             ..default()
         },
-        BackgroundColor(if ready { STAR_FILL } else { DISABLED }),
-        BorderColor::all(if ready { GOLD } else { MUTED }),
+        Skin(if ready { Look::Go } else { Look::TabOff }),
     ));
     button.with_children(|b| {
         b.spawn(text(fonts, "Слияние", true, 15.0, Color::WHITE));
@@ -1631,16 +1693,13 @@ fn to_tavern_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts) {
     let mut button = buttons.spawn((
         Node {
             flex_grow: 1.0,
-            height: px(64),
+            height: px(56),
             flex_direction: FlexDirection::Column,
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            border: UiRect::all(px(2)),
-            border_radius: BorderRadius::all(px(12)),
             ..default()
         },
-        BackgroundColor(GO),
-        BorderColor::all(GO_EDGE),
+        Skin(Look::Go),
     ));
     button.with_children(|b| {
         b.spawn(text(fonts, "Нанять в Таверне", true, 18.0, Color::WHITE));
@@ -1662,16 +1721,13 @@ fn team_button(buttons: &mut ChildSpawnerCommands, fonts: &Fonts, id: &str, in_t
     let id = id.to_string();
     let mut button = buttons.spawn((
         Node {
-            width: px(120),
-            height: px(64),
+            width: px(108),
+            height: px(56),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            border: UiRect::all(px(2)),
-            border_radius: BorderRadius::all(px(12)),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.10, 0.18, 0.30, 0.9)),
-        BorderColor::all(BRASS),
+        Skin(Look::Dark),
     ));
     button.with_child(text(
         fonts,

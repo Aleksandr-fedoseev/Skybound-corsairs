@@ -14,16 +14,12 @@ use crate::Screen;
 use crate::audio::Sfx;
 use crate::battle_screen::{BattleScreen, random_seed};
 use crate::crew::Roster;
-use crate::menu::{
-    BRASS, GO, GO_EDGE, GOLD, MUTED, PARCHMENT, Profile, Toast, WOOD, bottom_nav, pressable,
-    spawn_toast, text,
-};
+use crate::menu::{GOLD, PARCHMENT, Profile, Toast, bottom_nav, pressable, spawn_toast, text};
 use crate::ship::{Ship, ShipData};
-use crate::view::{Fonts, element_color};
+use crate::style::{self, INK, INK_SOFT, Look, Skin};
+use crate::view::Fonts;
 
-const FREE: Color = Color::srgb(0.30, 0.62, 0.38);
-const DISABLED: Color = Color::srgb(0.36, 0.38, 0.43);
-const DARK_TEXT: Color = Color::srgb(0.08, 0.10, 0.16);
+const BRIGHT: Color = Color::srgb(1.0, 0.93, 0.78);
 const SR_COLOR: Color = Color::srgb(0.70, 0.55, 1.0);
 const R_COLOR: Color = Color::srgb(0.70, 0.74, 0.80);
 /// Карточки найма открываются по одной.
@@ -280,7 +276,7 @@ fn rebuild_tavern(
         &screen.data,
     );
     if !results.list.is_empty() {
-        results_overlay(&mut commands, &fonts, &results, &screen.data);
+        results_overlay(&mut commands, &assets, &fonts, &results, &screen.data);
     }
 }
 
@@ -305,210 +301,270 @@ fn build(
                 height: percent(100),
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.17, 0.12, 0.08)),
+            BackgroundColor(Color::srgb(0.10, 0.07, 0.05)),
         ))
         .with_children(|root| {
-            header(root, fonts, profile);
-            root.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(66),
-                    left: px(135),
-                    width: px(270),
-                    height: px(212),
-                    ..default()
-                },
-                ImageNode::new(assets.load("menu/module_tavern.png")),
-                Pickable::IGNORE,
-            ));
-            pool_row(root, fonts, cfg, roster, data);
-            odds(root, fonts, cfg, state);
-            hire_buttons(root, fonts, cfg, state.free_left(free_per_day), profile);
+            style::backdrop(root, assets, "backgrounds/tavern.jpg", 0.15);
+            style::top_bar(
+                root,
+                assets,
+                fonts,
+                &[("doubloons", profile.doubloons), ("silver", profile.silver)],
+            );
+            style::title(root, fonts, "Таверна · найм героев", 56.0);
+            poster(root, assets, fonts, cfg, roster, data);
+            pity_panel(root, fonts, cfg, state);
+            hire_buttons(
+                root,
+                assets,
+                fonts,
+                cfg,
+                state.free_left(free_per_day),
+                profile,
+            );
+            pool_row(root, assets, fonts, cfg, roster, data);
             bottom_nav(root, assets, fonts, Screen::Tavern);
             spawn_toast(root, fonts);
         });
 }
 
-fn header(root: &mut ChildSpawnerCommands, fonts: &Fonts, profile: &Profile) {
-    root.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(0),
-            left: px(0),
-            width: percent(100),
-            height: px(56),
-            padding: UiRect::horizontal(px(16)),
-            justify_content: JustifyContent::SpaceBetween,
-            align_items: AlignItems::Center,
-            border: UiRect::bottom(px(2)),
-            ..default()
-        },
-        BackgroundColor(WOOD),
-        BorderColor::all(BRASS),
-    ))
-    .with_children(|bar| {
-        bar.spawn(text(fonts, "Таверна", true, 20.0, PARCHMENT));
-        bar.spawn(text(
-            fonts,
-            format!("дублоны {}", profile.doubloons),
-            true,
-            15.0,
-            GOLD,
-        ));
-    });
-}
-
-fn portrait(
-    parent: &mut ChildSpawnerCommands,
-    fonts: &Fonts,
-    size: f32,
-    name: &str,
-    color: Color,
-    edge: Color,
-) {
-    parent
-        .spawn((
-            Node {
-                width: px(size),
-                height: px(size),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(px(3)),
-                border_radius: BorderRadius::MAX,
-                ..default()
-            },
-            BackgroundColor(color),
-            BorderColor::all(edge),
-            Pickable::IGNORE,
-        ))
-        .with_child((
-            Text::new(name.chars().next().map(String::from).unwrap_or_default()),
-            fonts.text(true, size * 0.45),
-            TextColor(DARK_TEXT),
-            Pickable::IGNORE,
-        ));
-}
-
-/// Кто сейчас в таверне: все, кто может выпасть.
-fn pool_row(
+/// Плакат «Разыскивается»: SSR-герой из таверны, которого ещё нет в команде.
+fn poster(
     root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     cfg: &TavernData,
     roster: &Roster,
     data: &GameData,
 ) {
+    let ssr: Vec<_> = cfg
+        .pool
+        .iter()
+        .filter_map(|id| data.hero(id))
+        .filter(|h| h.rarity == Rarity::Ssr)
+        .collect();
+    let Some(hero) = ssr.iter().find(|h| !roster.owns(&h.id)).or(ssr.first()) else {
+        return;
+    };
     root.spawn(Node {
         position_type: PositionType::Absolute,
-        top: px(286),
-        left: px(10),
-        width: px(520),
-        flex_direction: FlexDirection::Column,
-        align_items: AlignItems::Center,
-        row_gap: px(6),
+        top: px(106),
+        left: px(0),
+        right: px(0),
+        justify_content: JustifyContent::Center,
         ..default()
     })
-    .with_children(|col| {
-        col.spawn(text(fonts, "Сегодня в таверне", true, 15.0, PARCHMENT));
-        col.spawn(Node {
-            column_gap: px(10),
-            ..default()
-        })
-        .with_children(|row| {
-            for id in &cfg.pool {
-                let Some(hero) = data.hero(id) else {
-                    continue;
-                };
-                row.spawn(Node {
-                    width: px(76),
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    ..default()
-                })
-                .with_children(|cell| {
-                    portrait(
-                        cell,
-                        fonts,
-                        56.0,
-                        &hero.name,
-                        element_color(hero.element),
-                        rarity_color(hero.rarity),
-                    );
-                    cell.spawn(text(fonts, hero.name.clone(), true, 13.0, PARCHMENT));
-                    let (label, color) = if roster.owns(id) {
-                        ("в команде", MUTED)
-                    } else {
-                        ("новый!", GOLD)
-                    };
-                    cell.spawn(text(
-                        fonts,
-                        rarity_label(hero.rarity),
-                        true,
-                        12.0,
-                        rarity_color(hero.rarity),
+    .with_children(|row| {
+        row.spawn((
+            Node {
+                width: px(300),
+                height: px(352),
+                padding: UiRect::all(px(20)),
+                ..default()
+            },
+            Skin(Look::Wood),
+        ))
+        .with_children(|frame| {
+            frame
+                .spawn((
+                    Node {
+                        flex_grow: 1.0,
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        padding: UiRect::top(px(8)),
+                        overflow: Overflow::clip(),
+                        ..default()
+                    },
+                    Skin(Look::Parchment),
+                ))
+                .with_children(|paper| {
+                    paper.spawn(text(fonts, "РАЗЫСКИВАЕТСЯ", true, 26.0, INK));
+                    paper.spawn((
+                        Node {
+                            height: px(228),
+                            margin: UiRect::top(px(4)),
+                            ..default()
+                        },
+                        ImageNode::new(assets.load(format!("ui/full_{}.png", hero.id))),
+                        Pickable::IGNORE,
                     ));
-                    cell.spawn(text(fonts, label, false, 11.0, color));
                 });
-            }
+            // Лента с именем поверх низа плаката.
+            frame
+                .spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: px(-10),
+                        right: px(-10),
+                        bottom: px(14),
+                        height: px(52),
+                        flex_direction: FlexDirection::Column,
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    Skin(Look::Go),
+                ))
+                .with_children(|ribbon| {
+                    ribbon.spawn(text(
+                        fonts,
+                        format!("SSR · {} — {}", hero.name, hero.title),
+                        true,
+                        15.0,
+                        Color::WHITE,
+                    ));
+                    ribbon.spawn(text(
+                        fonts,
+                        if roster.owns(&hero.id) {
+                            "уже в команде — копия даст звезду".to_string()
+                        } else {
+                            format!("шанс SSR {}%", (cfg.rates.ssr * 1000.0).round() / 10.0)
+                        },
+                        false,
+                        12.0,
+                        BRIGHT,
+                    ));
+                });
         });
     });
 }
 
-/// Опубликованные шансы и гарант.
-fn odds(root: &mut ChildSpawnerCommands, fonts: &Fonts, cfg: &TavernData, state: &TavernState) {
-    let pct = |p: f32| format!("{}%", (p * 1000.0).round() / 10.0);
-    let r = 1.0 - cfg.rates.ssr - cfg.rates.sr;
-    let left = cfg.ssr_pity.saturating_sub(state.pity.since_ssr);
+/// Кто сейчас в таверне: все, кто может выпасть.
+fn pool_row(
+    root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    cfg: &TavernData,
+    roster: &Roster,
+    data: &GameData,
+) {
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
-            top: px(424),
-            left: px(10),
-            width: px(520),
-            padding: UiRect::all(px(12)),
-            flex_direction: FlexDirection::Column,
-            row_gap: px(4),
-            border: UiRect::all(px(1)),
-            border_radius: BorderRadius::all(px(12)),
+            bottom: px(86),
+            left: px(6),
+            right: px(6),
+            height: px(84),
+            padding: UiRect::new(px(52), px(48), px(6), px(6)),
+            justify_content: JustifyContent::SpaceBetween,
+            align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(WOOD),
-        BorderColor::all(BRASS),
+        Skin(Look::Plank),
+    ))
+    .with_children(|rail| {
+        for id in &cfg.pool {
+            let Some(hero) = data.hero(id) else {
+                continue;
+            };
+            let owned = roster.owns(id);
+            rail.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|cell| {
+                cell.spawn(style::medallion(assets, &hero.id, 50.0, false));
+                cell.spawn(text(
+                    fonts,
+                    if owned {
+                        rarity_label(hero.rarity).to_string()
+                    } else {
+                        "новый!".to_string()
+                    },
+                    true,
+                    11.0,
+                    if owned {
+                        rarity_color(hero.rarity)
+                    } else {
+                        GOLD
+                    },
+                ));
+            });
+        }
+    });
+}
+
+/// Опубликованные шансы и гарант.
+fn pity_panel(
+    root: &mut ChildSpawnerCommands,
+    fonts: &Fonts,
+    cfg: &TavernData,
+    state: &TavernState,
+) {
+    let done = state.pity.since_ssr.min(cfg.ssr_pity);
+    let pct = |p: f32| format!("{}%", (p * 1000.0).round() / 10.0);
+    let odds = format!(
+        "Шансы: SSR {} · SR {} · R {}. Гарант: SSR не позже {}-го найма, в каждых {} — SR или выше. Внутри редкости герои выпадают поровну; повтор — копия для звёзд.",
+        pct(cfg.rates.ssr),
+        pct(cfg.rates.sr),
+        pct(1.0 - cfg.rates.ssr - cfg.rates.sr),
+        cfg.ssr_pity,
+        cfg.sr_every
+    );
+    root.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(468),
+            left: px(40),
+            right: px(40),
+            padding: UiRect::axes(px(22), px(12)),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            row_gap: px(6),
+            ..default()
+        },
+        Skin(Look::Parchment),
     ))
     .with_children(|panel| {
         panel.spawn(text(
             fonts,
-            format!(
-                "Шансы: SSR {} · SR {} · R {}",
-                pct(cfg.rates.ssr),
-                pct(cfg.rates.sr),
-                pct(r)
-            ),
+            format!("До гарантированного SSR: {done} / {}", cfg.ssr_pity),
             true,
             14.0,
-            PARCHMENT,
+            INK,
         ));
-        panel.spawn(text(
-            fonts,
-            format!(
-                "Гарант: SSR не позже {}-го найма — осталось {left}. В каждых {} наймах есть SR или выше.",
-                cfg.ssr_pity, cfg.sr_every
-            ),
-            false,
-            12.0,
-            MUTED,
+        panel
+            .spawn((
+                Node {
+                    width: percent(100),
+                    height: px(12),
+                    border: UiRect::all(px(2)),
+                    border_radius: BorderRadius::all(px(6)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.22, 0.14, 0.08)),
+                BorderColor::all(Color::srgb(0.72, 0.55, 0.26)),
+            ))
+            .with_child((
+                Node {
+                    width: percent(100.0 * done as f32 / cfg.ssr_pity.max(1) as f32),
+                    height: percent(100),
+                    border_radius: BorderRadius::all(px(4)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.95, 0.66, 0.22)),
+            ));
+        let mut rates = panel.spawn((
+            Node {
+                min_height: px(28),
+                padding: UiRect::axes(px(14), px(3)),
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            Skin(Look::TabOff),
         ));
-        panel.spawn(text(
-            fonts,
-            "Внутри редкости герои выпадают поровну. Повтор героя — копия для звёзд.",
-            false,
-            12.0,
-            MUTED,
-        ));
+        rates.with_child(text(fonts, "Шансы и гарант", true, 12.0, BRIGHT));
+        pressable(&mut rates);
+        rates.observe(move |_: On<PointerClick>, mut toast: ResMut<Toast>| {
+            toast.show_long(&odds);
+        });
     });
 }
 
 fn hire_buttons(
     root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     cfg: &TavernData,
     free_left: u32,
@@ -516,17 +572,18 @@ fn hire_buttons(
 ) {
     root.spawn(Node {
         position_type: PositionType::Absolute,
-        top: px(560),
-        left: px(10),
-        width: px(520),
+        top: px(590),
+        left: px(16),
+        right: px(16),
         flex_direction: FlexDirection::Column,
-        row_gap: px(10),
+        row_gap: px(8),
         ..default()
     })
     .with_children(|col| {
         let free = free_left > 0;
         hire_button(
             col,
+            assets,
             fonts,
             Hire::Free,
             if free {
@@ -534,11 +591,13 @@ fn hire_buttons(
             } else {
                 "Бесплатный найм — завтра"
             },
-            format!("осталось сегодня: {free_left} · больше — с уровнем Таверны"),
-            if free { FREE } else { DISABLED },
+            None,
+            format!("осталось сегодня: {free_left}"),
+            if free { Look::Dark } else { Look::Off },
+            52.0,
         );
         col.spawn(Node {
-            column_gap: px(10),
+            column_gap: px(12),
             ..default()
         })
         .with_children(|row| {
@@ -548,47 +607,62 @@ fn hire_buttons(
             ] {
                 hire_button(
                     row,
+                    assets,
                     fonts,
                     hire,
                     title,
-                    format!("{price} дублонов"),
+                    Some(price),
+                    String::new(),
                     if profile.doubloons >= price {
-                        GO
+                        Look::Go
                     } else {
-                        DISABLED
+                        Look::Off
                     },
+                    72.0,
                 );
             }
         });
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn hire_button(
     parent: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     hire: Hire,
     title: &str,
+    price: Option<u32>,
     sub: String,
-    fill: Color,
+    look: Look,
+    height: f32,
 ) {
     let mut button = parent.spawn((
         Node {
             flex_grow: 1.0,
             flex_basis: px(0),
-            height: px(70),
+            height: px(height),
             flex_direction: FlexDirection::Column,
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            border: UiRect::all(px(2)),
-            border_radius: BorderRadius::all(px(12)),
             ..default()
         },
-        BackgroundColor(fill),
-        BorderColor::all(if fill == DISABLED { MUTED } else { GO_EDGE }),
+        Skin(look),
     ));
     button.with_children(|b| {
-        b.spawn(text(fonts, title, true, 20.0, Color::WHITE));
-        b.spawn(text(fonts, sub, false, 13.0, PARCHMENT));
+        b.spawn(text(
+            fonts,
+            title,
+            true,
+            if price.is_some() { 21.0 } else { 15.0 },
+            Color::WHITE,
+        ));
+        match price {
+            Some(price) => style::costs(b, assets, fonts, &[("doubloons", price)], 15.0, BRIGHT),
+            None => {
+                b.spawn(text(fonts, sub, false, 11.0, PARCHMENT));
+            }
+        }
     });
     pressable(&mut button);
     button.observe(move |_: On<PointerClick>, mut commands: Commands| {
@@ -649,7 +723,13 @@ fn hire_heroes(
     dirty.0 = true;
 }
 
-fn results_overlay(commands: &mut Commands, fonts: &Fonts, results: &Results, data: &GameData) {
+fn results_overlay(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    results: &Results,
+    data: &GameData,
+) {
     commands
         .spawn((
             ResultsOverlay,
@@ -704,24 +784,16 @@ fn results_overlay(commands: &mut Commands, fonts: &Fonts, results: &Results, da
                                 flex_direction: FlexDirection::Column,
                                 align_items: AlignItems::Center,
                                 row_gap: px(2),
-                                border: UiRect::all(px(if ssr { 3.0 } else { 1.0 })),
                                 border_radius: BorderRadius::all(px(12)),
                                 ..default()
                             },
-                            BackgroundColor(WOOD),
-                            BorderColor::all(rarity_color(*rarity)),
+                            Skin(Look::Parchment),
+                            Outline::new(px(if ssr { 3.0 } else { 0.0 }), px(1), GOLD),
                             Visibility::Hidden,
                         ))
                         .with_children(|card| {
-                            portrait(
-                                card,
-                                fonts,
-                                62.0,
-                                &hero.name,
-                                element_color(hero.element),
-                                rarity_color(*rarity),
-                            );
-                            card.spawn(text(fonts, hero.name.clone(), true, 15.0, PARCHMENT));
+                            card.spawn(style::medallion(assets, &hero.id, 66.0, false));
+                            card.spawn(text(fonts, hero.name.clone(), true, 15.0, INK));
                             card.spawn(text(
                                 fonts,
                                 rarity_label(*rarity),
@@ -734,7 +806,11 @@ fn results_overlay(commands: &mut Commands, fonts: &Fonts, results: &Results, da
                                 if *new { "новый!" } else { "копия" },
                                 *new,
                                 12.0,
-                                if *new { GOLD } else { MUTED },
+                                if *new {
+                                    Color::srgb(0.70, 0.36, 0.05)
+                                } else {
+                                    INK_SOFT
+                                },
                             ));
                         });
                     }
@@ -745,12 +821,9 @@ fn results_overlay(commands: &mut Commands, fonts: &Fonts, results: &Results, da
                     height: px(56),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
-                    border: UiRect::all(px(2)),
-                    border_radius: BorderRadius::all(px(12)),
                     ..default()
                 },
-                BackgroundColor(GO),
-                BorderColor::all(GO_EDGE),
+                Skin(Look::Go),
             ));
             done.with_child(text(fonts, "Забрать", true, 20.0, Color::WHITE));
             pressable(&mut done);

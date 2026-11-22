@@ -23,6 +23,7 @@ mod ship;
 mod softbody;
 mod spells;
 mod story;
+mod style;
 mod tavern;
 mod view;
 
@@ -97,6 +98,7 @@ fn main() {
         gear::plugin,
         events::plugin,
     ))
+    .add_plugins(style::plugin)
     .add_message::<Shown>()
     .insert_resource(crew)
     .insert_resource(roster)

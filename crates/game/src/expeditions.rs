@@ -11,11 +11,10 @@ use crate::abyss::ActivitiesDirty;
 use crate::audio::Sfx;
 use crate::battle_screen::BattleScreen;
 use crate::crew::Roster;
-use crate::menu::{
-    BRASS, GO, GO_EDGE, GOLD, MUTED, PARCHMENT, Spoils, Toast, WOOD, pressable, text,
-};
+use crate::menu::{GO, GOLD, MUTED, PARCHMENT, Spoils, Toast, pressable, text};
 use crate::save::now;
 use crate::ship::{Ship, ShipData, clock};
+use crate::style::{Look, Skin};
 use crate::view::Fonts;
 
 const DONE: Color = Color::srgb(0.30, 0.62, 0.38);
@@ -155,15 +154,14 @@ pub fn section(
 ) {
     col.spawn((
         Node {
-            padding: UiRect::all(px(14)),
+            padding: UiRect::axes(px(30), px(28)),
             flex_direction: FlexDirection::Column,
             row_gap: px(8),
             border: UiRect::all(px(1)),
             border_radius: BorderRadius::all(px(14)),
             ..default()
         },
-        BackgroundColor(WOOD),
-        BorderColor::all(BRASS),
+        Skin(Look::Wood),
     ))
     .with_children(|card| {
         card.spawn(text(
@@ -248,8 +246,11 @@ pub fn section(
                         border_radius: BorderRadius::all(px(10)),
                         ..default()
                     },
-                    BackgroundColor(fill),
-                    BorderColor::all(if fill == DISABLED { MUTED } else { GO_EDGE }),
+                    Skin(if fill == DISABLED {
+                        Look::Off
+                    } else {
+                        Look::Go
+                    }),
                 ));
                 button.with_child(text(fonts, label, true, 14.0, Color::WHITE));
                 if fill != DISABLED {

@@ -39,6 +39,7 @@ EDITOR: none — у Bevy нет редактора, код в репозитор
 - Игра стартует в главном меню; сразу в бой — `SKYBOUND_SCREEN=battle`. В меню клавиша H (dev) — следующий уровень Корпуса.
 - Звуки и музыку синтезирует `python3 tools/make_sounds.py` (numpy + ffmpeg/libvorbis) → crates/game/assets/audio/; громкости — data/audio.json. Проверка без ушей: `parec --device=$(pactl get-default-sink).monitor` и уровень RMS.
 - Арт из assets/ (исходники) готовит `python3 tools/prepare_art.py` → crates/game/assets/menu/; JPEG в Bevy включён фичей `jpeg` в корневом Cargo.toml.
+- Детали интерфейса (панели, кнопки, иконки, медальоны и фигуры героев) готовит `python3 tools/make_ui.py` → crates/game/assets/ui/; рисованные версии кладутся в assets/ui_src/ (промпты — .studioigor/UI_KIT.md). Вид экранов — модуль `style.rs` (компонент `Skin(Look)`).
 - `cargo` не в PATH шелла агента: перед командами `. ~/.cargo/env`.
 - niri (тайловый Wayland) растягивал окно — теперь окно всегда 540×960 и неизменяемого размера (main.rs).
 - Игру запускать через cargo run: бинарник, запущенный напрямую, ищет assets/ рядом с exe и рисует экран без текста.
