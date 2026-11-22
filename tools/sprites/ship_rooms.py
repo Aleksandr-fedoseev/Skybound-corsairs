@@ -28,7 +28,8 @@ UPGRADES = {"tavern": "up_tavern", "cannon_deck": "up_cannon", "hold": "up_hold"
 LOCKED_FROM = ("locked", "training_deck")   # заколоченная комната: рисунок и чья рамка
 
 
-def without_sky(img):
+def sky_mask(img):
+    """Точно небо: цвет неба, связанный с краем рисунка, плюс крупные просветы выше корпуса."""
     a = np.asarray(img).astype(int)
     r, g, b = a[..., 0], a[..., 1], a[..., 2]
     sky = (b - r >= 4) & ((r + g + b) > 360)
@@ -45,11 +46,44 @@ def without_sky(img):
     big = np.asarray(Image.fromarray(sky.astype(np.uint8) * 255)
                      .filter(ImageFilter.MinFilter(k)).filter(ImageFilter.MaxFilter(k))) > 0
     big[int(h * 0.45):] = False
-    bg |= big & sky
-    alpha = Image.fromarray((~bg * 255).astype(np.uint8)).filter(ImageFilter.MinFilter(3))
-    alpha = alpha.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(0.8))
-    out = img.convert("RGBA")
-    out.putalpha(alpha)
+    return bg | (big & sky)
+
+
+def blur(a, r):
+    """Размытие (три прохода окна 2r+1 по осям) — для float-слоёв, PIL их не размывает."""
+    out = a.astype(np.float32)
+    for axis in (0, 1):
+        for _ in range(3):
+            pad = [(0, 0)] * out.ndim
+            pad[axis] = (r + 1, r)
+            c = np.cumsum(np.pad(out, pad, mode="edge"), axis=axis)
+            hi = np.take(c, np.arange(2 * r + 1, c.shape[axis]), axis=axis)
+            lo = np.take(c, np.arange(0, c.shape[axis] - 2 * r - 1), axis=axis)
+            out = (hi - lo) / (2 * r + 1)
+    return out
+
+
+def without_sky(img, sharpen=True):
+    """Мягкая вырезка: у края и на тонких канатах альфа — по отличию от цвета неба за ними,
+    цвет очищен от неба (без светлой каймы). Внутри корабля — непрозрачно."""
+    src = np.asarray(img.convert("RGB")).astype(np.float32)
+    bg = sky_mask(img)
+    # Цвет неба везде: размазанное небо, нормированное на его долю.
+    wgt = bg.astype(np.float32)[..., None]
+    sky = blur(src * wgt, 12) / np.maximum(blur(wgt, 12), 1e-3)
+    sure = Image.fromarray((~bg).astype(np.uint8) * 255).filter(ImageFilter.MinFilter(5))
+    sure = np.asarray(sure) > 0
+    dist = np.sqrt(((src - sky) ** 2).sum(axis=2))
+    alpha = np.clip((dist - 12) / 70, 0, 1)
+    alpha[sure] = 1
+    alpha[bg & (dist < 30)] = 0
+    a = alpha[..., None]
+    fg = np.where(a > 0.04, (src - (1 - a) * sky) / np.maximum(a, 0.04), src)
+    out = Image.fromarray(np.dstack([fg.clip(0, 255), alpha * 255]).astype(np.uint8), "RGBA")
+    if sharpen:
+        rgb = out.convert("RGB").filter(ImageFilter.UnsharpMask(1.6, 70, 2))
+        rgb.putalpha(out.getchannel("A"))
+        out = rgb
     return out
 
 
