@@ -505,14 +505,14 @@ fn event_frame<'a>(
 ) -> EntityCommands<'a> {
     let mut card = col.spawn((
         Node {
-            padding: UiRect::axes(px(30), px(28)),
+            padding: UiRect::axes(px(18), px(16)),
             flex_direction: FlexDirection::Column,
             row_gap: px(5),
             border: UiRect::all(px(2)),
             border_radius: BorderRadius::all(px(14)),
             ..default()
         },
-        Skin(Look::Wood),
+        Skin(Look::Tile),
     ));
     card.with_children(|c| {
         c.spawn(text(fonts, title, true, 18.0, PARCHMENT));
@@ -874,14 +874,14 @@ pub fn storm_card(
     let next = data.storm.milestones.get(reached);
     col.spawn((
         Node {
-            padding: UiRect::axes(px(30), px(28)),
+            padding: UiRect::axes(px(18), px(16)),
             flex_direction: FlexDirection::Column,
             row_gap: px(5),
             border: UiRect::all(px(2)),
             border_radius: BorderRadius::all(px(14)),
             ..default()
         },
-        Skin(Look::Wood),
+        Skin(Look::Tile),
     ))
     .with_children(|card| {
         card.spawn(text(

@@ -301,10 +301,8 @@ fn build(
                 height: percent(100),
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.10, 0.07, 0.05)),
         ))
         .with_children(|root| {
-            style::backdrop(root, assets, "backgrounds/tavern.jpg", 0.15);
             style::top_bar(
                 root,
                 assets,
@@ -328,7 +326,7 @@ fn build(
         });
 }
 
-/// Плакат «Разыскивается»: SSR-герой из таверны, которого ещё нет в команде.
+/// Баннер-витрина: SSR-герой из таверны, которого ещё нет в команде, во весь рост.
 fn poster(
     root: &mut ChildSpawnerCommands,
     assets: &AssetServer,
@@ -346,86 +344,83 @@ fn poster(
     let Some(hero) = ssr.iter().find(|h| !roster.owns(&h.id)).or(ssr.first()) else {
         return;
     };
-    root.spawn(Node {
-        position_type: PositionType::Absolute,
-        top: px(106),
-        left: px(0),
-        right: px(0),
-        justify_content: JustifyContent::Center,
-        ..default()
-    })
-    .with_children(|row| {
-        row.spawn((
+    let glow = crate::view::element_color(hero.element);
+    root.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(108),
+            left: px(10),
+            right: px(10),
+            height: px(410),
+            overflow: Overflow::clip(),
+            ..default()
+        },
+        Skin(Look::Tile),
+        BackgroundGradient(vec![
+            RadialGradient::new(
+                UiPosition::new(Vec2::new(0.25, 0.0), Val::ZERO, Val::ZERO),
+                RadialGradientShape::FarthestCorner,
+                vec![
+                    ColorStop::auto(glow.with_alpha(0.8)),
+                    ColorStop::auto(Color::srgb(0.07, 0.05, 0.03)),
+                ],
+            )
+            .into(),
+        ]),
+    ))
+    .with_children(|banner| {
+        // Герой во весь рост — справа.
+        banner.spawn((
             Node {
-                width: px(300),
-                height: px(352),
-                padding: UiRect::all(px(20)),
+                position_type: PositionType::Absolute,
+                right: px(-10),
+                bottom: px(0),
+                height: px(400),
                 ..default()
             },
-            Skin(Look::Wood),
-        ))
-        .with_children(|frame| {
-            frame
-                .spawn((
+            ImageNode::new(assets.load(format!("ui/full_{}.png", hero.id))),
+            Pickable::IGNORE,
+        ));
+        // Слева — имя, редкость и шанс.
+        banner
+            .spawn(Node {
+                position_type: PositionType::Absolute,
+                left: px(22),
+                top: px(22),
+                width: px(250),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(6),
+                ..default()
+            })
+            .with_children(|col| {
+                col.spawn((
                     Node {
-                        flex_grow: 1.0,
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::Center,
-                        padding: UiRect::top(px(8)),
-                        overflow: Overflow::clip(),
-                        ..default()
-                    },
-                    Skin(Look::Parchment),
-                ))
-                .with_children(|paper| {
-                    paper.spawn(text(fonts, "РАЗЫСКИВАЕТСЯ", true, 26.0, INK));
-                    paper.spawn((
-                        Node {
-                            height: px(228),
-                            margin: UiRect::top(px(4)),
-                            ..default()
-                        },
-                        ImageNode::new(assets.load(format!("ui/full_{}.png", hero.id))),
-                        Pickable::IGNORE,
-                    ));
-                });
-            // Лента с именем поверх низа плаката.
-            frame
-                .spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: px(-10),
-                        right: px(-10),
-                        bottom: px(14),
-                        height: px(52),
-                        flex_direction: FlexDirection::Column,
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
+                        padding: UiRect::axes(px(12), px(3)),
+                        align_self: AlignSelf::FlexStart,
                         ..default()
                     },
                     Skin(Look::Go),
                 ))
-                .with_children(|ribbon| {
-                    ribbon.spawn(text(
-                        fonts,
-                        format!("SSR · {} — {}", hero.name, hero.title),
-                        true,
-                        15.0,
-                        Color::WHITE,
-                    ));
-                    ribbon.spawn(text(
-                        fonts,
-                        if roster.owns(&hero.id) {
-                            "уже в команде — копия даст звезду".to_string()
-                        } else {
-                            format!("шанс SSR {}%", (cfg.rates.ssr * 1000.0).round() / 10.0)
-                        },
-                        false,
-                        12.0,
-                        BRIGHT,
-                    ));
-                });
-        });
+                .with_child(style::heading(
+                    fonts,
+                    "Особый найм · SSR",
+                    14.0,
+                    Color::WHITE,
+                ));
+                col.spawn(style::heading(fonts, hero.name.clone(), 40.0, BRIGHT));
+                col.spawn(style::heading(fonts, hero.title.clone(), 18.0, PARCHMENT));
+                col.spawn(text(
+                    fonts,
+                    if roster.owns(&hero.id) {
+                        "уже в команде — копия даст звезду".to_string()
+                    } else {
+                        format!("шанс SSR {}%", (cfg.rates.ssr * 1000.0).round() / 10.0)
+                    },
+                    false,
+                    13.0,
+                    PARCHMENT,
+                ));
+            });
     });
 }
 
@@ -445,12 +440,12 @@ fn pool_row(
             left: px(6),
             right: px(6),
             height: px(84),
-            padding: UiRect::new(px(52), px(48), px(6), px(6)),
+            padding: UiRect::axes(px(14), px(6)),
             justify_content: JustifyContent::SpaceBetween,
             align_items: AlignItems::Center,
             ..default()
         },
-        Skin(Look::Plank),
+        Skin(Look::Tile),
     ))
     .with_children(|rail| {
         for id in &cfg.pool {
@@ -485,7 +480,7 @@ fn pool_row(
     });
 }
 
-/// Опубликованные шансы и гарант.
+/// Гарант одной строкой: полоса до SSR и шансы по кнопке.
 fn pity_panel(
     root: &mut ChildSpawnerCommands,
     fonts: &Fonts,
@@ -505,56 +500,55 @@ fn pity_panel(
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
-            top: px(468),
-            left: px(40),
-            right: px(40),
-            padding: UiRect::axes(px(22), px(12)),
-            flex_direction: FlexDirection::Column,
+            top: px(528),
+            left: px(10),
+            right: px(10),
+            height: px(52),
+            padding: UiRect::axes(px(16), px(6)),
+            column_gap: px(12),
             align_items: AlignItems::Center,
-            row_gap: px(6),
             ..default()
         },
-        Skin(Look::Parchment),
+        Skin(Look::Tile),
     ))
-    .with_children(|panel| {
-        panel.spawn(text(
-            fonts,
-            format!("До гарантированного SSR: {done} / {}", cfg.ssr_pity),
-            true,
-            14.0,
-            INK,
-        ));
-        panel
-            .spawn((
-                Node {
-                    width: percent(100),
-                    height: px(12),
-                    border: UiRect::all(px(2)),
-                    border_radius: BorderRadius::all(px(6)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.22, 0.14, 0.08)),
-                BorderColor::all(Color::srgb(0.72, 0.55, 0.26)),
-            ))
-            .with_child((
-                Node {
-                    width: percent(100.0 * done as f32 / cfg.ssr_pity.max(1) as f32),
-                    height: percent(100),
-                    border_radius: BorderRadius::all(px(4)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.95, 0.66, 0.22)),
-            ));
-        let mut rates = panel.spawn((
+    .with_children(|row| {
+        row.spawn(style::heading(fonts, "Гарант SSR", 15.0, BRIGHT));
+        row.spawn((
             Node {
-                min_height: px(28),
-                padding: UiRect::axes(px(14), px(3)),
+                flex_grow: 1.0,
+                height: px(12),
+                border: UiRect::all(px(2)),
+                border_radius: BorderRadius::all(px(6)),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.18, 0.12, 0.07)),
+            BorderColor::all(Color::srgb(0.72, 0.55, 0.26)),
+        ))
+        .with_child((
+            Node {
+                width: percent(100.0 * done as f32 / cfg.ssr_pity.max(1) as f32),
+                height: percent(100),
+                border_radius: BorderRadius::all(px(4)),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.95, 0.66, 0.22)),
+        ));
+        row.spawn(style::heading(
+            fonts,
+            format!("{done}/{}", cfg.ssr_pity),
+            15.0,
+            BRIGHT,
+        ));
+        let mut rates = row.spawn((
+            Node {
+                min_height: px(34),
+                padding: UiRect::axes(px(12), px(4)),
                 align_items: AlignItems::Center,
                 ..default()
             },
-            Skin(Look::TabOff),
+            Skin(Look::Dark),
         ));
-        rates.with_child(text(fonts, "Шансы и гарант", true, 12.0, BRIGHT));
+        rates.with_child(style::heading(fonts, "Шансы", 13.0, BRIGHT));
         pressable(&mut rates);
         rates.observe(move |_: On<PointerClick>, mut toast: ResMut<Toast>| {
             toast.show_long(&odds);
@@ -573,7 +567,7 @@ fn hire_buttons(
     root.spawn(Node {
         position_type: PositionType::Absolute,
         top: px(590),
-        left: px(16),
+        left: px(10),
         right: px(16),
         flex_direction: FlexDirection::Column,
         row_gap: px(8),
@@ -611,14 +605,11 @@ fn hire_buttons(
                     fonts,
                     hire,
                     title,
-                    Some(price),
+                    Some((price, profile.doubloons >= price)),
                     String::new(),
-                    if profile.doubloons >= price {
-                        Look::Go
-                    } else {
-                        Look::Off
-                    },
-                    72.0,
+                    // Кнопка найма всегда янтарная; не хватает дублонов — цена красная.
+                    Look::Go,
+                    74.0,
                 );
             }
         });
@@ -632,7 +623,7 @@ fn hire_button(
     fonts: &Fonts,
     hire: Hire,
     title: &str,
-    price: Option<u32>,
+    price: Option<(u32, bool)>,
     sub: String,
     look: Look,
     height: f32,
@@ -650,15 +641,25 @@ fn hire_button(
         Skin(look),
     ));
     button.with_children(|b| {
-        b.spawn(text(
+        b.spawn(style::heading(
             fonts,
             title,
-            true,
-            if price.is_some() { 21.0 } else { 15.0 },
+            if price.is_some() { 26.0 } else { 18.0 },
             Color::WHITE,
         ));
         match price {
-            Some(price) => style::costs(b, assets, fonts, &[("doubloons", price)], 15.0, BRIGHT),
+            Some((price, affordable)) => style::costs(
+                b,
+                assets,
+                fonts,
+                &[("doubloons", price)],
+                16.0,
+                if affordable {
+                    BRIGHT
+                } else {
+                    Color::srgb(0.50, 0.07, 0.04)
+                },
+            ),
             None => {
                 b.spawn(text(fonts, sub, false, 11.0, PARCHMENT));
             }

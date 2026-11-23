@@ -154,14 +154,14 @@ pub fn section(
 ) {
     col.spawn((
         Node {
-            padding: UiRect::axes(px(30), px(28)),
+            padding: UiRect::axes(px(18), px(16)),
             flex_direction: FlexDirection::Column,
             row_gap: px(8),
             border: UiRect::all(px(1)),
             border_radius: BorderRadius::all(px(14)),
             ..default()
         },
-        Skin(Look::Wood),
+        Skin(Look::Tile),
     ))
     .with_children(|card| {
         card.spawn(text(

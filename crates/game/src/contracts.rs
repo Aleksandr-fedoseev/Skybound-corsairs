@@ -175,14 +175,14 @@ pub fn board(
             left: px(10),
             top: px(74),
             width: px(520),
-            padding: UiRect::axes(px(30), px(28)),
+            padding: UiRect::axes(px(18), px(16)),
             flex_direction: FlexDirection::Column,
             row_gap: px(8),
             border: UiRect::all(px(2)),
             border_radius: BorderRadius::all(px(14)),
             ..default()
         },
-        Skin(Look::Wood),
+        Skin(Look::Tile),
         GlobalZIndex(12),
     ))
     .with_children(|p| {

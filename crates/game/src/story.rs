@@ -10,12 +10,15 @@ use crate::Screen;
 use crate::audio::Sfx;
 use crate::battle_screen::BattleScreen;
 use crate::crew::Roster;
-use crate::menu::{BRASS, GOLD, MUTED, PARCHMENT, Progress, Voyage, pressable, text};
-use crate::view::{Fonts, element_color};
+use crate::menu::{MUTED, Progress, Voyage, pressable, text};
+use crate::style::{Look, Skin, heading};
+use crate::view::Fonts;
 
-const VALE: Color = Color::srgb(0.20, 0.26, 0.42);
-const DARK_TEXT: Color = Color::srgb(0.08, 0.10, 0.16);
-const PORTRAIT: f32 = 86.0;
+/// Табличка с именем адмирала — имперская, тёмно-синяя.
+const VALE: Look = Look::Dark;
+const BRIGHT: Color = Color::srgb(1.0, 0.93, 0.78);
+/// Высота фигуры говорящего над окном реплики.
+const FIGURE: f32 = 470.0;
 
 #[derive(Deserialize)]
 pub struct Scene {
@@ -151,6 +154,7 @@ fn show_dialogue(
     story: Res<Story>,
     screen: Res<BattleScreen>,
     fonts: Res<Fonts>,
+    assets: Res<AssetServer>,
     roots: Query<Entity, With<DialogueRoot>>,
 ) {
     if !active.is_changed() {
@@ -166,11 +170,11 @@ fn show_dialogue(
         return;
     };
     let hero = screen.data.hero(&line.who);
-    let (name, color) = match (line.who.as_str(), hero) {
-        ("narrator", _) => (None, MUTED),
-        ("vale", _) => (Some("Адмирал Вейл".to_string()), VALE),
-        (_, Some(h)) => (Some(h.name.clone()), element_color(h.element)),
-        (who, None) => (Some(who.to_string()), MUTED),
+    let name = match (line.who.as_str(), hero) {
+        ("narrator", _) => None,
+        ("vale", _) => Some("Адмирал Вейл".to_string()),
+        (_, Some(h)) => Some(h.name.clone()),
+        (who, None) => Some(who.to_string()),
     };
 
     let mut root = commands.spawn((
@@ -181,24 +185,38 @@ fn show_dialogue(
             height: percent(100),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
+        BackgroundColor(Color::srgba(0.02, 0.02, 0.05, 0.6)),
         GlobalZIndex(60),
     ));
     root.with_children(|r| {
+        // Говорящий герой во весь рост над окном реплики, как в визуальной новелле.
+        if hero.is_some() {
+            r.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(-6),
+                    bottom: px(190),
+                    height: px(FIGURE),
+                    ..default()
+                },
+                ImageNode::new(assets.load(format!("ui/full_{}.png", line.who))),
+                Pickable::IGNORE,
+            ));
+        }
+
         let mut skip = r.spawn((
             Node {
                 position_type: PositionType::Absolute,
-                top: px(72),
+                top: px(16),
                 right: px(12),
-                padding: UiRect::axes(px(14), px(8)),
-                border: UiRect::all(px(1)),
-                border_radius: BorderRadius::all(px(10)),
+                height: px(42),
+                padding: UiRect::horizontal(px(16)),
+                align_items: AlignItems::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.11, 0.075, 0.05, 0.9)),
-            BorderColor::all(BRASS),
+            Skin(Look::Dark),
         ));
-        skip.with_child(text(&fonts, "Пропустить", true, 14.0, PARCHMENT));
+        skip.with_child(heading(&fonts, "Пропустить »", 16.0, BRIGHT));
         pressable(&mut skip);
         skip.observe(|mut ev: On<PointerClick>, mut commands: Commands| {
             ev.propagate(false);
@@ -209,79 +227,49 @@ fn show_dialogue(
             Node {
                 position_type: PositionType::Absolute,
                 left: px(10),
-                bottom: px(28),
-                width: px(520),
+                right: px(10),
+                bottom: px(24),
                 min_height: px(170),
-                padding: UiRect::all(px(16)),
-                column_gap: px(14),
-                border: UiRect::all(px(2)),
-                border_radius: BorderRadius::all(px(16)),
+                padding: UiRect::new(px(22), px(22), px(30), px(16)),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(8),
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.11, 0.075, 0.05)),
-            BorderColor::all(BRASS),
+            Skin(Look::Tile),
             Pickable::IGNORE,
         ))
         .with_children(|panel| {
+            // Табличка с именем на верхней кромке окна.
             if let Some(name) = &name {
                 panel
                     .spawn((
                         Node {
-                            width: px(PORTRAIT),
-                            height: px(PORTRAIT),
-                            flex_shrink: 0.0,
-                            justify_content: JustifyContent::Center,
+                            position_type: PositionType::Absolute,
+                            top: px(-22),
+                            left: px(16),
+                            height: px(42),
+                            padding: UiRect::horizontal(px(18)),
                             align_items: AlignItems::Center,
-                            border: UiRect::all(px(3)),
-                            border_radius: BorderRadius::MAX,
                             ..default()
                         },
-                        BackgroundColor(color),
-                        BorderColor::all(GOLD),
+                        Skin(if line.who == "vale" { VALE } else { Look::Go }),
                         Pickable::IGNORE,
                     ))
-                    .with_child((
-                        Text::new(name.chars().next().map(String::from).unwrap_or_default()),
-                        fonts.text(true, 40.0),
-                        TextColor(if line.who == "vale" {
-                            PARCHMENT
-                        } else {
-                            DARK_TEXT
-                        }),
-                        Pickable::IGNORE,
-                    ));
+                    .with_child(heading(&fonts, name.clone(), 20.0, Color::WHITE));
             }
-            panel
-                .spawn((
-                    Node {
-                        flex_grow: 1.0,
-                        flex_shrink: 1.0,
-                        flex_direction: FlexDirection::Column,
-                        row_gap: px(6),
-                        ..default()
-                    },
-                    Pickable::IGNORE,
-                ))
-                .with_children(|col| {
-                    if let Some(name) = &name {
-                        col.spawn(text(&fonts, name.clone(), true, 18.0, GOLD));
-                    }
-                    col.spawn(text(
-                        &fonts,
-                        line.text.clone(),
-                        false,
-                        16.0,
-                        if name.is_some() { PARCHMENT } else { MUTED },
-                    ));
-                    col.spawn((
-                        Node {
-                            align_self: AlignSelf::FlexEnd,
-                            margin: UiRect::top(px(4)),
-                            ..default()
-                        },
-                        text(&fonts, "нажмите, чтобы продолжить", false, 12.0, MUTED),
-                    ));
-                });
+            panel.spawn((
+                Text::new(line.text.clone()),
+                fonts.serif(19.0),
+                TextColor(if name.is_some() { BRIGHT } else { MUTED }),
+                Pickable::IGNORE,
+            ));
+            panel.spawn((
+                Node {
+                    align_self: AlignSelf::FlexEnd,
+                    ..default()
+                },
+                text(&fonts, "нажмите, чтобы продолжить »", false, 12.0, MUTED),
+            ));
         });
     });
     root.observe(|_: On<PointerClick>, mut commands: Commands| {

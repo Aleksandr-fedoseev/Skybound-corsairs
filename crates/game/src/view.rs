@@ -5,27 +5,27 @@
 use battle_core::{BROADSIDE_MAX, ENERGY_MAX, Element, Outcome, Side, UnitId};
 use bevy::prelude::*;
 
+use crate::style::{Look, Skin};
+
 use crate::Screen;
 use crate::battle_screen::BattleScreen;
 use crate::battlefield;
 
 const SKY: Color = Color::srgb(0.53, 0.75, 0.92);
 const PANEL: Color = Color::srgba(0.05, 0.10, 0.20, 0.80);
-const ENEMY: Color = Color::srgb(0.40, 0.14, 0.17);
 const HP_ALLY: Color = Color::srgb(0.38, 0.85, 0.45);
 const HP_ENEMY: Color = Color::srgb(0.92, 0.32, 0.30);
-const BAR_TRACK: Color = Color::srgba(0.0, 0.0, 0.0, 0.5);
 const ENERGY: Color = Color::srgb(0.35, 0.65, 1.0);
 const ACCENT: Color = Color::srgb(1.0, 0.85, 0.35);
 const BROADSIDE: Color = Color::srgb(1.0, 0.55, 0.20);
 const SKILL: Color = Color::srgb(0.55, 0.85, 1.0);
-const BUTTON: Color = Color::srgba(0.10, 0.18, 0.30, 0.85);
-const BUTTON_ON: Color = Color::srgb(0.85, 0.62, 0.20);
-const DARK_TEXT: Color = Color::srgb(0.08, 0.10, 0.16);
+const BRASS_EDGE: Color = Color::srgb(0.79, 0.59, 0.25);
+const WOOD_DARK: Color = Color::srgb(0.10, 0.07, 0.04);
+const BRIGHT: Color = Color::srgb(1.0, 0.93, 0.78);
 const TURN_CHIPS: usize = 8;
-const CHIP: f32 = 30.0;
+const CHIP: f32 = 36.0;
 const ULT_SIZE: f32 = 70.0;
-const SMALL_BUTTON: f32 = 54.0;
+const SMALL_BUTTON: f32 = 62.0;
 const SKILL_BADGE: f32 = 24.0;
 /// Готовая ульта: портрет пульсирует.
 const READY_PULSE: f32 = 0.06;
@@ -44,9 +44,29 @@ pub fn element_color(element: Element) -> Color {
 pub struct Fonts {
     pub regular: Handle<Font>,
     pub bold: Handle<Font>,
+    /// Засечка Alegreya (цифры по высоте прописных): заголовки, кнопки, крупные цифры.
+    pub display: Handle<Font>,
+    /// Засечка потоньше: имена, подписи и числа на пергаменте.
+    pub serif: Handle<Font>,
 }
 
 impl Fonts {
+    pub fn display(&self, size: f32) -> TextFont {
+        TextFont {
+            font: self.display.clone().into(),
+            font_size: FontSize::Px(size),
+            ..default()
+        }
+    }
+
+    pub fn serif(&self, size: f32) -> TextFont {
+        TextFont {
+            font: self.serif.clone().into(),
+            font_size: FontSize::Px(size),
+            ..default()
+        }
+    }
+
     pub fn text(&self, bold: bool, size: f32) -> TextFont {
         TextFont {
             font: if bold { &self.bold } else { &self.regular }.clone().into(),
@@ -134,6 +154,8 @@ impl FromWorld for Fonts {
         Self {
             regular: assets.load("fonts/NotoSans-Regular.ttf"),
             bold: assets.load("fonts/NotoSans-Bold.ttf"),
+            display: assets.load("fonts/Alegreya-ExtraBold-Lining.ttf"),
+            serif: assets.load("fonts/Alegreya-Bold-Lining.ttf"),
         }
     }
 }
@@ -170,10 +192,16 @@ pub fn rebuild(
         &screen,
         &fonts,
     );
-    spawn_hud(&mut commands, &screen, &fonts, voyage.from);
+    spawn_hud(&mut commands, &assets, &screen, &fonts, voyage.from);
 }
 
-fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts, back: Screen) {
+fn spawn_hud(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    screen: &BattleScreen,
+    fonts: &Fonts,
+    back: Screen,
+) {
     let heroes: Vec<UnitId> = screen
         .battle
         .units()
@@ -204,15 +232,10 @@ fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts, back
             })
             .with_children(|top| {
                 spawn_squads(top, fonts);
-                top.spawn((
-                    Text::new(screen.title()),
-                    fonts.text(true, 13.0),
-                    TextColor(Color::WHITE),
-                    shadow(),
-                ));
-                spawn_turn_order(top, fonts);
+                top.spawn(crate::style::heading(fonts, screen.title(), 16.0, BRIGHT));
+                spawn_turn_order(top);
             });
-            spawn_bottom(root, &heroes, screen, fonts);
+            spawn_bottom(root, assets, &heroes, screen, fonts);
         });
 
     // Полоса ульты через весь экран (видна только во время ульты и залпа).
@@ -235,7 +258,7 @@ fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts, back
         .with_child((
             UltBandText,
             Text::new(""),
-            fonts.text(true, 30.0),
+            fonts.display(36.0),
             TextColor(Color::NONE),
             TextLayout::justify(Justify::Center),
             shadow(),
@@ -260,66 +283,77 @@ fn spawn_hud(commands: &mut Commands, screen: &BattleScreen, fonts: &Fonts, back
             Visibility::Hidden,
             GlobalZIndex(10),
         ))
-        .with_children(|o| {
-            o.spawn((
-                ResultText,
-                Text::new(""),
-                fonts.text(true, 44.0),
-                TextColor(ACCENT),
-            ));
-            o.spawn((
-                ResultNote,
-                Text::new(""),
-                fonts.text(false, 17.0),
-                TextColor(Color::WHITE),
-                TextLayout::justify(Justify::Center),
-            ));
-            o.spawn(Node {
-                margin: UiRect::top(px(16)),
-                column_gap: px(14),
-                ..default()
-            })
-            .with_children(|row| {
-                let button = |fill: Color| {
-                    (
-                        Node {
-                            width: px(170),
-                            height: px(56),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            border_radius: BorderRadius::all(px(12)),
-                            ..default()
-                        },
-                        BackgroundColor(fill),
-                    )
-                };
-                row.spawn(button(BUTTON))
-                    .with_child((
-                        Text::new("Ещё раз"),
-                        fonts.text(true, 20.0),
-                        TextColor(Color::WHITE),
-                    ))
-                    .observe(|_: On<PointerClick>, mut screen: ResMut<BattleScreen>| {
-                        if screen.shown_outcome.is_some() {
-                            screen.restart_with_new_seed();
-                        }
+        .with_children(|overlay| {
+            overlay
+                .spawn((
+                    Node {
+                        width: px(470),
+                        padding: UiRect::axes(px(22), px(24)),
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        row_gap: px(10),
+                        ..default()
+                    },
+                    Skin(Look::Tile),
+                ))
+                .with_children(|o| {
+                    o.spawn((
+                        ResultText,
+                        Text::new(""),
+                        fonts.display(50.0),
+                        TextColor(ACCENT),
+                        shadow(),
+                    ));
+                    o.spawn((
+                        ResultNote,
+                        Text::new(""),
+                        fonts.text(false, 16.0),
+                        TextColor(BRIGHT),
+                        TextLayout::justify(Justify::Center),
+                    ));
+                    o.spawn(Node {
+                        margin: UiRect::top(px(12)),
+                        column_gap: px(14),
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        let button = |look: Look| {
+                            (
+                                Node {
+                                    width: px(190),
+                                    height: px(58),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    ..default()
+                                },
+                                Skin(look),
+                            )
+                        };
+                        row.spawn(button(Look::Dark))
+                            .with_child(crate::style::heading(fonts, "Ещё раз", 21.0, BRIGHT))
+                            .observe(|_: On<PointerClick>, mut screen: ResMut<BattleScreen>| {
+                                if screen.shown_outcome.is_some() {
+                                    screen.restart_with_new_seed();
+                                }
+                            });
+                        row.spawn(button(Look::Go))
+                            .with_child(crate::style::heading(
+                                fonts,
+                                match back {
+                                    Screen::Map => "К карте",
+                                    Screen::Activities => "Назад",
+                                    _ => "На корабль",
+                                },
+                                21.0,
+                                Color::WHITE,
+                            ))
+                            .observe(
+                                move |_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
+                                    next.set(back);
+                                },
+                            );
                     });
-                row.spawn(button(BUTTON_ON))
-                    .with_child((
-                        Text::new(match back {
-                            Screen::Map => "К карте",
-                            Screen::Activities => "Назад",
-                            _ => "На корабль",
-                        }),
-                        fonts.text(true, 20.0),
-                        TextColor(Color::WHITE),
-                    ))
-                    .observe(
-                        move |_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
-                            next.set(back);
-                        },
-                    );
-            });
+                });
         });
 }
 
@@ -338,14 +372,16 @@ fn spawn_squads(top: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 Node {
                     flex_grow: 1.0,
                     flex_basis: px(0),
-                    height: px(22),
-                    border_radius: BorderRadius::all(px(6)),
+                    height: px(26),
+                    border: UiRect::all(px(2)),
+                    border_radius: BorderRadius::all(px(9)),
                     overflow: Overflow::clip(),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     ..default()
                 },
-                BackgroundColor(BAR_TRACK),
+                BackgroundColor(WOOD_DARK),
+                BorderColor::all(BRASS_EDGE),
             ))
             .with_children(|b| {
                 b.spawn((
@@ -364,7 +400,7 @@ fn spawn_squads(top: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 b.spawn((
                     SquadText(side),
                     Text::new(""),
-                    fonts.text(true, 13.0),
+                    fonts.display(15.0),
                     TextColor(Color::WHITE),
                     shadow(),
                 ));
@@ -373,29 +409,29 @@ fn spawn_squads(top: &mut ChildSpawnerCommands, fonts: &Fonts) {
         bar(row, Side::Ally, HP_ALLY);
         row.spawn((
             Node {
-                width: px(46),
-                height: px(46),
+                width: px(52),
+                height: px(52),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 border: UiRect::all(px(3)),
-                border_radius: BorderRadius::all(px(23)),
+                border_radius: BorderRadius::all(px(26)),
                 ..default()
             },
-            BackgroundColor(PANEL),
-            BorderColor::all(ACCENT),
+            BackgroundColor(WOOD_DARK),
+            BorderColor::all(BRASS_EDGE),
         ))
         .with_child((
             TurnBadge,
             Text::new(""),
-            fonts.text(true, 17.0),
-            TextColor(Color::WHITE),
+            fonts.display(22.0),
+            TextColor(BRIGHT),
         ));
         bar(row, Side::Enemy, HP_ENEMY);
     });
 }
 
 /// Очередь ходов: кружки с первой буквой, рамка — цвет стороны, первый — крупнее.
-fn spawn_turn_order(top: &mut ChildSpawnerCommands, fonts: &Fonts) {
+fn spawn_turn_order(top: &mut ChildSpawnerCommands) {
     top.spawn(Node {
         flex_direction: FlexDirection::Row,
         align_items: AlignItems::Center,
@@ -410,19 +446,12 @@ fn spawn_turn_order(top: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 Node {
                     width: px(size),
                     height: px(size),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(px(3)),
-                    border_radius: BorderRadius::all(px(size / 2.0)),
                     ..default()
                 },
-                BackgroundColor(Color::NONE),
-                BorderColor::all(Color::NONE),
-            ))
-            .with_child((
-                Text::new(""),
-                fonts.text(true, size * 0.5),
-                TextColor(DARK_TEXT),
+                ImageNode {
+                    color: Color::NONE,
+                    ..default()
+                },
             ));
         }
     });
@@ -430,6 +459,7 @@ fn spawn_turn_order(top: &mut ChildSpawnerCommands, fonts: &Fonts) {
 
 fn spawn_bottom(
     root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     heroes: &[UnitId],
     screen: &BattleScreen,
     fonts: &Fonts,
@@ -456,19 +486,21 @@ fn spawn_bottom(
                 row.spawn((
                     BroadsideLabel,
                     Text::new(""),
-                    fonts.text(true, 12.0),
+                    fonts.display(15.0),
                     TextColor(BROADSIDE),
                     shadow(),
                 ));
                 row.spawn((
                     Node {
-                        width: px(110),
-                        height: px(10),
-                        border_radius: BorderRadius::all(px(5)),
+                        width: px(130),
+                        height: px(14),
+                        border: UiRect::all(px(2)),
+                        border_radius: BorderRadius::all(px(7)),
                         overflow: Overflow::clip(),
                         ..default()
                     },
-                    BackgroundColor(BAR_TRACK),
+                    BackgroundColor(WOOD_DARK),
+                    BorderColor::all(BRASS_EDGE),
                 ))
                 .with_child((
                     BroadsideFill,
@@ -491,7 +523,7 @@ fn spawn_bottom(
             })
             .with_children(|row| {
                 for &id in heroes {
-                    spawn_ult_button(row, id, screen, fonts);
+                    spawn_ult_button(row, assets, id, screen, fonts);
                 }
                 row.spawn(Node {
                     flex_grow: 1.0,
@@ -508,19 +540,14 @@ fn spawn_bottom(
                             kind,
                             Node {
                                 width: px(SMALL_BUTTON),
-                                height: px(SMALL_BUTTON * 0.62),
+                                height: px(SMALL_BUTTON * 0.7),
                                 justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
-                                border_radius: BorderRadius::all(px(SMALL_BUTTON * 0.31)),
                                 ..default()
                             },
-                            BackgroundColor(BUTTON),
+                            Skin(Look::Dark),
                         ))
-                        .with_child((
-                            Text::new(""),
-                            fonts.text(true, 14.0),
-                            TextColor(Color::WHITE),
-                        ))
+                        .with_child((Text::new(""), fonts.display(15.0), TextColor(BRIGHT)))
                         .observe(
                             move |_: On<PointerClick>, mut screen: ResMut<BattleScreen>| {
                                 press(&mut screen, kind);
@@ -542,12 +569,13 @@ fn spawn_bottom(
 
 fn spawn_ult_button(
     row: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     id: UnitId,
     screen: &BattleScreen,
     fonts: &Fonts,
 ) {
     let unit = screen.battle.unit(id);
-    let initial: String = unit.def.name.chars().take(1).collect();
+    let portrait = format!("ui/hero_{}.png", unit.def.id);
     row.spawn((
         UltButton(id),
         Node {
@@ -559,27 +587,23 @@ fn spawn_ult_button(
         UiTransform::default(),
     ))
     .with_children(|b| {
-        // Круглый портрет с буквой; энергия — полоской под ним (Bevy режет потомков
-        // по прямоугольнику, а не по кругу, поэтому заливка внутри круга торчала бы углами).
+        // Медальон героя; энергия — полоской под ним (Bevy режет потомков по
+        // прямоугольнику, а не по кругу, поэтому заливка внутри круга торчала бы углами).
+        // Готовая ульта — золотое кольцо вокруг медальона.
         b.spawn((
             Node {
                 width: px(ULT_SIZE),
                 height: px(ULT_SIZE),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                border: UiRect::all(px(4)),
+                border: UiRect::all(px(3)),
                 border_radius: BorderRadius::all(px(ULT_SIZE / 2.0)),
                 ..default()
             },
-            BackgroundColor(element_color(unit.def.element)),
-            BorderColor::all(PANEL),
+            ImageNode::new(assets.load(portrait)),
+            BorderColor::all(Color::NONE),
         ))
         .with_children(|p| {
-            p.spawn((
-                Text::new(initial),
-                fonts.text(true, 30.0),
-                TextColor(DARK_TEXT),
-            ));
             // Через сколько ходов спецатака; «!» — готова.
             p.spawn((
                 SkillBadge(id),
@@ -598,21 +622,19 @@ fn spawn_ult_button(
                 BackgroundColor(PANEL),
                 BorderColor::all(SKILL),
             ))
-            .with_child((
-                Text::new(""),
-                fonts.text(true, 13.0),
-                TextColor(Color::WHITE),
-            ));
+            .with_child((Text::new(""), fonts.display(14.0), TextColor(Color::WHITE)));
         });
         b.spawn((
             Node {
-                width: px(ULT_SIZE * 0.85),
-                height: px(7),
-                border_radius: BorderRadius::all(px(3.5)),
+                width: px(ULT_SIZE * 0.9),
+                height: px(10),
+                border: UiRect::all(px(1)),
+                border_radius: BorderRadius::all(px(5)),
                 overflow: Overflow::clip(),
                 ..default()
             },
-            BackgroundColor(BAR_TRACK),
+            BackgroundColor(WOOD_DARK),
+            BorderColor::all(BRASS_EDGE),
         ))
         .with_child((
             UltFill(id),
@@ -626,7 +648,7 @@ fn spawn_ult_button(
         b.spawn((
             UltLabel(id),
             Text::new(""),
-            fonts.text(true, 12.0),
+            fonts.display(14.0),
             TextColor(Color::WHITE),
             shadow(),
         ));
@@ -701,7 +723,7 @@ pub fn refresh_ult_buttons(
     time: Res<Time>,
     screen: Res<BattleScreen>,
     mut buttons: Query<(&UltButton, &Children, &mut UiTransform)>,
-    mut frames: Query<(&mut BorderColor, &mut BackgroundColor), Without<UltFill>>,
+    mut frames: Query<(&mut BorderColor, &mut ImageNode), Without<UltFill>>,
     mut fills: Query<(&UltFill, &mut Node, &mut BackgroundColor)>,
     mut labels: Query<(&UltLabel, &mut Text, &mut TextColor)>,
 ) {
@@ -716,10 +738,15 @@ pub fn refresh_ult_buttons(
         } else {
             1.0
         });
-        if let Some((mut border, mut bg)) = children.first().and_then(|&c| frames.get_mut(c).ok()) {
-            *border = BorderColor::all(if ready { ACCENT } else { PANEL });
-            let base = element_color(unit.def.element);
-            bg.0 = if alive { base } else { base.with_alpha(0.3) };
+        if let Some((mut border, mut image)) =
+            children.first().and_then(|&c| frames.get_mut(c).ok())
+        {
+            *border = BorderColor::all(if ready { ACCENT } else { Color::NONE });
+            image.color = if alive {
+                Color::WHITE
+            } else {
+                Color::srgba(0.45, 0.45, 0.5, 0.6)
+            };
         }
     }
     for (UltFill(id), mut node, mut bg) in &mut fills {
@@ -746,14 +773,18 @@ pub fn refresh_ult_buttons(
 /// Кнопки сбоку и кружки очереди ходов.
 pub fn refresh_controls(
     screen: Res<BattleScreen>,
-    mut buttons: Query<(&ButtonKind, &Children, &mut BackgroundColor), Without<TurnChip>>,
-    mut chips: Query<(&TurnChip, &Children, &mut BackgroundColor, &mut BorderColor)>,
+    assets: Res<AssetServer>,
+    mut buttons: Query<(&ButtonKind, &Children, &mut Skin)>,
+    mut chips: Query<(&TurnChip, &mut ImageNode)>,
     mut texts: Query<&mut Text>,
 ) {
     let battle = &screen.battle;
-    for (kind, children, mut bg) in &mut buttons {
+    for (kind, children, mut skin) in &mut buttons {
         let (label, on) = button_label(&screen, *kind);
-        bg.0 = if on { BUTTON_ON } else { BUTTON };
+        let look = if on { Look::Go } else { Look::Dark };
+        if skin.0 != look {
+            skin.0 = look;
+        }
         if let Some(mut text) = children.first().and_then(|&c| texts.get_mut(c).ok()) {
             text.0 = label;
         }
@@ -763,20 +794,22 @@ pub fn refresh_controls(
     } else {
         battle.turn_order_preview(TURN_CHIPS)
     };
-    for (TurnChip(i), children, mut bg, mut border) in &mut chips {
-        let unit = order.get(*i).map(|&id| battle.unit(id));
-        bg.0 = unit
-            .map(|u| element_color(u.def.element))
-            .unwrap_or(Color::NONE);
-        *border = BorderColor::all(match unit.map(|u| u.side) {
-            Some(Side::Ally) => HP_ALLY,
-            Some(Side::Enemy) => ENEMY,
-            None => Color::NONE,
-        });
-        if let Some(mut text) = children.first().and_then(|&c| texts.get_mut(c).ok()) {
-            text.0 = unit
-                .map(|u| u.def.name.chars().take(1).collect())
-                .unwrap_or_default();
+    // Очередь ходов — медальоны: у героев кольцо редкости, у врагов — красное.
+    for (TurnChip(i), mut image) in &mut chips {
+        let Some(unit) = order.get(*i).map(|&id| battle.unit(id)) else {
+            image.color = Color::NONE;
+            continue;
+        };
+        let path = match unit.side {
+            Side::Ally => format!("ui/hero_{}.png", unit.def.id),
+            Side::Enemy => format!("ui/unit_{}.png", unit.def.id),
+        };
+        let handle = assets.load(path);
+        if image.image != handle {
+            image.image = handle;
+        }
+        if image.color != Color::WHITE {
+            image.color = Color::WHITE;
         }
     }
 }

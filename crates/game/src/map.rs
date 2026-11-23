@@ -11,11 +11,12 @@ use crate::battle_screen::BattleScreen;
 use crate::convoys::{ConvoyData, Convoys};
 use crate::crew::Roster;
 use crate::menu::{
-    BRASS, DARK_WOOD, GO, GO_EDGE, GOLD, MUTED, MenuData, PARCHMENT, Progress, Toast, Voyage, WOOD,
+    BRASS, DARK_WOOD, GO, GO_EDGE, GOLD, MUTED, MenuData, PARCHMENT, Progress, Toast, Voyage,
     bottom_nav, pressable, spawn_toast, text,
 };
 use crate::ship::clock;
 use crate::story::VoyageRequest;
+use crate::style::{Look, Skin};
 use crate::view::Fonts;
 
 const CLEARED: Color = Color::srgb(0.30, 0.62, 0.38);
@@ -118,6 +119,7 @@ fn spawn_map(
     convoy: Res<ConvoyData>,
     mut selected: ResMut<Selected>,
     mut pick: ResMut<ConvoyPick>,
+    profile: Res<crate::menu::Profile>,
 ) {
     let stages = &screen.data.stages;
     let next = progress.next_stage(stages.len());
@@ -138,12 +140,26 @@ fn spawn_map(
             },
         ))
         .with_children(|root| {
-            header(
+            crate::style::top_bar(
+                root,
+                &assets,
+                &fonts,
+                &[
+                    ("doubloons", profile.doubloons),
+                    ("silver", profile.silver),
+                    ("planks", profile.planks),
+                ],
+            );
+            crate::style::title(
                 root,
                 &fonts,
-                &map.chapter,
-                progress.cleared.min(stages.len()),
-                stages.len(),
+                &format!(
+                    "{} · {} из {}",
+                    map.chapter,
+                    progress.cleared.min(stages.len()),
+                    stages.len()
+                ),
+                56.0,
             );
             home(root, &assets, &fonts, &map.home);
             for spot in &map.locked {
@@ -170,64 +186,25 @@ fn spawn_map(
         });
 }
 
-fn header(
-    root: &mut ChildSpawnerCommands,
-    fonts: &Fonts,
-    chapter: &str,
-    cleared: usize,
-    total: usize,
-) {
-    root.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(0),
-            left: px(0),
-            width: percent(100),
-            height: px(56),
-            padding: UiRect::horizontal(px(16)),
-            justify_content: JustifyContent::SpaceBetween,
-            align_items: AlignItems::Center,
-            border: UiRect::bottom(px(2)),
-            ..default()
-        },
-        BackgroundColor(WOOD),
-        BorderColor::all(BRASS),
-    ))
-    .with_children(|bar| {
-        bar.spawn(text(
-            fonts,
-            format!("Карта · {chapter}"),
-            true,
-            20.0,
-            PARCHMENT,
-        ));
-        bar.spawn(text(
-            fonts,
-            format!("Пройдено {cleared} из {total}"),
-            false,
-            14.0,
-            MUTED,
-        ));
-    });
-}
-
 /// Подпись под точкой на карте.
 fn plate(parent: &mut ChildSpawnerCommands, fonts: &Fonts, title: &str, sub: &str, color: Color) {
     parent
         .spawn((
             Node {
                 margin: UiRect::top(px(4)),
-                padding: UiRect::axes(px(8), px(2)),
+                padding: UiRect::axes(px(10), px(3)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
+                border: UiRect::all(px(1)),
                 border_radius: BorderRadius::all(px(8)),
                 ..default()
             },
-            BackgroundColor(WOOD),
+            BackgroundColor(Color::srgba(0.07, 0.05, 0.03, 0.92)),
+            BorderColor::all(BRASS),
             Pickable::IGNORE,
         ))
         .with_children(|p| {
-            p.spawn(text(fonts, title, true, 12.0, color));
+            p.spawn(crate::style::heading(fonts, title, 14.0, color));
             if !sub.is_empty() {
                 p.spawn(text(fonts, sub, false, 11.0, MUTED));
             }
@@ -267,11 +244,11 @@ fn home(root: &mut ChildSpawnerCommands, assets: &AssetServer, fonts: &Fonts, sp
             ));
             node.with_child((
                 Node {
-                    width: px(50),
-                    height: px(50),
+                    width: px(54),
+                    height: px(54),
                     ..default()
                 },
-                ImageNode::new(assets.load("menu/ship_lvl1.png")),
+                ImageNode::new(assets.load("ui/nav_ship.png")),
                 Pickable::IGNORE,
             ));
             pressable(&mut node);
@@ -306,9 +283,9 @@ fn stage_node(
     let size = if boss { BOSS_NODE } else { NODE };
     let open = index <= cleared;
     let (fill, edge) = if index < cleared {
-        (CLEARED, Color::WHITE)
+        (CLEARED, BRASS)
     } else if open {
-        (GO, GO_EDGE)
+        (GO, GOLD)
     } else {
         (LOCKED, Color::srgb(0.6, 0.6, 0.62))
     };
@@ -339,12 +316,12 @@ fn stage_node(
                 },
                 BackgroundColor(fill),
                 BorderColor::all(edge),
+                Outline::new(px(2), px(0), Color::srgb(0.30, 0.20, 0.08)),
             ));
-            node.with_child(text(
+            node.with_child(crate::style::heading(
                 fonts,
                 label,
-                true,
-                if boss { 14.0 } else { 16.0 },
+                if boss { 16.0 } else { 18.0 },
                 Color::WHITE,
             ));
             if index == next && open {
@@ -378,15 +355,12 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
             left: px(10),
             bottom: px(92),
             width: px(520),
-            padding: UiRect::all(px(14)),
+            padding: UiRect::axes(px(18), px(14)),
             column_gap: px(12),
             align_items: AlignItems::Center,
-            border: UiRect::all(px(2)),
-            border_radius: BorderRadius::all(px(14)),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.16, 0.11, 0.07, 0.96)),
-        BorderColor::all(BRASS),
+        Skin(Look::Tile),
         Visibility::Hidden,
     ))
     .with_children(|card| {
@@ -398,7 +372,10 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
             ..default()
         })
         .with_children(|info| {
-            info.spawn((CardText::Title, text(fonts, "", true, 18.0, PARCHMENT)));
+            info.spawn((
+                CardText::Title,
+                crate::style::heading(fonts, "", 22.0, Color::srgb(1.0, 0.93, 0.78)),
+            ));
             info.spawn((CardText::Enemies, text(fonts, "", false, 13.0, PARCHMENT)));
             info.spawn((CardText::Level, text(fonts, "", true, 13.0, PARCHMENT)));
             info.spawn((CardText::Status, text(fonts, "", false, 12.0, MUTED)));
@@ -406,18 +383,15 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
         let mut go = card.spawn((
             Node {
                 width: px(130),
-                height: px(54),
+                height: px(58),
                 flex_shrink: 0.0,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                border: UiRect::all(px(2)),
-                border_radius: BorderRadius::all(px(12)),
                 ..default()
             },
-            BackgroundColor(GO),
-            BorderColor::all(GO_EDGE),
+            Skin(Look::Go),
         ));
-        go.with_child(text(fonts, "В бой", true, 22.0, Color::WHITE));
+        go.with_child(crate::style::heading(fonts, "В бой", 24.0, Color::WHITE));
         pressable(&mut go);
         go.observe(
             |_: On<PointerClick>,
@@ -631,17 +605,24 @@ fn convoy_spot(
             col.spawn((
                 Node {
                     margin: UiRect::top(px(4)),
-                    padding: UiRect::axes(px(8), px(2)),
+                    padding: UiRect::axes(px(10), px(3)),
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Center,
+                    border: UiRect::all(px(1)),
                     border_radius: BorderRadius::all(px(8)),
                     ..default()
                 },
-                BackgroundColor(WOOD),
+                BackgroundColor(Color::srgba(0.07, 0.05, 0.03, 0.92)),
+                BorderColor::all(BRASS),
                 Pickable::IGNORE,
             ))
             .with_children(|p| {
-                p.spawn(text(fonts, spot.name.clone(), true, 12.0, PARCHMENT));
+                p.spawn(crate::style::heading(
+                    fonts,
+                    spot.name.clone(),
+                    14.0,
+                    PARCHMENT,
+                ));
                 p.spawn((ConvoyLabel, text(fonts, "", false, 11.0, GOLD)));
             });
         });

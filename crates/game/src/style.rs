@@ -18,8 +18,8 @@ pub const INK_GOOD: Color = Color::srgb(0.16, 0.45, 0.20);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Look {
-    /// Доски с латунной окантовкой — большие панели.
-    Wood,
+    /// Тёмное дерево в тонкой латунной кайме — панели и ленты (как ряд отсеков).
+    Tile,
     /// Пергамент — карточки внутри панелей.
     Parchment,
     /// Латунная кнопка главного действия.
@@ -37,7 +37,7 @@ pub enum Look {
 impl Look {
     fn file(self) -> &'static str {
         match self {
-            Look::Wood => "ui/panel.png",
+            Look::Tile => "",
             Look::Parchment => "ui/card.png",
             Look::Go => "ui/button.png",
             Look::Dark => "ui/button_dark.png",
@@ -52,8 +52,7 @@ impl Look {
     /// Неизменяемая рамка картинки (по горизонтали, по вертикали) в пикселях.
     fn border(self) -> BorderRect {
         let (x, y) = match self {
-            // Угловые накладки с заклёпками не растягиваются.
-            Look::Wood => (36.0, 36.0),
+            Look::Tile => (0.0, 0.0),
             Look::Parchment => (16.0, 16.0),
             // Болты на концах доски не растягиваются.
             Look::Plank => (58.0, 16.0),
@@ -78,10 +77,20 @@ pub fn plugin(app: &mut App) {
 fn apply_skins(
     mut commands: Commands,
     assets: Res<AssetServer>,
-    nodes: Query<(Entity, &Skin), Changed<Skin>>,
+    mut nodes: Query<(Entity, &Skin, &mut Node), Changed<Skin>>,
 ) {
-    for (entity, look) in &nodes {
-        commands.entity(entity).insert(skin(&assets, look.0));
+    for (entity, look, mut node) in &mut nodes {
+        if look.0 == Look::Tile {
+            // Без картинки: заливка, тонкая латунная кайма и скругление.
+            node.border = UiRect::all(px(2));
+            node.border_radius = BorderRadius::all(px(14));
+            commands.entity(entity).insert((
+                BackgroundColor(Color::srgb(0.07, 0.05, 0.03)),
+                BorderColor::all(Color::srgb(0.79, 0.59, 0.25)),
+            ));
+        } else {
+            commands.entity(entity).insert(skin(&assets, look.0));
+        }
     }
 }
 
@@ -164,39 +173,12 @@ pub fn costs(
                         ..default()
                     },
                     Text::new(n.to_string()),
-                    fonts.text(true, size),
+                    fonts.serif(size + 3.0),
                     TextColor(color),
                     Pickable::IGNORE,
                 ));
             }
         });
-}
-
-/// Рисованный фон экрана во весь размер с затемнением поверх.
-pub fn backdrop(root: &mut ChildSpawnerCommands, assets: &AssetServer, image: &str, dim: f32) {
-    root.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            width: percent(100),
-            height: percent(100),
-            ..default()
-        },
-        ImageNode {
-            image: assets.load(image.to_string()),
-            image_mode: NodeImageMode::Stretch,
-            ..default()
-        },
-        Pickable::IGNORE,
-    ))
-    .with_child((
-        Node {
-            width: percent(100),
-            height: percent(100),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.05, 0.03, 0.02, dim)),
-        Pickable::IGNORE,
-    ));
 }
 
 /// Полоса ресурсов вверху экрана: тёмные плашки с иконкой слева.
@@ -206,15 +188,24 @@ pub fn top_bar(
     fonts: &Fonts,
     resources: &[(&str, u32)],
 ) {
+    bar(root).with_children(|bar| {
+        for (kind, n) in resources {
+            resource_slot(bar, assets, fonts, kind, n.to_string(), 18.0, ());
+        }
+    });
+}
+
+/// Пустая полоса ресурсов: тёмное дерево с латунной кромкой снизу.
+pub fn bar<'a>(root: &'a mut ChildSpawnerCommands) -> EntityCommands<'a> {
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
             top: px(0),
             left: px(0),
             right: px(0),
-            height: px(50),
-            padding: UiRect::axes(px(14), px(8)),
-            column_gap: px(14),
+            height: px(54),
+            padding: UiRect::axes(px(12), px(7)),
+            column_gap: px(12),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             border: UiRect::bottom(px(2)),
@@ -223,46 +214,55 @@ pub fn top_bar(
         BackgroundColor(Color::srgba(0.09, 0.06, 0.04, 0.92)),
         BorderColor::all(Color::srgb(0.62, 0.46, 0.20)),
     ))
-    .with_children(|bar| {
-        for (kind, n) in resources {
-            bar.spawn(Node {
-                flex_grow: 1.0,
-                flex_basis: px(0),
-                height: px(32),
+}
+
+/// Плашка ресурса: крупная иконка слева, число засечкой. `extra` — на текст числа
+/// (например, метка, по которой число обновляется).
+pub fn resource_slot<'a>(
+    bar: &'a mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    kind: &str,
+    value: String,
+    size: f32,
+    extra: impl Bundle,
+) -> EntityCommands<'a> {
+    let mut slot = bar.spawn(Node {
+        flex_grow: 1.0,
+        flex_basis: px(0),
+        height: px(40),
+        align_items: AlignItems::Center,
+        ..default()
+    });
+    slot.with_children(|slot| {
+        slot.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(16),
+                right: px(0),
+                top: px(4),
+                bottom: px(4),
+                padding: UiRect::left(px(22)),
+                justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 ..default()
-            })
-            .with_children(|slot| {
-                slot.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: px(12),
-                        right: px(0),
-                        top: px(2),
-                        bottom: px(2),
-                        padding: UiRect::right(px(12)),
-                        justify_content: JustifyContent::FlexEnd,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    ImageNode {
-                        image: assets.load("ui/pill.png"),
-                        image_mode: NodeImageMode::Sliced(TextureSlicer {
-                            border: BorderRect::all(20.0),
-                            ..default()
-                        }),
-                        ..default()
-                    },
-                ))
-                .with_child((
-                    Text::new(n.to_string()),
-                    fonts.text(true, 15.0),
-                    TextColor(Color::srgb(1.0, 0.93, 0.78)),
-                ));
-                slot.spawn(icon(assets, kind, 30.0));
-            });
-        }
+            },
+            ImageNode {
+                image: assets.load("ui/pill.png"),
+                image_mode: NodeImageMode::Sliced(TextureSlicer {
+                    border: BorderRect::all(20.0),
+                    ..default()
+                }),
+                ..default()
+            },
+        ))
+        .with_child((
+            heading(fonts, value, size, Color::srgb(1.0, 0.93, 0.78)),
+            extra,
+        ));
+        slot.spawn(icon(assets, kind, 38.0));
     });
+    slot
 }
 
 /// Доска-заголовок экрана по центру.
@@ -278,21 +278,37 @@ pub fn title(root: &mut ChildSpawnerCommands, fonts: &Fonts, label: &str, top: f
     .with_children(|row| {
         row.spawn((
             Node {
-                height: px(44),
+                height: px(48),
                 padding: UiRect::horizontal(px(64)),
                 align_items: AlignItems::Center,
                 ..default()
             },
             Skin(Look::Plank),
         ))
-        .with_child((
-            Text::new(label),
-            fonts.text(true, 20.0),
-            TextColor(Color::srgb(1.0, 0.93, 0.78)),
-            TextShadow {
-                offset: Vec2::new(0.0, 2.0),
-                color: Color::srgba(0.0, 0.0, 0.0, 0.7),
-            },
-        ));
+        .with_child(heading(fonts, label, 24.0, Color::srgb(1.0, 0.93, 0.78)));
     });
+}
+
+/// Заголовок, надпись на кнопке, крупная цифра: засечка с тенью.
+pub fn heading(fonts: &Fonts, value: impl Into<String>, size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(value),
+        fonts.display(size),
+        TextColor(color),
+        TextShadow {
+            offset: Vec2::new(0.0, 2.0),
+            color: Color::srgba(0.0, 0.0, 0.0, 0.75),
+        },
+        Pickable::IGNORE,
+    )
+}
+
+/// Надпись чернилами на пергаменте: засечка без тени.
+pub fn ink(fonts: &Fonts, value: impl Into<String>, size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(value),
+        fonts.serif(size),
+        TextColor(color),
+        Pickable::IGNORE,
+    )
 }

@@ -12,14 +12,12 @@ use serde::{Deserialize, Serialize};
 use crate::Screen;
 use crate::audio::Sfx;
 use crate::contracts::Deed;
-use crate::menu::{
-    BRASS, GO, GO_EDGE, GOLD, MUTED, MenuRebuild, PARCHMENT, Profile, Toast, pressable, text,
-};
+use crate::menu::{GOLD, MUTED, MenuRebuild, PARCHMENT, Profile, Toast, pressable, text};
+use crate::style::{INK, INK_GOOD, Look as Skins, Skin, heading, icon, ink};
 use crate::view::Fonts;
 
-const DISABLED: Color = Color::srgb(0.36, 0.38, 0.43);
-const LACKING: Color = Color::srgb(1.0, 0.55, 0.45);
-const BETTER: Color = Color::srgb(0.55, 0.88, 0.55);
+const LACKING: Color = Color::srgb(1.0, 0.45, 0.38);
+const BRIGHT: Color = Color::srgb(1.0, 0.93, 0.78);
 const HULL: &str = "hull";
 
 /// Данные корабля: `data/ship.json`.
@@ -584,8 +582,10 @@ fn effect_line(effect: &Effect, level: u32) -> String {
 }
 
 /// Панель отсека поверх корабля: польза сейчас и на следующем уровне, цена, кнопки.
+#[allow(clippy::too_many_arguments)]
 pub fn panel(
     root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     data: &ShipData,
     ship: &Ship,
@@ -605,17 +605,14 @@ pub fn panel(
             position_type: PositionType::Absolute,
             left: px(10),
             // Внизу, поверх ряда отсеков и похода: корабль над панелью остаётся виден.
-            bottom: px(86),
+            bottom: px(90),
             width: px(520),
-            padding: UiRect::axes(px(14), px(10)),
+            padding: UiRect::axes(px(32), px(30)),
             flex_direction: FlexDirection::Column,
-            row_gap: px(4),
-            border: UiRect::all(px(2)),
-            border_radius: BorderRadius::all(px(14)),
+            row_gap: px(8),
             ..default()
         },
-        BackgroundColor(Color::srgb(0.11, 0.075, 0.05)),
-        BorderColor::all(BRASS),
+        Skin(Skins::Tile),
         GlobalZIndex(10),
     ))
     .with_children(|p| {
@@ -625,29 +622,27 @@ pub fn panel(
             ..default()
         })
         .with_children(|row| {
-            row.spawn(text(
+            row.spawn(heading(
                 fonts,
                 if level == 0 {
                     format!("{} · не построен", compartment.name)
                 } else {
                     format!("{} · ур. {level}", compartment.name)
                 },
-                true,
-                20.0,
-                PARCHMENT,
+                23.0,
+                BRIGHT,
             ));
             let mut close = row.spawn((
                 Node {
-                    width: px(44),
-                    height: px(36),
+                    width: px(46),
+                    height: px(40),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
-                    border_radius: BorderRadius::all(px(8)),
                     ..default()
                 },
-                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.35)),
+                Skin(Skins::Dark),
             ));
-            close.with_child(text(fonts, "x", true, 18.0, MUTED));
+            close.with_child(heading(fonts, "×", 22.0, PARCHMENT));
             pressable(&mut close);
             close.observe(
                 |_: On<PointerClick>,
@@ -659,25 +654,35 @@ pub fn panel(
             );
         });
 
+        // Польза отсека сейчас и на следующем уровне — на пергаменте.
         if let Some(effect) = &compartment.effect {
-            if level > 0 {
-                p.spawn(text(
-                    fonts,
-                    format!("Сейчас: {}", effect_line(effect, level)),
-                    false,
-                    14.0,
-                    PARCHMENT,
-                ));
-            }
-            if level < data.max_level {
-                p.spawn(text(
-                    fonts,
-                    format!("На ур. {}: {}", level + 1, effect_line(effect, level + 1)),
-                    false,
-                    14.0,
-                    BETTER,
-                ));
-            }
+            p.spawn((
+                Node {
+                    padding: UiRect::axes(px(16), px(12)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(4),
+                    ..default()
+                },
+                Skin(Skins::Parchment),
+            ))
+            .with_children(|card| {
+                if level > 0 {
+                    card.spawn(ink(
+                        fonts,
+                        format!("Сейчас: {}", effect_line(effect, level)),
+                        17.0,
+                        INK,
+                    ));
+                }
+                if level < data.max_level {
+                    card.spawn(ink(
+                        fonts,
+                        format!("На ур. {}: {}", level + 1, effect_line(effect, level + 1)),
+                        17.0,
+                        INK_GOOD,
+                    ));
+                }
+            });
         }
 
         if building_here {
@@ -685,35 +690,31 @@ pub fn panel(
         }
         match &step {
             Ok(cost) => {
-                let lack = |have: u32, need: u32| if have >= need { PARCHMENT } else { LACKING };
+                // Цена иконками; чего не хватает — красным.
+                let lack = |have: u32, need: u32| if have >= need { BRIGHT } else { LACKING };
                 p.spawn(Node {
-                    column_gap: px(14),
-                    margin: UiRect::top(px(4)),
+                    column_gap: px(16),
+                    align_items: AlignItems::Center,
                     ..default()
                 })
                 .with_children(|row| {
-                    row.spawn(text(
-                        fonts,
-                        format!("серебро {}", cost.silver),
-                        true,
-                        14.0,
-                        lack(profile.silver, cost.silver),
-                    ));
-                    row.spawn(text(
-                        fonts,
-                        format!("доски {}", cost.planks),
-                        true,
-                        14.0,
-                        lack(profile.planks, cost.planks),
-                    ));
+                    let mut items = vec![
+                        ("silver", cost.silver, lack(profile.silver, cost.silver)),
+                        ("planks", cost.planks, lack(profile.planks, cost.planks)),
+                    ];
                     if cost.ether > 0 {
-                        row.spawn(text(
-                            fonts,
-                            format!("эфир {}", cost.ether),
-                            true,
-                            14.0,
-                            lack(profile.ether, cost.ether),
-                        ));
+                        items.push(("ether", cost.ether, lack(profile.ether, cost.ether)));
+                    }
+                    for (kind, n, color) in items {
+                        row.spawn(Node {
+                            column_gap: px(5),
+                            align_items: AlignItems::Center,
+                            ..default()
+                        })
+                        .with_children(|item| {
+                            item.spawn(icon(assets, kind, 26.0));
+                            item.spawn(heading(fonts, n.to_string(), 19.0, color));
+                        });
                     }
                     row.spawn(text(
                         fonts,
@@ -811,15 +812,12 @@ fn action_button(
             flex_direction: FlexDirection::Column,
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
-            border: UiRect::all(px(2)),
-            border_radius: BorderRadius::all(px(12)),
             ..default()
         },
-        BackgroundColor(if ready { GO } else { DISABLED }),
-        BorderColor::all(if ready { GO_EDGE } else { MUTED }),
+        Skin(if ready { Skins::Go } else { Skins::Off }),
     ));
     button.with_children(|b| {
-        b.spawn(text(fonts, title, true, 18.0, Color::WHITE));
+        b.spawn(heading(fonts, title, 21.0, Color::WHITE));
         b.spawn(text(fonts, sub, false, 12.0, PARCHMENT));
     });
     pressable(&mut button);
