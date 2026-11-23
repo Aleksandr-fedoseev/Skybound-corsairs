@@ -441,7 +441,7 @@ fn rarity_label(rarity: Rarity) -> &'static str {
     }
 }
 
-fn role_label(role: Role) -> &'static str {
+pub(crate) fn role_label(role: Role) -> &'static str {
     match role {
         Role::Gunner => "Канонир",
         Role::Duelist => "Дуэлянт",
@@ -452,7 +452,7 @@ fn role_label(role: Role) -> &'static str {
     }
 }
 
-fn element_label(element: Element) -> &'static str {
+pub(crate) fn element_label(element: Element) -> &'static str {
     match element {
         Element::Wind => "ветер",
         Element::Lightning => "молния",

@@ -11,21 +11,16 @@ use game_data::{GameData, Rarity};
 use serde::{Deserialize, Serialize};
 
 use crate::Screen;
-use crate::audio::Sfx;
 use crate::battle_screen::{BattleScreen, random_seed};
 use crate::crew::Roster;
 use crate::menu::{GOLD, PARCHMENT, Profile, Toast, bottom_nav, pressable, spawn_toast, text};
 use crate::ship::{Ship, ShipData};
-use crate::style::{self, INK, INK_SOFT, Look, Skin};
+use crate::style::{self, Look, Skin};
 use crate::view::Fonts;
 
 const BRIGHT: Color = Color::srgb(1.0, 0.93, 0.78);
 const SR_COLOR: Color = Color::srgb(0.70, 0.55, 1.0);
 const R_COLOR: Color = Color::srgb(0.70, 0.74, 0.80);
-/// Карточки найма открываются по одной.
-const REVEAL_STEP: f32 = 0.18;
-const REVEAL_POP: f32 = 0.25;
-const SSR_POP_SCALE: f32 = 1.35;
 const SECONDS_PER_DAY: u64 = 86_400;
 
 /// Настройки найма: `data/tavern.json`.
@@ -152,26 +147,11 @@ impl TavernState {
     }
 }
 
-/// Что выпало в последнем найме: герой, редкость, новый ли.
-#[derive(Resource, Default)]
-struct Results {
-    list: Vec<(String, Rarity, bool)>,
-    /// Сколько секунд прошло с начала показа.
-    elapsed: f32,
-}
-
 #[derive(Resource, Default)]
 struct TavernDirty(bool);
 
 #[derive(Component)]
 struct TavernRoot;
-
-#[derive(Component)]
-struct ResultsOverlay;
-
-/// Карточка результата номер `.0`, её редкость SSR.
-#[derive(Component)]
-struct Reveal(usize, bool);
 
 #[derive(Clone, Copy)]
 enum Hire {
@@ -183,13 +163,9 @@ enum Hire {
 pub fn plugin(app: &mut App) {
     app.insert_resource(TavernData::bundled())
         .init_resource::<TavernState>()
-        .init_resource::<Results>()
         .init_resource::<TavernDirty>()
         .add_systems(OnEnter(Screen::Tavern), spawn_tavern)
-        .add_systems(
-            Update,
-            (rebuild_tavern, reveal_results).run_if(in_state(Screen::Tavern)),
-        );
+        .add_systems(Update, rebuild_tavern.run_if(in_state(Screen::Tavern)));
 }
 
 fn rarity_label(rarity: Rarity) -> &'static str {
@@ -255,7 +231,6 @@ fn rebuild_tavern(
     profile: Res<Profile>,
     roster: Res<Roster>,
     screen: Res<BattleScreen>,
-    results: Res<Results>,
 ) {
     if !dirty.0 {
         return;
@@ -275,9 +250,6 @@ fn rebuild_tavern(
         &roster,
         &screen.data,
     );
-    if !results.list.is_empty() {
-        results_overlay(&mut commands, &assets, &fonts, &results, &screen.data);
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -682,7 +654,7 @@ fn hire_heroes(
     ship_data: Res<ShipData>,
     mut profile: ResMut<Profile>,
     mut roster: ResMut<Roster>,
-    mut results: ResMut<Results>,
+    mut reveal: ResMut<crate::hire_reveal::HireReveal>,
     mut toast: ResMut<Toast>,
     mut dirty: ResMut<TavernDirty>,
 ) {
@@ -712,161 +684,16 @@ fn hire_heroes(
     };
     let pool = pool_of(&cfg, &screen.data);
     let state = &mut *state;
-    results.list = (0..count)
+    let list = (0..count)
         .map(|_| {
             let (roll, pick) = (state.rng.next_f32(), state.rng.next_f32());
             let (id, rarity) = pull(&cfg, &mut state.pity, roll, pick, &pool);
             let new = roster.recruit(&id);
-            (id, rarity, new)
+            crate::hire_reveal::Pulled { id, rarity, new }
         })
         .collect();
-    results.elapsed = 0.0;
+    reveal.start(list);
     dirty.0 = true;
-}
-
-fn results_overlay(
-    commands: &mut Commands,
-    assets: &AssetServer,
-    fonts: &Fonts,
-    results: &Results,
-    data: &GameData,
-) {
-    commands
-        .spawn((
-            ResultsOverlay,
-            DespawnOnExit(Screen::Tavern),
-            Node {
-                position_type: PositionType::Absolute,
-                width: percent(100),
-                height: percent(100),
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                row_gap: px(16),
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.82)),
-            GlobalZIndex(30),
-        ))
-        .with_children(|overlay| {
-            let any_new = results.list.iter().any(|(_, _, new)| *new);
-            overlay.spawn(text(
-                fonts,
-                if any_new {
-                    "Новые лица на борту!"
-                } else {
-                    "Итоги найма"
-                },
-                true,
-                26.0,
-                GOLD,
-            ));
-            overlay
-                .spawn(Node {
-                    width: px(520),
-                    flex_wrap: FlexWrap::Wrap,
-                    justify_content: JustifyContent::Center,
-                    column_gap: px(8),
-                    row_gap: px(10),
-                    ..default()
-                })
-                .with_children(|grid| {
-                    for (i, (id, rarity, new)) in results.list.iter().enumerate() {
-                        let Some(hero) = data.hero(id) else {
-                            continue;
-                        };
-                        let ssr = *rarity == Rarity::Ssr;
-                        grid.spawn((
-                            Reveal(i, ssr),
-                            Node {
-                                width: px(96),
-                                height: px(150),
-                                padding: UiRect::top(px(10)),
-                                flex_direction: FlexDirection::Column,
-                                align_items: AlignItems::Center,
-                                row_gap: px(2),
-                                border_radius: BorderRadius::all(px(12)),
-                                ..default()
-                            },
-                            Skin(Look::Parchment),
-                            Outline::new(px(if ssr { 3.0 } else { 0.0 }), px(1), GOLD),
-                            Visibility::Hidden,
-                        ))
-                        .with_children(|card| {
-                            card.spawn(style::medallion(assets, &hero.id, 66.0, false));
-                            card.spawn(text(fonts, hero.name.clone(), true, 15.0, INK));
-                            card.spawn(text(
-                                fonts,
-                                rarity_label(*rarity),
-                                true,
-                                13.0,
-                                rarity_color(*rarity),
-                            ));
-                            card.spawn(text(
-                                fonts,
-                                if *new { "новый!" } else { "копия" },
-                                *new,
-                                12.0,
-                                if *new {
-                                    Color::srgb(0.70, 0.36, 0.05)
-                                } else {
-                                    INK_SOFT
-                                },
-                            ));
-                        });
-                    }
-                });
-            let mut done = overlay.spawn((
-                Node {
-                    width: px(220),
-                    height: px(56),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                Skin(Look::Go),
-            ));
-            done.with_child(text(fonts, "Забрать", true, 20.0, Color::WHITE));
-            pressable(&mut done);
-            done.observe(
-                |_: On<PointerClick>,
-                 mut commands: Commands,
-                 mut results: ResMut<Results>,
-                 overlays: Query<Entity, With<ResultsOverlay>>| {
-                    results.list.clear();
-                    for overlay in &overlays {
-                        commands.entity(overlay).despawn();
-                    }
-                },
-            );
-        });
-}
-
-/// Карточки появляются по одной; SSR — с увеличением.
-fn reveal_results(
-    time: Res<Time>,
-    mut results: ResMut<Results>,
-    mut cards: Query<(&Reveal, &mut Visibility, &mut UiTransform)>,
-    mut sfx: MessageWriter<Sfx>,
-) {
-    if results.list.is_empty() {
-        return;
-    }
-    results.elapsed += time.delta_secs();
-    for (Reveal(i, ssr), mut vis, mut transform) in &mut cards {
-        let t = results.elapsed - *i as f32 * REVEAL_STEP;
-        if t < 0.0 {
-            continue;
-        }
-        if *vis == Visibility::Hidden {
-            sfx.write(Sfx(if *ssr { "ssr" } else { "flip" }));
-        }
-        vis.set_if_neq(Visibility::Inherited);
-        let k = (t / REVEAL_POP).min(1.0);
-        let peak = if *ssr { SSR_POP_SCALE } else { 1.15 };
-        // Выскакивает крупнее и оседает до обычного размера.
-        transform.scale = Vec2::splat(1.0 + (peak - 1.0) * (1.0 - k));
-    }
 }
 
 #[cfg(test)]

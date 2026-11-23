@@ -640,13 +640,7 @@ fn abyss_card(
             17.0,
             GOLD,
         ));
-        card.spawn(text(
-            fonts,
-            names.join(" · "),
-            false,
-            13.0,
-            PARCHMENT,
-        ));
+        card.spawn(text(fonts, names.join(" · "), false, 13.0, PARCHMENT));
         card.spawn(text(
             fonts,
             format!("Награда: {}", data.reward(floor).line()),

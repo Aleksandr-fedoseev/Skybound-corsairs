@@ -175,7 +175,10 @@ fn refresh(
             }
         }
     }
-    let mut value = format!("Припасы {}/{} · победа −{}", profile.supplies, data.cap, data.cost);
+    let mut value = format!(
+        "Припасы {}/{} · победа −{}",
+        profile.supplies, data.cap, data.cost
+    );
     if profile.supplies < data.cap {
         let left = (1.0 - profile.supplies_regen) * data.regen_minutes * 60.0;
         value.push_str(&format!(" · +1 через {}", clock(left)));

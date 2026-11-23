@@ -16,6 +16,7 @@ mod events;
 mod expeditions;
 mod fx;
 mod gear;
+mod hire_reveal;
 mod map;
 mod menu;
 mod save;
@@ -100,6 +101,7 @@ fn main() {
         events::plugin,
     ))
     .add_plugins(supplies::plugin)
+    .add_plugins(hire_reveal::plugin)
     .add_plugins(style::plugin)
     .add_message::<Shown>()
     .insert_resource(crew)

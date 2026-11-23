@@ -11,8 +11,8 @@ use crate::audio::Sfx;
 use crate::battle_screen::BattleScreen;
 use crate::crew::Roster;
 use crate::menu::{MUTED, Profile, Progress, Toast, Voyage, pressable, text};
-use crate::supplies::SupplyData;
 use crate::style::{Look, Skin, heading};
+use crate::supplies::SupplyData;
 use crate::view::Fonts;
 
 /// Табличка с именем адмирала — имперская, тёмно-синяя.
