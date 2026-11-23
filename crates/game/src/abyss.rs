@@ -290,11 +290,8 @@ fn build(commands: &mut Commands, view: &View) {
                 height: percent(100),
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.10, 0.11, 0.18)),
         ))
         .with_children(|root| {
-            // Вид из вороньего гнезда на бурю над Бездной.
-            style::backdrop(root, assets, "backgrounds/activities.jpg", 0.1);
             style::top_bar(
                 root,
                 assets,
@@ -411,7 +408,6 @@ fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
                         ..default()
                     },
                     ImageNode::new(assets.load(format!("ui/act_{art}.png"))),
-                    Outline::new(px(2), px(0), Color::srgb(0.72, 0.55, 0.26)),
                 ));
                 card.spawn(Node {
                     flex_grow: 1.0,
@@ -610,14 +606,14 @@ fn abyss_card(
     let level = enemies.iter().map(|(_, l)| *l).max().unwrap_or(1);
     col.spawn((
         Node {
-            padding: UiRect::axes(px(30), px(28)),
+            padding: UiRect::axes(px(18), px(16)),
             flex_direction: FlexDirection::Column,
             row_gap: px(6),
             border: UiRect::all(px(2)),
             border_radius: BorderRadius::all(px(14)),
             ..default()
         },
-        Skin(Look::Wood),
+        Skin(Look::Tile),
     ))
     .with_children(|card| {
         card.spawn(text(fonts, "Бездна облаков", true, 22.0, PARCHMENT));

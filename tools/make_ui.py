@@ -340,68 +340,65 @@ def biggest_blob_box(solid):
     return (int(cols.min()), int(rows.min()), int(cols.max()) + 1, int(rows.max()) + 1)
 
 
-# Временные иконки умений — кольца, вырезанные из макетов Gemini: (макет, центр x, y, радиус).
-SKILL_RINGS = {
-    "pistol": ("crew", 78, 624, 40),
-    "wind": ("crew", 178, 624, 40),
-    "spyglass": ("crew", 278, 624, 40),
-    "blade": ("crew_alt", 82, 636, 44),
-    "swirl": ("crew_alt", 190, 636, 44),
-    "musket": ("crew_alt", 298, 636, 44),
+# Листы иконок из Gemini (assets/ui_src/sheets/): колонки, ряды, имена ячеек по порядку
+# и размер, в который вписывается иконка. None — ячейка не нужна.
+SHEETS = {
+    "nav": (3, 2, ["nav_ship", "nav_crew", "nav_map", "nav_tavern", "nav_activities", None], (96, 96)),
+    "resources": (3, 3, [
+        "icon_silver", "icon_doubloons", "icon_planks", "icon_ether", "icon_journals",
+        "icon_charts", "icon_details", "icon_storm_cores", "icon_figureheads",
+    ], (96, 96)),
+    "activities": (2, 2, ["act_event", "act_abyss", "act_expeditions", "act_contracts"], (240, 228)),
+    "skills_1": (3, 3, [
+        "skill_ren_0", "skill_ren_1", "skill_ren_2", "skill_sora_0", "skill_sora_1",
+        "skill_sora_2", "skill_kaya_0", "skill_kaya_1", "skill_kaya_2",
+    ], (128, 128)),
+    "skills_2": (3, 3, [
+        "skill_lira_0", "skill_lira_1", "skill_lira_2", "skill_mei_0", "skill_mei_1",
+        "skill_mei_2", "skill_borg_0", "skill_borg_1", "skill_borg_2",
+    ], (128, 128)),
+    "stats": (3, 3, [
+        "stat_hp", "stat_atk", "stat_def", "stat_spd", "star", "star_empty",
+        "badge_r", "badge_sr", "badge_ssr",
+    ], (96, 96)),
 }
 
 
-# Картинки карточек Активностей — из макетов Gemini: (макет, рамка).
-ACTIVITY_ART = {
-    "event": ("activities", (62, 172, 180, 284)),
-    "abyss": ("activities", (62, 327, 180, 437)),
-    "expeditions": ("activities", (62, 482, 180, 592)),
-    "contracts": ("activities_alt", (88, 688, 200, 800)),
-}
-
-
-def activity_art(mockup, box, size=(160, 152)):
-    src = Image.open(SRC / "mockups" / f"{mockup}.png").convert("RGBA")
-    return src.crop(box).resize(size, Image.LANCZOS)
-
-
-# Иконки нижней панели — из макета Экипажа: (рамка, допуск по цвету фона плитки).
-NAV_ICONS = {
-    "ship": ((14, 944, 104, 994), 48),
-    "crew": ((134, 934, 208, 992), 40),
-    "map": ((248, 944, 334, 994), 48),
-    "tavern": ((362, 940, 446, 994), 48),
-    "activities": ((474, 940, 560, 994), 48),
-}
-
-
-def nav_icon(box, tol, size=72):
-    """Иконка с плитки макета: фон плитки, связанный с краем, — прозрачный."""
-    im = Image.open(SRC / "mockups" / "crew.png").convert("RGBA").crop(box)
+def cut_cell(sheet, col, row, cols, rows, size):
+    """Ячейка листа: серый фон, связанный с краем ячейки, — прозрачный; обрезка по рисунку."""
+    w, h = sheet.size
+    cw, ch = w / cols, h / rows
+    inset = 10  # отступ от границы ячейки: на некоторых листах есть линии сетки
+    box = (round(col * cw) + inset, round(row * ch) + inset, round((col + 1) * cw) - inset, round((row + 1) * ch) - inset)
+    im = sheet.crop(box).convert("RGBA")
     a = np.asarray(im).astype(int)
-    h, w = a.shape[:2]
+    hh, ww = a.shape[:2]
     edge = np.concatenate([a[0, :, :3], a[-1, :, :3], a[:, 0, :3], a[:, -1, :3]])
-    near = np.abs(a[:, :, :3] - np.median(edge, axis=0)).sum(axis=2) < tol
+    near = np.abs(a[:, :, :3] - np.median(edge, axis=0)).sum(axis=2) < 36
     mask = Image.fromarray((near * 255).astype(np.uint8)).copy()
-    seeds = [(x, y) for x in range(0, w, 3) for y in (0, h - 1)] + [(x, y) for y in range(0, h, 3) for x in (0, w - 1)]
+    seeds = [(x, y) for x in range(0, ww, 4) for y in (0, hh - 1)] + [(x, y) for y in range(0, hh, 4) for x in (0, ww - 1)]
     for x, y in seeds:
         if mask.getpixel((x, y)) == 255:
             ImageDraw.floodfill(mask, (x, y), 128)
     alpha = np.where(np.asarray(mask) == 128, 0, 255).astype(np.uint8)
-    alpha = np.asarray(Image.fromarray(alpha).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.8)))
+    # Мягкий край без серой каймы.
+    alpha = np.asarray(Image.fromarray(alpha).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.7)))
     a[:, :, 3] = alpha
     icon = Image.fromarray(a.astype(np.uint8))
     icon = icon.crop(icon.getbbox())
-    return fit(icon.resize((icon.width * 2, icon.height * 2), Image.LANCZOS), (size, size))
+    return fit(icon, size)
 
 
-def skill_ring(mockup, cx, cy, r, size=96):
-    src = Image.open(SRC / "mockups" / f"{mockup}.png").convert("RGBA")
-    im = src.crop((cx - r, cy - r, cx + r, cy + r)).resize((size * 2, size * 2), Image.LANCZOS)
-    mask = Image.new("L", im.size, 0)
-    ImageDraw.Draw(mask).ellipse((6, 6, size * 2 - 7, size * 2 - 7), fill=255)
-    im.putalpha(mask)
-    return im.resize((size, size), Image.LANCZOS)
+def cut_sheets():
+    for name, (cols, rows, cells, size) in SHEETS.items():
+        path = SRC / "sheets" / f"{name}.png"
+        if not path.exists():
+            continue
+        sheet = Image.open(path).convert("RGB")
+        for i, out in enumerate(cells):
+            if out:
+                cut_cell(sheet, i % cols, i // cols, cols, rows, size).save(OUT / f"{out}.png")
+                print("  ", f"{out}.png", "(лист)")
 
 
 def ink_icon(kind, size=48):
@@ -469,7 +466,6 @@ def save(name, im):
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    save("panel.png", panel())
     save("card.png", parchment())
     save("button.png", button((236, 160, 70), (176, 96, 30), (255, 226, 160)))
     save("button_pressed.png", button((176, 96, 30), (136, 70, 20), (220, 180, 110)))
@@ -485,18 +481,13 @@ def main():
         save(f"stat_{kind}.png", ink_icon(kind))
     for rarity in ("R", "SR", "SSR"):
         save(f"badge_{rarity.lower()}.png", badge(rarity))
-    if (SRC / "mockups").exists():
-        for kind, ring in SKILL_RINGS.items():
-            save(f"skill_{kind}.png", skill_ring(*ring))
-        for kind, (box, tol) in NAV_ICONS.items():
-            save(f"nav_{kind}.png", nav_icon(box, tol))
-        for kind, (mockup, box) in ACTIVITY_ART.items():
-            save(f"act_{kind}.png", activity_art(mockup, box))
     heroes = json.load(open("data/heroes.json"))
     anim = json.load(open("data/animated.json"))
     for h in heroes:
         save(f"hero_{h['id']}.png", medallion(h["id"], h["element"], h["rarity"], h["name"], anim))
         save(f"full_{h['id']}.png", figure(h["id"], anim))
+    # Листы из Gemini — поверх временных иконок.
+    cut_sheets()
 
 
 if __name__ == "__main__":

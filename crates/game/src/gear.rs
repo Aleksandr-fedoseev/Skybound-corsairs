@@ -12,11 +12,10 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::audio::Sfx;
-use crate::menu::{GO, GO_EDGE, MUTED, MenuRebuild, PARCHMENT, Profile, Toast, pressable, text};
+use crate::menu::{MUTED, MenuRebuild, PARCHMENT, Profile, Toast, pressable, text};
 use crate::save::now;
+use crate::style::{Look, Skin};
 use crate::view::Fonts;
-
-const DISABLED: Color = Color::srgb(0.36, 0.38, 0.43);
 
 #[derive(Resource, Deserialize)]
 pub struct GearData {
@@ -356,8 +355,7 @@ fn gear_button(
             border_radius: BorderRadius::all(px(8)),
             ..default()
         },
-        BackgroundColor(if active { GO } else { DISABLED }),
-        BorderColor::all(if active { GO_EDGE } else { MUTED }),
+        Skin(if active { Look::Go } else { Look::Off }),
     ));
     button.with_child((
         text(fonts, label, true, 12.0, PARCHMENT),
