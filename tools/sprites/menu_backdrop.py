@@ -3,9 +3,9 @@
 
   python3 tools/sprites/menu_backdrop.py
 
-art/2d/sky/pano_b.png — панорама из Gemini 21:9 (без обрезанных краями островов): конец плавно
-перетекает в начало, получается кольцо — в игре едет влево без шва. Панорама растянута лишь
-до BAND px по высоте (иначе мылит); выше неё — небо, протянутое от её верхнего края.
+art/2d/sky/pano_c.jpeg — панорама из Gemini 21:9 (острова в середине, по краям только облака): конец
+плавно перетекает в начало, получается кольцо — в игре едет влево без шва. Растянута на всю высоту
+экрана: ни заливки сверху, ни отражения снизу.
 art/2d/sky/clouds.png (три облака) и clouds_bank.png (длинная гряда) — на чистом зелёном: вырезаются
 ключом по зелёному, каждое облако — свой файл menu/cloud_N.png.
 Нужны Pillow и numpy.
@@ -19,8 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "crates" / "game" / "assets"
 SKY = ROOT / "art" / "2d" / "sky"
 SCREEN_H = 960
-BAND_TOP, BAND = 120, 580     # где на экране лежит панорама и её высота (логические px)
-OVERLAP = 260                 # px исходника на плавный переход конца в начало
+OVERLAP = 300                 # px исходника на плавный переход конца в начало
 
 
 def seamless(src):
@@ -34,24 +33,11 @@ def seamless(src):
 
 
 def backdrop(src):
+    """Панорама на всю высоту экрана: ни заливки сверху, ни отражения снизу — без швов."""
     band = seamless(src)
-    k = BAND / band.height
-    band = band.resize((round(band.width * k), BAND), Image.Resampling.LANCZOS)
-    band = band.filter(ImageFilter.UnsharpMask(1.5, 50, 2))
-    w = band.width
-    a = np.asarray(band).astype(float)
-    # Выше панорамы — небо: верхняя строка панорамы, сглаженная по ширине, уходит в густую синеву.
-    top = np.asarray(band.crop((0, 0, w, 12)).filter(ImageFilter.BoxBlur(40))).astype(float).mean(axis=0)
-    deep = np.array([62, 104, 178], float)
-    t = np.linspace(0, 1, BAND_TOP)[:, None, None]
-    sky = deep * (1 - t) + top[None] * t
-    # Ниже — море облаков отражено вниз и чуть притенено к низу экрана.
-    rest = SCREEN_H - BAND_TOP - BAND
-    below = a[::-1][:rest].copy()
-    shade = np.linspace(1.0, 0.82, rest)[:, None, None]
-    below = below * shade + np.array([120, 110, 170], float) * (1 - shade)
-    out = np.concatenate([sky, a, below], axis=0)
-    return Image.fromarray(out.clip(0, 255).astype(np.uint8))
+    k = SCREEN_H / band.height
+    band = band.resize((round(band.width * k), SCREEN_H), Image.Resampling.LANCZOS)
+    return band.filter(ImageFilter.UnsharpMask(1.2, 40, 2))
 
 
 def clouds(src):
@@ -93,7 +79,8 @@ def bird():
 
 
 def main():
-    sky = backdrop(Image.open(SKY / "pano_b.png"))
+    sky = backdrop(Image.open(SKY / "pano_c.jpeg"))
+    print("ширина неба:", sky.width)
     sky.save(ASSETS / "menu" / "sky_pano.jpg", quality=90)
     print("панорама", sky.size)
     i = 0
