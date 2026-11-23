@@ -235,6 +235,10 @@ pub enum Effect {
     Workshop {
         values: Vec<u32>,
     },
+    /// Камбуз: припасов в час.
+    SuppliesPerHour {
+        values: Vec<u32>,
+    },
 }
 
 /// Значение по уровню: на уровне 0 (не построен) — ноль, выше таблицы — последнее.
@@ -379,6 +383,13 @@ impl Ship {
             _ => None,
         });
         (v > 0).then(|| v as usize - 1)
+    }
+
+    pub fn supplies_per_hour(&self, data: &ShipData) -> u32 {
+        self.value(data, |e| match e {
+            Effect::SuppliesPerHour { values } => Some(values),
+            _ => None,
+        })
     }
 
     pub fn cabins(&self, data: &ShipData) -> u32 {
@@ -562,6 +573,9 @@ fn effect_line(effect: &Effect, level: u32) -> String {
             format!("Шлюпок для экспедиций: +{}", at(values, level))
         }
         Effect::Cabins { values } => format!("Кают для соседей: {}", at(values, level)),
+        Effect::SuppliesPerHour { values } => {
+            format!("Припасы: {} в час", at(values, level))
+        }
         Effect::Workshop { values } => {
             let name = ["обычное", "редкое", "эпическое"]
                 .get(at(values, level).saturating_sub(1) as usize)

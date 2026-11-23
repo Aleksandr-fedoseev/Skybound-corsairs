@@ -34,6 +34,10 @@
       "effect": { "kind": "ether_per_minute", "values": [6, 9, 13, 18, 24, 31, 40] }
     },
     {
+      "id": "galley", "name": "Камбуз", "icon": "menu/module_hold.png", "unlock_hull": 1, "start_level": 1,
+      "effect": { "kind": "supplies_per_hour", "values": [6, 8, 10, 13, 16, 20, 24] }
+    },
+    {
       "id": "tavern", "name": "Таверна", "icon": "menu/module_tavern.png", "unlock_hull": 1, "start_level": 1, "opens": "tavern",
       "effect": { "kind": "free_hires", "values": [1, 1, 2, 2, 2, 3, 3] }
     },

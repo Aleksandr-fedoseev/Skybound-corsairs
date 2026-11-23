@@ -62,12 +62,13 @@ pub struct Bundle {
     pub doubloons: u32,
     pub charts: u32,
     pub storm_cores: u32,
+    pub supplies: u32,
     /// Копия героя на выбор.
     pub copies: u32,
 }
 
 impl Bundle {
-    fn fields(&self) -> [(u32, &'static str); 9] {
+    fn fields(&self) -> [(u32, &'static str); 10] {
         [
             (self.silver, "серебра"),
             (self.planks, "досок"),
@@ -77,6 +78,7 @@ impl Bundle {
             (self.doubloons, "дублонов"),
             (self.charts, "лоции"),
             (self.storm_cores, "буревых ядер"),
+            (self.supplies, "припасов"),
             (self.copies, "копия героя"),
         ]
     }
@@ -99,6 +101,7 @@ impl Bundle {
             && p.doubloons >= self.doubloons
             && p.charts >= self.charts
             && p.storm_cores >= self.storm_cores
+            && p.supplies >= self.supplies
     }
 
     fn take(&self, p: &mut Profile) {
@@ -110,6 +113,7 @@ impl Bundle {
         p.doubloons -= self.doubloons;
         p.charts -= self.charts;
         p.storm_cores -= self.storm_cores;
+        p.supplies -= self.supplies;
     }
 
     fn put(&self, p: &mut Profile) {
@@ -121,6 +125,7 @@ impl Bundle {
         p.doubloons += self.doubloons;
         p.charts += self.charts;
         p.storm_cores += self.storm_cores;
+        p.supplies += self.supplies;
     }
 }
 
@@ -165,6 +170,7 @@ pub struct Prize {
     pub charts: u32,
     pub doubloons: u32,
     pub storm_cores: u32,
+    pub supplies: u32,
 }
 
 impl Prize {
@@ -174,6 +180,7 @@ impl Prize {
             (self.charts, "лоции"),
             (self.doubloons, "дублонов"),
             (self.storm_cores, "буревых ядер"),
+            (self.supplies, "припасов"),
         ] {
             if n > 0 {
                 parts.push(format!("+{n} {name}"));
@@ -335,6 +342,7 @@ impl StormEvent {
             profile.charts += m.reward.charts;
             profile.doubloons += m.reward.doubloons;
             profile.storm_cores += m.reward.storm_cores;
+            profile.supplies += m.reward.supplies;
             got.push(m.reward.line());
             self.reached += 1;
         }

@@ -7,7 +7,8 @@
     "ether": 0,
     "doubloons": 300,
     "journals": 100,
-    "ether_waiting": 24
+    "ether_waiting": 24,
+    "supplies": 60
   },
   "victory_reward": {
     "silver": 120,

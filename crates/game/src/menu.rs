@@ -67,6 +67,7 @@ pub struct Start {
     pub journals: u32,
     /// Эфир, который Ветроловы накопили, пока игрока не было.
     pub ether_waiting: f32,
+    pub supplies: u32,
 }
 
 #[derive(Deserialize, Clone)]
@@ -106,6 +107,20 @@ pub struct Profile {
     pub storm_cores: u32,
     /// Эфир, который накопили Ветроловы и который ещё не собран.
     pub ether_pending: f32,
+    /// Припасы: победа на этапе главы их тратит (`supplies.rs`).
+    #[serde(default = "start_supplies")]
+    pub supplies: u32,
+    /// Доля следующей единицы восстановления.
+    #[serde(default)]
+    pub supplies_regen: f32,
+    /// Сваренное Камбузом, ещё не собранное.
+    #[serde(default)]
+    pub supplies_pending: f32,
+}
+
+/// Старые сохранения без припасов получают стартовый запас.
+fn start_supplies() -> u32 {
+    MenuData::bundled().start.supplies
 }
 
 impl Profile {
@@ -122,6 +137,9 @@ impl Profile {
             details: 0,
             storm_cores: 0,
             ether_pending: start.ether_waiting,
+            supplies: start.supplies,
+            supplies_regen: 0.0,
+            supplies_pending: 0.0,
         }
     }
 }
@@ -133,6 +151,12 @@ pub struct Progress {
     /// Просмотренные сцены сюжета.
     #[serde(default)]
     pub seen: Vec<String>,
+    /// День (UTC), к которому относится `wins`.
+    #[serde(default)]
+    pub day: u64,
+    /// Побед за этот день по этапам — для убывающей награды и дневного лимита.
+    #[serde(default)]
+    pub wins: Vec<u32>,
 }
 
 impl Progress {
@@ -586,6 +610,7 @@ fn ship_outside(
         },
     );
     ether_bubble(root, fonts, px(60), px(300));
+    crate::supplies::galley_bubble(root, fonts, px(330), px(300));
 }
 
 /// Пропеллер на корме, поверх руля: крутится всегда.
@@ -1372,6 +1397,7 @@ fn voyage(root: &mut ChildSpawnerCommands, fonts: &Fonts, next: &game_data::Stag
                     22.0,
                     Color::srgb(1.0, 0.93, 0.78),
                 ));
+                info.spawn(crate::supplies::label(fonts, 12.0, PARCHMENT));
             });
         let mut go = panel.spawn((
             Node {
@@ -1638,6 +1664,7 @@ fn count_victory(
     mut deeds: MessageWriter<Deed>,
     abyss: (Res<AbyssData>, ResMut<Abyss>),
     events: (Res<EventData>, ResMut<StormEvent>, ResMut<WeekEvents>),
+    supply: Res<crate::supplies::SupplyData>,
 ) {
     let (abyss_data, mut abyss) = abyss;
     let (event_data, mut storm, mut week_events) = events;
@@ -1749,7 +1776,19 @@ fn count_victory(
             parts.join(" · ")
         }
         (Outcome::Victory, None) => {
+            // Повторные победы за день приносят меньше (supplies.rs); первая — всегда целиком.
+            let today = crate::cabins::today();
+            let wins = progress.wins_today(screen.stage, today);
+            let percent = supply.percent(wins).unwrap_or(0);
+            progress.add_win(screen.stage, today);
+            spoils.profile.supplies = spoils.profile.supplies.saturating_sub(supply.cost);
+            let cut = |n: u32| n * percent / 100;
             let reward = &data.victory_reward;
+            let reward = crate::menu::Reward {
+                silver: cut(reward.silver),
+                planks: cut(reward.planks),
+                journals: cut(reward.journals),
+            };
             spoils.give(reward.silver, reward.planks, reward.journals);
             deeds.write(Deed("win"));
             let first = screen.stage == progress.cleared;
@@ -1769,9 +1808,20 @@ fn count_victory(
             } else {
                 String::new()
             };
+            let replay = if percent < 100 {
+                format!(" · повтор: {percent}%")
+            } else {
+                String::new()
+            };
             format!(
-                "+{} серебра · +{} досок · +{} журналов{doubloons}{opened}",
-                reward.silver, reward.planks, reward.journals
+                "+{} серебра · +{} досок · +{} журналов{doubloons}{replay}\n−{} припасов (осталось {}) · побед сегодня {}/{}{opened}",
+                reward.silver,
+                reward.planks,
+                reward.journals,
+                supply.cost,
+                spoils.profile.supplies,
+                wins + 1,
+                supply.daily_limit()
             )
         }
     };

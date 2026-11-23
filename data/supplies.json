@@ -1,0 +1,7 @@
+{
+  "cap": 60,
+  "regen_minutes": 6,
+  "cost": 6,
+  "replay_percent": [100, 100, 60, 30, 10],
+  "galley_hours": 8
+}

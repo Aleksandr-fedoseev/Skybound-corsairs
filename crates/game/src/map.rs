@@ -94,6 +94,7 @@ enum CardText {
     Title,
     Enemies,
     Level,
+    Supplies,
     Status,
 }
 
@@ -355,7 +356,7 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
             left: px(10),
             bottom: px(92),
             width: px(520),
-            padding: UiRect::axes(px(18), px(14)),
+            padding: UiRect::axes(px(18), px(10)),
             column_gap: px(12),
             align_items: AlignItems::Center,
             ..default()
@@ -378,6 +379,7 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
             ));
             info.spawn((CardText::Enemies, text(fonts, "", false, 13.0, PARCHMENT)));
             info.spawn((CardText::Level, text(fonts, "", true, 13.0, PARCHMENT)));
+            info.spawn((CardText::Supplies, text(fonts, "", false, 13.0, PARCHMENT)));
             info.spawn((CardText::Status, text(fonts, "", false, 12.0, MUTED)));
         });
         let mut go = card.spawn((
@@ -463,6 +465,7 @@ fn refresh_card(
     progress: Res<Progress>,
     menu: Res<MenuData>,
     roster: Res<Roster>,
+    supply: (Res<crate::supplies::SupplyData>, Res<crate::menu::Profile>),
     mut cards: Query<&mut Visibility, With<Card>>,
     mut texts: Query<(&CardText, &mut Text, &mut TextColor)>,
 ) {
@@ -482,6 +485,10 @@ fn refresh_card(
             let value = match kind {
                 CardText::Title => format!("Конвой · {}", tier.name),
                 CardText::Enemies => format!("{} · ур. {level}", enemies_text(&screen, &ids)),
+                CardText::Supplies => {
+                    color.0 = PARCHMENT;
+                    "Абордаж не тратит припасов — нужны суда".to_string()
+                }
                 CardText::Level => {
                     color.0 = if convoys.ready > 0 { READY } else { WEAK };
                     if convoys.ready >= data.max_ready {
@@ -523,6 +530,9 @@ fn refresh_card(
     };
     let def = &screen.data.stages[stage];
     let reward = &menu.victory_reward;
+    let (supply, profile) = supply;
+    let wins = progress.wins_today(stage, crate::cabins::today());
+    let percent = supply.percent(wins);
     // Средний уровень отряда против рекомендуемого: ниже — этап, скорее всего, не пройти.
     let team = roster.team_levels();
     let team_level = team.iter().map(|(_, l)| l).sum::<u32>() / team.len().max(1) as u32;
@@ -544,16 +554,41 @@ fn refresh_card(
                     def.recommended_level
                 )
             }
+            CardText::Supplies => {
+                color.0 = if supply.check(&profile, wins).is_ok() {
+                    READY
+                } else {
+                    WEAK
+                };
+                format!(
+                    "Победа: −{} припасов (есть {}) · побед сегодня {wins}/{}",
+                    supply.cost,
+                    profile.supplies,
+                    supply.daily_limit()
+                )
+            }
             CardText::Status => {
                 let state = if stage < progress.cleared {
                     "Пройден"
                 } else {
                     "Новый"
                 };
-                format!(
-                    "{state} · +{} серебра · +{} досок · +{} журналов",
-                    reward.silver, reward.planks, reward.journals
-                )
+                match percent {
+                    None => format!("{state} · лимит побед на сегодня исчерпан"),
+                    Some(p) => {
+                        let replay = if p < 100 {
+                            format!(" · повтор {p}%")
+                        } else {
+                            String::new()
+                        };
+                        format!(
+                            "{state} · +{} серебра · +{} досок · +{} журналов{replay}",
+                            reward.silver * p / 100,
+                            reward.planks * p / 100,
+                            reward.journals * p / 100
+                        )
+                    }
+                }
             }
         };
         if text.0 != value {

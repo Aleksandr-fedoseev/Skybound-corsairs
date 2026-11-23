@@ -40,6 +40,7 @@ pub struct Reward {
     pub planks: u32,
     pub journals: u32,
     pub charts: u32,
+    pub supplies: u32,
 }
 
 impl Reward {
@@ -51,6 +52,7 @@ impl Reward {
             (self.planks, "досок"),
             (self.journals, "журналов"),
             (self.charts, "лоций"),
+            (self.supplies, "припасов"),
         ] {
             if n > 0 {
                 parts.push(format!("+{n} {name}"));
@@ -378,6 +380,7 @@ fn claim_reward(
     spoils.give(reward.silver, reward.planks, reward.journals);
     spoils.profile.doubloons += reward.doubloons;
     spoils.profile.charts += reward.charts;
+    spoils.profile.supplies += reward.supplies;
     toast.show(&format!("Контракт выполнен: {}", reward.line()));
     sfx.write(Sfx("coin"));
     rebuild.0 = true;

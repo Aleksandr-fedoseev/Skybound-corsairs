@@ -7,7 +7,8 @@
       "need": 3,
       "reward": {
         "doubloons": 30,
-        "charts": 1
+        "charts": 1,
+        "supplies": 12
       }
     },
     {
@@ -48,6 +49,7 @@
     }
   ],
   "all_done": {
-    "doubloons": 50
+    "doubloons": 50,
+    "supplies": 30
   }
 }

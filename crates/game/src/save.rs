@@ -136,6 +136,18 @@ pub fn offline(save: &mut SaveData, data: &ShipData, convoy: &ConvoyData, second
         parts.push(format!("+{journals} журналов"));
     }
 
+    let galley = save.ship.supplies_per_hour(data);
+    let (before, pending) = (save.profile.supplies, save.profile.supplies_pending);
+    crate::supplies::SupplyData::bundled().pass(&mut save.profile, galley, seconds);
+    let rested = save.profile.supplies - before;
+    if rested > 0 {
+        parts.push(format!("+{rested} припасов"));
+    }
+    let cooked = (save.profile.supplies_pending - pending).floor() as u32;
+    if cooked > 0 {
+        parts.push(format!("Камбуз сварил {cooked} припасов"));
+    }
+
     let arrived = save.convoys.pass(convoy, seconds);
     if arrived > 0 {
         parts.push(format!("конвоев на карте: +{arrived}"));
@@ -245,7 +257,7 @@ mod tests {
             profile: Profile::new(&menu.start),
             progress: Progress {
                 cleared: 2,
-                seen: Vec::new(),
+                ..default()
             },
             roster: Roster::new(&CrewData::bundled()),
             ship: Ship::new(&ship),

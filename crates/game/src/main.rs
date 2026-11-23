@@ -24,6 +24,7 @@ mod softbody;
 mod spells;
 mod story;
 mod style;
+mod supplies;
 mod tavern;
 mod view;
 
@@ -98,6 +99,7 @@ fn main() {
         gear::plugin,
         events::plugin,
     ))
+    .add_plugins(supplies::plugin)
     .add_plugins(style::plugin)
     .add_message::<Shown>()
     .insert_resource(crew)

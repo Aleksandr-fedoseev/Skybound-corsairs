@@ -27,7 +27,8 @@
         "damage": 1500,
         "reward": {
           "charts": 1,
-          "doubloons": 20
+          "doubloons": 20,
+          "supplies": 30
         }
       },
       {
@@ -41,7 +42,8 @@
         "damage": 7000,
         "reward": {
           "storm_cores": 2,
-          "doubloons": 50
+          "doubloons": 50,
+          "supplies": 30
         }
       },
       {
@@ -64,6 +66,17 @@
     "name": "Ярмарка островов",
     "about": "Торговцы со всех островов: меняйте лишнее на нужное. Лимиты — на неделю.",
     "offers": [
+      {
+        "id": "supplies",
+        "text": "Припасы за серебро",
+        "give": {
+          "silver": 200
+        },
+        "get": {
+          "supplies": 20
+        },
+        "limit": 5
+      },
       {
         "id": "planks",
         "text": "Доски за серебро",
@@ -142,7 +155,8 @@
           ]
         ],
         "reward": {
-          "doubloons": 20
+          "doubloons": 20,
+          "supplies": 12
         }
       },
       {
@@ -185,7 +199,8 @@
           ]
         ],
         "reward": {
-          "doubloons": 30
+          "doubloons": 30,
+          "supplies": 12
         }
       },
       {
@@ -254,7 +269,8 @@
           ]
         ],
         "reward": {
-          "details": 20
+          "details": 20,
+          "supplies": 12
         }
       },
       {
@@ -296,7 +312,8 @@
           ]
         ],
         "reward": {
-          "storm_cores": 1
+          "storm_cores": 1,
+          "supplies": 12
         }
       },
       {

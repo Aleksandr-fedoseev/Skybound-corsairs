@@ -331,11 +331,33 @@ fn spawn_hud(
                         };
                         row.spawn(button(Look::Dark))
                             .with_child(crate::style::heading(fonts, "Ещё раз", 21.0, BRIGHT))
-                            .observe(|_: On<PointerClick>, mut screen: ResMut<BattleScreen>| {
-                                if screen.shown_outcome.is_some() {
+                            .observe(
+                                |_: On<PointerClick>,
+                                 mut screen: ResMut<BattleScreen>,
+                                 gate: (
+                                    Res<crate::supplies::SupplyData>,
+                                    Res<crate::menu::Profile>,
+                                    Res<crate::menu::Progress>,
+                                ),
+                                 mut notes: Query<&mut Text, With<ResultNote>>| {
+                                    if screen.shown_outcome.is_none() {
+                                        return;
+                                    }
+                                    // Этап главы: повтор — за припасы и в пределах дневного лимита.
+                                    if screen.custom.is_none() {
+                                        let (supply, profile, progress) = gate;
+                                        let today = crate::cabins::today();
+                                        let wins = progress.wins_today(screen.stage, today);
+                                        if let Err(why) = supply.check(&profile, wins) {
+                                            for mut text in &mut notes {
+                                                text.0 = why.clone();
+                                            }
+                                            return;
+                                        }
+                                    }
                                     screen.restart_with_new_seed();
-                                }
-                            });
+                                },
+                            );
                         row.spawn(button(Look::Go))
                             .with_child(crate::style::heading(
                                 fonts,

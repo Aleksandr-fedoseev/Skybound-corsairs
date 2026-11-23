@@ -10,7 +10,8 @@ use crate::Screen;
 use crate::audio::Sfx;
 use crate::battle_screen::BattleScreen;
 use crate::crew::Roster;
-use crate::menu::{MUTED, Progress, Voyage, pressable, text};
+use crate::menu::{MUTED, Profile, Progress, Toast, Voyage, pressable, text};
+use crate::supplies::SupplyData;
 use crate::style::{Look, Skin, heading};
 use crate::view::Fonts;
 
@@ -95,12 +96,14 @@ pub fn plugin(app: &mut App) {
         );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn start_voyage(
     mut requests: MessageReader<VoyageRequest>,
     voyage: Res<Voyage>,
     progress: Res<Progress>,
     screen: Res<BattleScreen>,
     story: Res<Story>,
+    supplies: (Res<SupplyData>, Res<Profile>, ResMut<Toast>),
     mut active: ResMut<Active>,
     mut next: ResMut<NextState<Screen>>,
 ) {
@@ -113,6 +116,12 @@ fn start_voyage(
     }
     let stages = &screen.data.stages;
     let stage = voyage.stage.unwrap_or(progress.next_stage(stages.len()));
+    let (supply, profile, mut toast) = supplies;
+    let wins = progress.wins_today(stage, crate::cabins::today());
+    if let Err(why) = supply.check(&profile, wins) {
+        toast.show_long(&why);
+        return;
+    }
     let id = &stages[stage].id;
     match story.find(&progress.seen, |s| s.before.as_ref() == Some(id)) {
         Some(scene) => {

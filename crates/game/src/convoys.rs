@@ -151,7 +151,7 @@ mod tests {
         let early = data.tier(&Progress::default()).planks;
         let late = data.tier(&Progress {
             cleared: 4,
-            seen: Vec::new(),
+            ..Default::default()
         });
         assert!(late.planks > early);
     }
