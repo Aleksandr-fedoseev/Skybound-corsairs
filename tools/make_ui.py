@@ -38,7 +38,8 @@ ELEMENT = {
     "steel": (158, 173, 191),
     "mist": (204, 224, 250),
 }
-RARITY = {"R": (180, 189, 204), "SR": (178, 140, 255), "SSR": (242, 193, 78), "ENEMY": (205, 70, 58)}
+# Кольцо медальона: у героев одно на всех (редкостей нет, решение №70), у врагов — красное.
+RARITY = {"HERO": (226, 178, 84), "ENEMY": (205, 70, 58)}
 
 
 def noise(w, h, blur=1.5, scale=1.0):
@@ -507,7 +508,7 @@ def main():
     heroes = json.load(open("data/heroes.json"))
     anim = json.load(open("data/animated.json"))
     for h in heroes:
-        save(f"hero_{h['id']}.png", medallion(h["id"], h["element"], h["rarity"], h["name"], anim))
+        save(f"hero_{h['id']}.png", medallion(h["id"], h["element"], "HERO", h["name"], anim))
         save(f"full_{h['id']}.png", figure(h["id"], anim))
     # Враги в очереди ходов — медальоны в красном кольце.
     for e in json.load(open("data/enemies.json")):

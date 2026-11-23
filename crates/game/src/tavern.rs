@@ -1,26 +1,24 @@
 //! Таверна: найм героев за дублоны и бесплатный найм раз в день.
 //!
-//! Шансы и гарант показаны на экране. Новый герой приходит в команду, повтор — копией
-//! для будущих звёзд. Пока всё считается на клиенте; в релизе крутки считает сервер.
+//! Найм даёт копии героев команды (все поровну) — копии нужны для звёзд. Новые герои приходят
+//! только за главы (решения №69, №70). Пока всё считается на клиенте; в релизе крутки считает сервер.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use battle_core::Rng;
 use bevy::prelude::*;
-use game_data::{GameData, Rarity};
+use game_data::GameData;
 use serde::{Deserialize, Serialize};
 
 use crate::Screen;
 use crate::battle_screen::{BattleScreen, random_seed};
-use crate::crew::Roster;
+use crate::crew::{CrewData, Roster};
 use crate::menu::{GOLD, PARCHMENT, Profile, Toast, bottom_nav, pressable, spawn_toast, text};
 use crate::ship::{Ship, ShipData};
 use crate::style::{self, Look, Skin};
 use crate::view::Fonts;
 
 const BRIGHT: Color = Color::srgb(1.0, 0.93, 0.78);
-const SR_COLOR: Color = Color::srgb(0.70, 0.55, 1.0);
-const R_COLOR: Color = Color::srgb(0.70, 0.74, 0.80);
 const SECONDS_PER_DAY: u64 = 86_400;
 
 /// Настройки найма: `data/tavern.json`.
@@ -28,20 +26,6 @@ const SECONDS_PER_DAY: u64 = 86_400;
 pub struct TavernData {
     pub single_price: u32,
     pub ten_price: u32,
-    pub rates: Rates,
-    /// SSR гарантирован не позже этого найма с прошлого SSR.
-    pub ssr_pity: u32,
-    /// В каждых `sr_every` наймах подряд хотя бы один SR или выше.
-    pub sr_every: u32,
-    /// Кто может выпасть. Внутри одной редкости все герои выпадают поровну.
-    pub pool: Vec<String>,
-}
-
-/// Шансы на редкость; R — всё остальное.
-#[derive(Deserialize)]
-pub struct Rates {
-    pub ssr: f32,
-    pub sr: f32,
 }
 
 impl TavernData {
@@ -51,54 +35,16 @@ impl TavernData {
     }
 }
 
-/// Счётчики гаранта: сколько наймов прошло с последнего SSR и с последнего SR-или-выше.
-#[derive(Resource, Default, Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct Pity {
-    pub since_ssr: u32,
-    pub since_sr: u32,
-}
-
-/// Один найм. `roll` решает редкость, `pick` — героя внутри редкости (оба в [0, 1)).
-pub fn pull(
-    cfg: &TavernData,
-    pity: &mut Pity,
-    roll: f32,
-    pick: f32,
-    pool: &[(String, Rarity)],
-) -> (String, Rarity) {
-    pity.since_ssr += 1;
-    pity.since_sr += 1;
-    let mut rarity = if roll < cfg.rates.ssr {
-        Rarity::Ssr
-    } else if roll < cfg.rates.ssr + cfg.rates.sr {
-        Rarity::Sr
-    } else {
-        Rarity::R
-    };
-    if pity.since_ssr >= cfg.ssr_pity {
-        rarity = Rarity::Ssr;
-    } else if rarity == Rarity::R && pity.since_sr >= cfg.sr_every {
-        rarity = Rarity::Sr;
-    }
-    match rarity {
-        Rarity::Ssr => *pity = Pity::default(),
-        Rarity::Sr => pity.since_sr = 0,
-        Rarity::R => {}
-    }
-    let same: Vec<&(String, Rarity)> = pool.iter().filter(|(_, r)| *r == rarity).collect();
-    let candidates: Vec<&(String, Rarity)> = if same.is_empty() {
-        pool.iter().collect()
-    } else {
-        same
-    };
-    let index = ((pick * candidates.len() as f32) as usize).min(candidates.len() - 1);
-    candidates[index].clone()
+/// Один найм: копия одного из героев команды, все поровну (`pick` в [0, 1)).
+/// Новых героев Таверна не даёт — они приходят за главы (решения №69, №70).
+pub fn pull(pick: f32, owned: &[String]) -> String {
+    let index = ((pick * owned.len() as f32) as usize).min(owned.len() - 1);
+    owned[index].clone()
 }
 
 /// Состояние Таверны между заходами (гарант и бесплатные наймы сохраняются в файл).
 #[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct TavernState {
-    pity: Pity,
     #[serde(skip, default = "fresh_rng")]
     rng: Rng,
     /// День (по UTC) и сколько бесплатных наймов в этот день уже взято.
@@ -112,7 +58,6 @@ fn fresh_rng() -> Rng {
 impl Default for TavernState {
     fn default() -> Self {
         Self {
-            pity: Pity::default(),
             rng: Rng::new(random_seed()),
             free_used: (0, 0),
         }
@@ -168,29 +113,6 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, rebuild_tavern.run_if(in_state(Screen::Tavern)));
 }
 
-fn rarity_label(rarity: Rarity) -> &'static str {
-    match rarity {
-        Rarity::R => "R",
-        Rarity::Sr => "SR",
-        Rarity::Ssr => "SSR",
-    }
-}
-
-fn rarity_color(rarity: Rarity) -> Color {
-    match rarity {
-        Rarity::R => R_COLOR,
-        Rarity::Sr => SR_COLOR,
-        Rarity::Ssr => GOLD,
-    }
-}
-
-fn pool_of(cfg: &TavernData, data: &GameData) -> Vec<(String, Rarity)> {
-    cfg.pool
-        .iter()
-        .filter_map(|id| data.hero(id).map(|h| (h.id.clone(), h.rarity)))
-        .collect()
-}
-
 #[allow(clippy::too_many_arguments)]
 fn spawn_tavern(
     mut commands: Commands,
@@ -203,6 +125,7 @@ fn spawn_tavern(
     profile: Res<Profile>,
     roster: Res<Roster>,
     screen: Res<BattleScreen>,
+    crew: Res<CrewData>,
 ) {
     build(
         &mut commands,
@@ -213,6 +136,7 @@ fn spawn_tavern(
         ship.free_hires(&ship_data),
         &profile,
         &roster,
+        &crew,
         &screen.data,
     );
 }
@@ -231,6 +155,7 @@ fn rebuild_tavern(
     profile: Res<Profile>,
     roster: Res<Roster>,
     screen: Res<BattleScreen>,
+    crew: Res<CrewData>,
 ) {
     if !dirty.0 {
         return;
@@ -248,6 +173,7 @@ fn rebuild_tavern(
         ship.free_hires(&ship_data),
         &profile,
         &roster,
+        &crew,
         &screen.data,
     );
 }
@@ -262,6 +188,7 @@ fn build(
     free_per_day: u32,
     profile: &Profile,
     roster: &Roster,
+    crew: &CrewData,
     data: &GameData,
 ) {
     commands
@@ -282,8 +209,8 @@ fn build(
                 &[("doubloons", profile.doubloons), ("silver", profile.silver)],
             );
             style::title(root, fonts, "Таверна · найм героев", 56.0);
-            poster(root, assets, fonts, cfg, roster, data);
-            pity_panel(root, fonts, cfg, state);
+            poster(root, assets, fonts, roster, crew, data);
+            rules_strip(root, fonts);
             hire_buttons(
                 root,
                 assets,
@@ -292,31 +219,41 @@ fn build(
                 state.free_left(free_per_day),
                 profile,
             );
-            pool_row(root, assets, fonts, cfg, roster, data);
+            pool_row(root, assets, fonts, roster, crew);
             bottom_nav(root, assets, fonts, Screen::Tavern);
             spawn_toast(root, fonts);
         });
 }
 
-/// Баннер-витрина: SSR-герой из таверны, которого ещё нет в команде, во весь рост.
+/// Баннер: герой, которому меньше всего не хватает копий до следующей звезды.
 fn poster(
     root: &mut ChildSpawnerCommands,
     assets: &AssetServer,
     fonts: &Fonts,
-    cfg: &TavernData,
     roster: &Roster,
+    crew: &CrewData,
     data: &GameData,
 ) {
-    let ssr: Vec<_> = cfg
-        .pool
+    let need = |id: &str| {
+        let stars = roster.stars(id);
+        if stars >= crew.max_stars() {
+            return u32::MAX;
+        }
+        crew.rule(stars + 1)
+            .copies
+            .saturating_sub(roster.copies(id))
+    };
+    let owned = roster.owned();
+    let Some(hero) = owned
         .iter()
-        .filter_map(|id| data.hero(id))
-        .filter(|h| h.rarity == Rarity::Ssr)
-        .collect();
-    let Some(hero) = ssr.iter().find(|h| !roster.owns(&h.id)).or(ssr.first()) else {
+        .min_by_key(|id| need(id))
+        .and_then(|id| data.hero(id))
+    else {
         return;
     };
     let glow = crate::view::element_color(hero.element);
+    let stars = roster.stars(&hero.id);
+    let left = need(&hero.id);
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
@@ -353,7 +290,6 @@ fn poster(
             ImageNode::new(assets.load(format!("ui/full_{}.png", hero.id))),
             Pickable::IGNORE,
         ));
-        // Слева — имя, редкость и шанс.
         banner
             .spawn(Node {
                 position_type: PositionType::Absolute,
@@ -375,7 +311,7 @@ fn poster(
                 ))
                 .with_child(style::heading(
                     fonts,
-                    "Особый найм · SSR",
+                    "Ближе всех к звезде",
                     14.0,
                     Color::WHITE,
                 ));
@@ -383,10 +319,15 @@ fn poster(
                 col.spawn(style::heading(fonts, hero.title.clone(), 18.0, PARCHMENT));
                 col.spawn(text(
                     fonts,
-                    if roster.owns(&hero.id) {
-                        "уже в команде — копия даст звезду".to_string()
+                    if left == u32::MAX {
+                        "все звёзды уже собраны".to_string()
+                    } else if left == 0 {
+                        format!(
+                            "копий хватает на {}-ю звезду — слияние в Экипаже",
+                            stars + 1
+                        )
                     } else {
-                        format!("шанс SSR {}%", (cfg.rates.ssr * 1000.0).round() / 10.0)
+                        format!("до {}-й звезды не хватает копий: {left}", stars + 1)
                     },
                     false,
                     13.0,
@@ -396,14 +337,13 @@ fn poster(
     });
 }
 
-/// Кто сейчас в таверне: все, кто может выпасть.
+/// Герои команды: звёзды и копии к следующей звезде — их и даёт Таверна.
 fn pool_row(
     root: &mut ChildSpawnerCommands,
     assets: &AssetServer,
     fonts: &Fonts,
-    cfg: &TavernData,
     roster: &Roster,
-    data: &GameData,
+    crew: &CrewData,
 ) {
     root.spawn((
         Node {
@@ -413,62 +353,46 @@ fn pool_row(
             right: px(6),
             height: px(84),
             padding: UiRect::axes(px(14), px(6)),
-            justify_content: JustifyContent::SpaceBetween,
+            justify_content: JustifyContent::SpaceEvenly,
             align_items: AlignItems::Center,
             ..default()
         },
         Skin(Look::Tile),
     ))
     .with_children(|rail| {
-        for id in &cfg.pool {
-            let Some(hero) = data.hero(id) else {
-                continue;
+        for id in roster.owned() {
+            let stars = roster.stars(&id);
+            let line = if stars >= crew.max_stars() {
+                format!("зв. {stars}")
+            } else {
+                format!(
+                    "зв. {stars} · {}/{}",
+                    roster.copies(&id),
+                    crew.rule(stars + 1).copies
+                )
             };
-            let owned = roster.owns(id);
+            let ready = roster.star_copies_ready(&id, crew);
             rail.spawn(Node {
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 ..default()
             })
             .with_children(|cell| {
-                cell.spawn(style::medallion(assets, &hero.id, 50.0, false));
+                cell.spawn(style::medallion(assets, &id, 50.0, false));
                 cell.spawn(text(
                     fonts,
-                    if owned {
-                        rarity_label(hero.rarity).to_string()
-                    } else {
-                        "новый!".to_string()
-                    },
+                    line,
                     true,
                     11.0,
-                    if owned {
-                        rarity_color(hero.rarity)
-                    } else {
-                        GOLD
-                    },
+                    if ready { GOLD } else { PARCHMENT },
                 ));
             });
         }
     });
 }
 
-/// Гарант одной строкой: полоса до SSR и шансы по кнопке.
-fn pity_panel(
-    root: &mut ChildSpawnerCommands,
-    fonts: &Fonts,
-    cfg: &TavernData,
-    state: &TavernState,
-) {
-    let done = state.pity.since_ssr.min(cfg.ssr_pity);
-    let pct = |p: f32| format!("{}%", (p * 1000.0).round() / 10.0);
-    let odds = format!(
-        "Шансы: SSR {} · SR {} · R {}. Гарант: SSR не позже {}-го найма, в каждых {} — SR или выше. Внутри редкости герои выпадают поровну; повтор — копия для звёзд.",
-        pct(cfg.rates.ssr),
-        pct(cfg.rates.sr),
-        pct(1.0 - cfg.rates.ssr - cfg.rates.sr),
-        cfg.ssr_pity,
-        cfg.sr_every
-    );
+/// Правила найма одной строкой.
+fn rules_strip(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
@@ -477,55 +401,19 @@ fn pity_panel(
             right: px(10),
             height: px(52),
             padding: UiRect::axes(px(16), px(6)),
-            column_gap: px(12),
+            justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             ..default()
         },
         Skin(Look::Tile),
     ))
-    .with_children(|row| {
-        row.spawn(style::heading(fonts, "Гарант SSR", 15.0, BRIGHT));
-        row.spawn((
-            Node {
-                flex_grow: 1.0,
-                height: px(12),
-                border: UiRect::all(px(2)),
-                border_radius: BorderRadius::all(px(6)),
-                ..default()
-            },
-            BackgroundColor(Color::srgb(0.18, 0.12, 0.07)),
-            BorderColor::all(Color::srgb(0.72, 0.55, 0.26)),
-        ))
-        .with_child((
-            Node {
-                width: percent(100.0 * done as f32 / cfg.ssr_pity.max(1) as f32),
-                height: percent(100),
-                border_radius: BorderRadius::all(px(4)),
-                ..default()
-            },
-            BackgroundColor(Color::srgb(0.95, 0.66, 0.22)),
-        ));
-        row.spawn(style::heading(
-            fonts,
-            format!("{done}/{}", cfg.ssr_pity),
-            15.0,
-            BRIGHT,
-        ));
-        let mut rates = row.spawn((
-            Node {
-                min_height: px(34),
-                padding: UiRect::axes(px(12), px(4)),
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            Skin(Look::Dark),
-        ));
-        rates.with_child(style::heading(fonts, "Шансы", 13.0, BRIGHT));
-        pressable(&mut rates);
-        rates.observe(move |_: On<PointerClick>, mut toast: ResMut<Toast>| {
-            toast.show_long(&odds);
-        });
-    });
+    .with_child(text(
+        fonts,
+        "Найм даёт копии героев команды — все поровну. Копии нужны для звёзд. Новые герои приходят за главы.",
+        false,
+        13.0,
+        PARCHMENT,
+    ));
 }
 
 fn hire_buttons(
@@ -648,7 +536,7 @@ fn hire_button(
 fn hire_heroes(
     In(hire): In<Hire>,
     cfg: Res<TavernData>,
-    screen: Res<BattleScreen>,
+    crew: Res<CrewData>,
     mut state: ResMut<TavernState>,
     ship: Res<Ship>,
     ship_data: Res<ShipData>,
@@ -682,14 +570,16 @@ fn hire_heroes(
             count
         }
     };
-    let pool = pool_of(&cfg, &screen.data);
+    let owned = roster.owned();
     let state = &mut *state;
     let list = (0..count)
         .map(|_| {
-            let (roll, pick) = (state.rng.next_f32(), state.rng.next_f32());
-            let (id, rarity) = pull(&cfg, &mut state.pity, roll, pick, &pool);
-            let new = roster.recruit(&id);
-            crate::hire_reveal::Pulled { id, rarity, new }
+            let id = pull(state.rng.next_f32(), &owned);
+            // Порог звезды пересекла именно эта копия — подсветить её в показе.
+            let before = roster.star_copies_ready(&id, &crew);
+            roster.recruit(&id);
+            let star = !before && roster.star_copies_ready(&id, &crew);
+            crate::hire_reveal::Pulled { id, star }
         })
         .collect();
     reveal.start(list);
@@ -700,46 +590,16 @@ fn hire_heroes(
 mod tests {
     use super::*;
 
-    fn pool() -> Vec<(String, Rarity)> {
-        vec![
-            ("a".into(), Rarity::Ssr),
-            ("b".into(), Rarity::Sr),
-            ("c".into(), Rarity::R),
-        ]
-    }
-
     #[test]
-    fn ssr_guaranteed_by_pity() {
-        let cfg = TavernData::bundled();
-        let mut pity = Pity::default();
-        // Всегда самый неудачный бросок: SSR должен прийти ровно на гаранте.
-        let rarities: Vec<Rarity> = (0..cfg.ssr_pity)
-            .map(|_| pull(&cfg, &mut pity, 0.999, 0.0, &pool()).1)
-            .collect();
-        assert_eq!(rarities.last(), Some(&Rarity::Ssr));
-        assert_eq!(rarities.iter().filter(|r| **r == Rarity::Ssr).count(), 1);
-    }
-
-    #[test]
-    fn sr_in_every_window() {
-        let cfg = TavernData::bundled();
-        let mut pity = Pity::default();
-        let rarities: Vec<Rarity> = (0..100)
-            .map(|_| pull(&cfg, &mut pity, 0.999, 0.0, &pool()).1)
-            .collect();
-        for window in rarities.windows(cfg.sr_every as usize) {
-            assert!(window.iter().any(|r| *r != Rarity::R), "{window:?}");
+    fn pull_gives_only_owned_heroes_evenly() {
+        let owned: Vec<String> = ["a", "b", "c", "d"].iter().map(|s| s.to_string()).collect();
+        let mut counts = std::collections::HashMap::new();
+        for i in 0..400 {
+            let id = pull(i as f32 / 400.0, &owned);
+            assert!(owned.contains(&id));
+            *counts.entry(id).or_insert(0) += 1;
         }
-    }
-
-    #[test]
-    fn rates_pick_rarity() {
-        let cfg = TavernData::bundled();
-        let mut pity = Pity::default();
-        assert_eq!(pull(&cfg, &mut pity, 0.0, 0.0, &pool()).1, Rarity::Ssr);
-        assert_eq!(
-            pull(&cfg, &mut pity, cfg.rates.ssr + 0.001, 0.0, &pool()).1,
-            Rarity::Sr
-        );
+        assert!(counts.values().all(|&n| n == 100), "{counts:?}");
+        assert_eq!(pull(0.9999, &owned), "d");
     }
 }

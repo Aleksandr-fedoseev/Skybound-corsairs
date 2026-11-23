@@ -1,12 +1,12 @@
 //! Момент найма в Таверне: карты рубашкой вверх → переворот по одной → витрина героя → итог.
 //!
-//! Рубашка заранее подсказывает редкость свечением (SR — фиолетовое, SSR — золотое и пульсирует),
-//! перед SSR карта дрожит, а при открытии экран вспыхивает. Витрина — герой во весь рост в позе
-//! победы на лучах цвета редкости. В одиночном найме витрина есть всегда, в ×10 — только для
-//! новых героев и SSR. Тап по экрану — дальше, «Пропустить» — сразу к итогу.
+//! Таверна даёт копии героев команды. Рубашка светится золотом, если эта копия добирает героя до
+//! звезды: перед ней карта дрожит, при открытии экран вспыхивает. Витрина — герой во весь рост в
+//! позе победы на лучах цвета стихии (золотых, если звезда готова). В одиночном найме витрина есть
+//! всегда, в ×10 — только для копий, которые добрали звезду. Тап по экрану — дальше, «Пропустить» — сразу к итогу.
 
 use bevy::prelude::*;
-use game_data::{GameData, Rarity};
+use game_data::GameData;
 
 use crate::Screen;
 use crate::audio::Sfx;
@@ -16,8 +16,7 @@ use crate::menu::{GOLD, PARCHMENT, pressable, text};
 use crate::style::{self, INK, INK_SOFT, Look, Skin};
 use crate::view::Fonts;
 
-const SR_COLOR: Color = Color::srgb(0.70, 0.55, 1.0);
-const R_COLOR: Color = Color::srgb(0.70, 0.74, 0.80);
+const BRASS_EDGE: Color = Color::srgb(0.79, 0.59, 0.25);
 const MUTED: Color = Color::srgb(0.75, 0.70, 0.62);
 /// Первая карта открывается через столько секунд, следующие — с шагом.
 const FIRST_FLIP: f32 = 0.7;
@@ -40,8 +39,8 @@ const RAYS_TURN: f32 = 0.03;
 #[derive(Clone)]
 pub struct Pulled {
     pub id: String,
-    pub rarity: Rarity,
-    pub new: bool,
+    /// Эта копия добрала героя до следующей звезды.
+    pub star: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -85,21 +84,17 @@ impl HireReveal {
         let mut flips = Vec::with_capacity(list.len());
         let mut t = FIRST_FLIP;
         for p in &list {
-            if p.rarity == Rarity::Ssr {
+            if p.star {
                 t += SSR_SUSPENSE;
             }
             flips.push(t);
-            t += if p.rarity == Rarity::R {
-                FLIP_STEP
-            } else {
-                RARE_AFTER
-            };
+            t += if !p.star { FLIP_STEP } else { RARE_AFTER };
         }
         let single = list.len() == 1;
         let shows = list
             .iter()
             .enumerate()
-            .filter(|(_, p)| single || p.new || p.rarity == Rarity::Ssr)
+            .filter(|(_, p)| single || p.star)
             .map(|(i, _)| i)
             .collect();
         *self = Self {
@@ -175,22 +170,6 @@ pub fn plugin(app: &mut App) {
             .chain()
             .run_if(in_state(Screen::Tavern)),
     );
-}
-
-pub fn rarity_color(rarity: Rarity) -> Color {
-    match rarity {
-        Rarity::R => R_COLOR,
-        Rarity::Sr => SR_COLOR,
-        Rarity::Ssr => GOLD,
-    }
-}
-
-fn rarity_label(rarity: Rarity) -> &'static str {
-    match rarity {
-        Rarity::R => "R",
-        Rarity::Sr => "SR",
-        Rarity::Ssr => "SSR",
-    }
 }
 
 fn drive(time: Res<Time>, mut reveal: ResMut<HireReveal>) {
@@ -351,9 +330,11 @@ fn cards(root: &mut ChildSpawnerCommands, fonts: &Fonts, list: &[Pulled]) {
     })
     .with_children(|grid| {
         for (i, p) in list.iter().enumerate() {
-            let glow = match p.rarity {
-                Rarity::R => Color::NONE,
-                r => rarity_color(r).with_alpha(0.8),
+            // Золотое свечение рубашки — эта копия добирает героя до звезды.
+            let glow = if p.star {
+                GOLD.with_alpha(0.8)
+            } else {
+                Color::NONE
             };
             grid.spawn((
                 HireCard(i),
@@ -417,7 +398,7 @@ fn cards(root: &mut ChildSpawnerCommands, fonts: &Fonts, list: &[Pulled]) {
                         ..default()
                     },
                     Skin(Look::Parchment),
-                    Outline::new(px(3), px(0), rarity_color(p.rarity)),
+                    Outline::new(px(3), px(0), if p.star { GOLD } else { BRASS_EDGE }),
                     Visibility::Hidden,
                 ));
             });
@@ -453,21 +434,14 @@ fn card_face(
     card.spawn(text(fonts, hero.name.clone(), true, 14.0 * k, INK));
     card.spawn(text(
         fonts,
-        rarity_label(p.rarity),
-        true,
-        13.0 * k,
-        match p.rarity {
-            Rarity::Ssr => Color::srgb(0.75, 0.50, 0.05),
-            Rarity::Sr => Color::srgb(0.45, 0.30, 0.75),
-            Rarity::R => INK_SOFT,
+        if p.star {
+            "на звезду!"
+        } else {
+            "копия"
         },
-    ));
-    card.spawn(text(
-        fonts,
-        if p.new { "новый!" } else { "копия" },
-        p.new,
+        p.star,
         12.0 * k,
-        if p.new {
+        if p.star {
             Color::srgb(0.70, 0.36, 0.05)
         } else {
             INK_SOFT
@@ -487,12 +461,12 @@ fn showcase(
     let Some(hero) = data.hero(&p.id) else {
         return;
     };
-    let color = rarity_color(p.rarity);
-    let rays = if p.rarity == Rarity::Ssr {
-        760.0
+    let color = if p.star {
+        GOLD
     } else {
-        620.0
+        crate::view::element_color(hero.element)
     };
+    let rays = if p.star { 760.0 } else { 620.0 };
     root.spawn((
         Rays,
         Node {
@@ -567,18 +541,6 @@ fn showcase(
     ))
     .with_children(|info| {
         info.spawn((
-            Node {
-                width: px(64),
-                height: px(64),
-                ..default()
-            },
-            ImageNode::new(assets.load(match p.rarity {
-                Rarity::R => "ui/badge_r.png",
-                Rarity::Sr => "ui/badge_sr.png",
-                Rarity::Ssr => "ui/badge_ssr.png",
-            })),
-        ));
-        info.spawn((
             Text::new(hero.name.clone()),
             fonts.display(46.0),
             TextColor(color),
@@ -606,7 +568,7 @@ fn showcase(
                 border_radius: BorderRadius::all(px(16)),
                 ..default()
             },
-            BackgroundColor(if p.new {
+            BackgroundColor(if p.star {
                 Color::srgb(0.62, 0.36, 0.08)
             } else {
                 Color::srgba(1.0, 1.0, 1.0, 0.12)
@@ -614,8 +576,8 @@ fn showcase(
         ))
         .with_child(text(
             fonts,
-            if p.new {
-                "Новый герой в команде!"
+            if p.star {
+                "Копий хватает на звезду — слияние в Экипаже!"
             } else {
                 "Копия — пойдёт на звезду героя"
             },
@@ -640,10 +602,10 @@ fn summary(
     data: &GameData,
     list: &[Pulled],
 ) {
-    let any_new = list.iter().any(|p| p.new);
+    let any_star = list.iter().any(|p| p.star);
     root.spawn((
-        Text::new(if any_new {
-            "Новые лица на борту!"
+        Text::new(if any_star {
+            "Звезда ждёт слияния!"
         } else {
             "Итоги найма"
         }),
@@ -672,7 +634,7 @@ fn summary(
                     ..default()
                 },
                 Skin(Look::Parchment),
-                Outline::new(px(3), px(0), rarity_color(p.rarity)),
+                Outline::new(px(3), px(0), if p.star { GOLD } else { BRASS_EDGE }),
             ))
             .with_children(|card| card_face(card, assets, fonts, data, p, false));
         }
@@ -721,16 +683,16 @@ fn animate_cards(
         let k = ((t - at) / FLIP_TIME).clamp(0.0, 1.0);
         // Ожидание: SSR дрожит перед открытием, рубашки редких пульсируют.
         let wait = at - t;
-        transform.translation = if p.rarity == Rarity::Ssr && wait > 0.0 && wait < SSR_SUSPENSE {
+        transform.translation = if p.star && wait > 0.0 && wait < SSR_SUSPENSE {
             Val2::px((t * 70.0).sin() * 4.0 * (1.0 - wait / SSR_SUSPENSE), 0.0)
         } else {
             Val2::ZERO
         };
         if let Some(style) = shadow.0.first_mut()
-            && p.rarity != Rarity::R
+            && p.star
         {
             let pulse = 0.55 + 0.45 * (t * 5.0 + *i as f32).sin().abs();
-            style.color = rarity_color(p.rarity).with_alpha(0.9 * pulse);
+            style.color = GOLD.with_alpha(0.9 * pulse);
         }
         // Переворот: первая половина — рубашка сжимается, вторая — лицо разворачивается.
         transform.scale.x = if k < 0.5 {
@@ -752,12 +714,8 @@ fn animate_cards(
                     });
                 }
             }
-            sfx.write(Sfx(match p.rarity {
-                Rarity::Ssr => "ssr",
-                Rarity::Sr => "skill",
-                Rarity::R => "flip",
-            }));
-            if p.rarity == Rarity::Ssr {
+            sfx.write(Sfx(if p.star { "ssr" } else { "flip" }));
+            if p.star {
                 ssr_opened = true;
             }
         }
@@ -799,18 +757,9 @@ fn animate_show(
     let p = &reveal.list[reveal.shows[n]];
     if *played != Some(n) {
         *played = Some(n);
-        sfx.write(Sfx(match (p.rarity, p.new) {
-            (Rarity::Ssr, _) => "ssr",
-            (_, true) => "levelup",
-            _ => "flip",
-        }));
+        sfx.write(Sfx(if p.star { "ssr" } else { "levelup" }));
         for mut bg in &mut flash {
-            bg.0 = Color::srgba(
-                1.0,
-                1.0,
-                1.0,
-                if p.rarity == Rarity::Ssr { 1.0 } else { 0.6 },
-            );
+            bg.0 = Color::srgba(1.0, 1.0, 1.0, if p.star { 1.0 } else { 0.6 });
         }
     }
     let t = reveal.t;

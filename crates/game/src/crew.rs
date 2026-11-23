@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use battle_core::{Effect, Element, Role, UnitDef};
 use bevy::prelude::*;
-use game_data::{GameData, HeroDef, Rarity};
+use game_data::{GameData, HeroDef};
 use serde::{Deserialize, Serialize};
 
 use crate::Screen;
@@ -35,6 +35,9 @@ const BETTER: Color = Color::srgb(0.55, 0.88, 0.55);
 #[derive(Resource, Deserialize, Clone)]
 pub struct CrewData {
     pub start_team: Vec<String>,
+    /// Кто за какую главу приходит в команду (решение №69); вступает он сценой после босса.
+    #[serde(default)]
+    pub arrivals: HashMap<String, u32>,
     pub team_size: usize,
     /// Опорные точки «уровень → журналов за следующий уровень» (из концепта); между ними
     /// цена растёт плавно, в одно и то же число раз за уровень.
@@ -103,7 +106,7 @@ impl CrewData {
         self.stars.last().map_or(1, |r| r.star)
     }
 
-    fn rule(&self, star: u32) -> StarRule {
+    pub fn rule(&self, star: u32) -> StarRule {
         self.stars
             .iter()
             .find(|r| r.star == star)
@@ -270,6 +273,19 @@ impl Roster {
         }
     }
 
+    /// Герои в команде, по алфавиту id (порядок не зависит от HashMap).
+    pub fn owned(&self) -> Vec<String> {
+        let mut ids: Vec<String> = self.heroes.keys().cloned().collect();
+        ids.sort();
+        ids
+    }
+
+    /// Копий хватает на следующую звезду (корм для 3★+ проверяет `merge_plan`).
+    pub fn star_copies_ready(&self, id: &str, crew: &CrewData) -> bool {
+        let stars = self.stars(id);
+        stars < crew.max_stars() && self.copies(id) >= crew.rule(stars + 1).copies
+    }
+
     pub fn owns(&self, id: &str) -> bool {
         self.heroes.contains_key(id)
     }
@@ -364,18 +380,18 @@ impl Roster {
         }
         let mut spare = own - rule.copies;
         let mut need = rule.fodder;
-        let mut others: Vec<(&String, Rarity, u32)> = data
+        let mut others: Vec<(&String, u32)> = data
             .heroes
             .iter()
             .filter(|h| h.id != id && h.element == hero.element)
             .filter_map(|h| {
                 let copies = self.copies(&h.id);
-                (copies > 0).then_some((&h.id, h.rarity, copies))
+                (copies > 0).then_some((&h.id, copies))
             })
             .collect();
-        others.sort_by_key(|(_, rarity, copies)| (*rarity, u32::MAX - copies));
+        others.sort_by_key(|(id, copies)| (u32::MAX - copies, (*id).clone()));
         let mut fodder = Vec::new();
-        for (other, _, copies) in others {
+        for (other, copies) in others {
             if need == 0 {
                 break;
             }
@@ -431,14 +447,6 @@ pub fn plugin(app: &mut App) {
         .init_resource::<CrewTab>()
         .add_systems(OnEnter(Screen::Crew), spawn_crew)
         .add_systems(Update, rebuild_crew.run_if(in_state(Screen::Crew)));
-}
-
-fn rarity_label(rarity: Rarity) -> &'static str {
-    match rarity {
-        Rarity::R => "R",
-        Rarity::Sr => "SR",
-        Rarity::Ssr => "SSR",
-    }
 }
 
 pub(crate) fn role_label(role: Role) -> &'static str {
@@ -668,7 +676,7 @@ fn build(
                     &format!("Экипаж · отряд {}/{}", roster.team.len(), crew.team_size),
                     56.0,
                 );
-                hero_grid(root, assets, fonts, data, roster);
+                hero_grid(root, assets, fonts, data, roster, crew);
                 bottom_nav(root, assets, fonts, Screen::Crew);
                 spawn_toast(root, fonts);
                 return;
@@ -705,7 +713,7 @@ fn build(
                 Skin(Look::Tile),
             ))
             .with_children(|rail| {
-                for hero in &data.heroes {
+                for hero in data.heroes.iter().filter(|h| roster.owns(&h.id)) {
                     roster_chip(
                         rail,
                         assets,
@@ -727,6 +735,7 @@ fn hero_grid(
     fonts: &Fonts,
     data: &GameData,
     roster: &Roster,
+    crew: &CrewData,
 ) {
     root.spawn(Node {
         position_type: PositionType::Absolute,
@@ -739,10 +748,44 @@ fn hero_grid(
         ..default()
     })
     .with_children(|grid| {
-        for hero in &data.heroes {
+        // В сетке — только команда; кто придёт позже, сказано строкой ниже.
+        for hero in data.heroes.iter().filter(|h| roster.owns(&h.id)) {
             hero_tile(grid, assets, fonts, hero, roster);
         }
     });
+    let mut coming: Vec<(u32, &str)> = data
+        .heroes
+        .iter()
+        .filter(|h| !roster.owns(&h.id))
+        .filter_map(|h| crew.arrivals.get(&h.id).map(|&c| (c, h.name.as_str())))
+        .collect();
+    coming.sort();
+    if !coming.is_empty() {
+        let line = coming
+            .iter()
+            .map(|(c, name)| format!("{name} — за главу {c}"))
+            .collect::<Vec<_>>()
+            .join(" · ");
+        root.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(714),
+                left: px(10),
+                right: px(10),
+                padding: UiRect::axes(px(16), px(8)),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            Skin(Look::Tile),
+        ))
+        .with_child(text(
+            fonts,
+            format!("Скоро в команде: {line}"),
+            false,
+            13.0,
+            PARCHMENT,
+        ));
+    }
     // Отряд в бой: четыре медальона.
     root.spawn((
         Node {
@@ -856,34 +899,9 @@ fn hero_tile(
                     MUTED,
                 ));
             } else {
-                info.spawn(text(fonts, "в Таверне", false, 12.0, MUTED));
+                info.spawn(text(fonts, "придёт за главу", false, 12.0, MUTED));
             }
         });
-        // Щит редкости и метка «в отряде».
-        t.spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: px(6),
-                right: px(6),
-                width: px(34),
-                height: px(36),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                padding: UiRect::bottom(px(4)),
-                ..default()
-            },
-            ImageNode::new(assets.load(format!(
-                "ui/badge_{}.png",
-                rarity_label(hero.rarity).to_lowercase()
-            ))),
-            Pickable::IGNORE,
-        ))
-        .with_child(style::heading(
-            fonts,
-            rarity_label(hero.rarity),
-            12.0,
-            Color::WHITE,
-        ));
         if in_team {
             t.spawn((
                 Node {
@@ -1095,29 +1113,6 @@ fn details(
             Skin(Look::Parchment),
         ))
         .with_children(|card| {
-            card.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(-4),
-                    right: px(12),
-                    width: px(36),
-                    height: px(42),
-                    padding: UiRect::bottom(px(8)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                ImageNode::new(assets.load(format!(
-                    "ui/badge_{}.png",
-                    rarity_label(hero.rarity).to_lowercase()
-                ))),
-            ))
-            .with_child(style::heading(
-                fonts,
-                rarity_label(hero.rarity),
-                14.0,
-                Color::WHITE,
-            ));
             card.spawn((
                 Node {
                     margin: UiRect::right(px(40)),

@@ -10,23 +10,12 @@ use std::path::Path;
 use battle_core::{Ability, Element, Role, Stats, UnitDef};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum Rarity {
-    #[serde(rename = "R")]
-    R,
-    #[serde(rename = "SR")]
-    Sr,
-    #[serde(rename = "SSR")]
-    Ssr,
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct HeroDef {
     pub id: String,
     pub name: String,
     /// Короткое прозвище для карточки героя.
     pub title: String,
-    pub rarity: Rarity,
     pub role: Role,
     pub element: Element,
     pub base_stats: Stats,

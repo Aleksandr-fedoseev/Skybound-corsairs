@@ -1,4 +1,5 @@
 {
+  "arrivals": { "lira": 2, "sora": 4, "tess": 6 },
   "start_team": [
     "ren",
     "kaya",
