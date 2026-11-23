@@ -220,7 +220,7 @@ pub enum Effect {
     FreeHires {
         values: Vec<u32>,
     },
-    JournalsPerMinute {
+    JournalsPerHour {
         values: Vec<u32>,
     },
     /// Дополнительные шлюпки для экспедиций.
@@ -361,9 +361,9 @@ impl Ship {
         })
     }
 
-    pub fn journals_per_minute(&self, data: &ShipData) -> u32 {
+    pub fn journals_per_hour(&self, data: &ShipData) -> u32 {
         self.value(data, |e| match e {
-            Effect::JournalsPerMinute { values } => Some(values),
+            Effect::JournalsPerHour { values } => Some(values),
             _ => None,
         })
     }
@@ -523,7 +523,7 @@ fn income(
     let cap = ship.capacity(&data).ether as f32;
     let ether = ship.ether_per_minute(&data) as f32;
     profile.ether_pending = (profile.ether_pending + ether * minutes).min(cap);
-    ship.journals_pending += ship.journals_per_minute(&data) as f32 * minutes;
+    ship.journals_pending += ship.journals_per_hour(&data) as f32 * minutes / 60.0;
     let whole = ship.journals_pending.floor();
     if whole >= 1.0 {
         ship.journals_pending -= whole;
@@ -566,8 +566,8 @@ fn effect_line(effect: &Effect, level: u32) -> String {
         Effect::FreeHires { values } => {
             format!("Бесплатных наймов в день: {}", at(values, level))
         }
-        Effect::JournalsPerMinute { values } => {
-            format!("Судовые журналы: {} в минуту", at(values, level))
+        Effect::JournalsPerHour { values } => {
+            format!("Судовые журналы: {} в час", at(values, level))
         }
         Effect::Boats { values } => {
             format!("Шлюпок для экспедиций: +{}", at(values, level))
@@ -934,6 +934,6 @@ mod tests {
         ship.levels.insert("cannon_deck".into(), 2);
         assert!(ship.broadside(&data) > before);
         // Тренировочная палуба не построена — журналов нет.
-        assert_eq!(ship.journals_per_minute(&data), 0);
+        assert_eq!(ship.journals_per_hour(&data), 0);
     }
 }

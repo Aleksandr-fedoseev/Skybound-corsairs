@@ -43,7 +43,7 @@
     },
     {
       "id": "training_deck", "name": "Тренировочная палуба", "short": "Тренировка", "icon": "menu/module_training_deck.png", "unlock_hull": 2, "start_level": 0,
-      "effect": { "kind": "journals_per_minute", "values": [2, 3, 4, 6, 8, 10, 13] }
+      "effect": { "kind": "journals_per_hour", "values": [15, 20, 30, 40, 55, 70, 90] }
     },
     { "id": "navigation", "name": "Штурманская рубка", "short": "Рубка", "icon": "menu/module_navigation.png", "unlock_hull": 2, "start_level": 0 },
     {

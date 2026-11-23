@@ -130,7 +130,7 @@ pub fn offline(save: &mut SaveData, data: &ShipData, convoy: &ConvoyData, second
         parts.push(format!("+{ether} эфира у Ветроловов"));
     }
 
-    let journals = (save.ship.journals_per_minute(data) as f32 * minutes).floor() as u32;
+    let journals = (save.ship.journals_per_hour(data) as f32 * minutes / 60.0).floor() as u32;
     if journals > 0 {
         save.profile.journals += journals;
         parts.push(format!("+{journals} журналов"));

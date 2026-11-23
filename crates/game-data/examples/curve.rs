@@ -3,6 +3,7 @@
 //! Запуск: `cargo run -p game-data --example curve --release -- [число боёв]`
 //! Для этапов главы, конвоев и этажей Бездны печатает уровень, с которого побед ≥ 50% и ≥ 80%.
 //! Второе число — то, что стоит писать в `recommended_level`.
+//! `-- [число боёв] abyss` — только Бездна, этажи 1–60 (таблица для tools/economy.py).
 
 use std::path::Path;
 
@@ -11,7 +12,7 @@ use game_data::GameData;
 use serde_json::Value;
 
 const TEAM: [&str; 4] = ["ren", "kaya", "borg", "mei"];
-const MAX_LEVEL: u32 = 40;
+const MAX_LEVEL: u32 = 60;
 
 /// Бой: подпись, враги (id, уровень), уровень из данных.
 type Fight = (String, Vec<(String, u32)>, Option<u64>);
@@ -64,7 +65,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .flatten()
         .filter_map(|v| v.as_str().map(String::from))
         .collect();
-    for floor in [1u32, 3, 5, 7, 9, 10, 11, 13, 15, 19, 20, 21, 25, 29, 30, 40] {
+    let abyss_only = std::env::args().nth(2).as_deref() == Some("abyss");
+    if abyss_only {
+        fights.clear();
+    }
+    let floors: Vec<u32> = if abyss_only {
+        (1..=60).collect()
+    } else {
+        vec![1, 3, 5, 7, 9, 10, 11, 13, 15, 19, 20, 21, 25, 29, 30, 40]
+    };
+    for floor in floors {
         let count = (n("base_count") as u32 + (floor - 1) / n("more_every") as u32)
             .min(n("max_count") as u32);
         let extra = count - n("base_count") as u32;

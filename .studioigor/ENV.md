@@ -28,6 +28,7 @@ VERIFIED: yes
 ## Commands
 RUN: cargo run -p game
 BALANCE: cargo run -p game-data --example curve --release  (порог уровня для этапов, конвоев, Бездны)
+ECONOMY: python3 tools/economy.py [дней]  (модель игрока по дням; кэш Бездны target/abyss_levels.json — удалить после правок Бездны/героев)
 TEST: cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings
 BUILD: cargo build --release -p game --no-default-features
 CAPTURE: mkdir -p .studioigor/captures/menu && SKYBOUND_SCREENSHOT=.studioigor/captures/menu/menu.png cargo run -p game
