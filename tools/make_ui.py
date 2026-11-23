@@ -13,6 +13,7 @@
 """
 
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -226,7 +227,17 @@ def medallion(hero, element, rarity, name, anim, size=192):
 
 
 def figure(hero, anim):
-    """Фигура героя во весь рост (первый кадр позы), обрезанная по рисунку."""
+    """Фигура героя во весь рост, обрезанная по рисунку. Есть исходный рисунок стойки
+    (art/2d/<id>/idle.png, не в git) — из него в высоту 600: чётче кадра боевого листа."""
+    art = Path("art/2d") / hero / "idle.png"
+    if art.exists():
+        sys.path.insert(0, str(Path(__file__).parent / "sprites"))
+        from painted_frames import cutout
+
+        frame = cutout(art)
+        frame = frame.crop(frame.getbbox())
+        k = 600 / frame.height
+        return frame.resize((round(frame.width * k), 600), Image.LANCZOS)
     info = anim.get(hero)
     path = UNITS / f"{hero}.png"
     if not info or not path.exists():

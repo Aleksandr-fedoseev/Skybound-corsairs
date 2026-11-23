@@ -249,7 +249,8 @@ pub fn plugin(app: &mut App) {
                     .or_else(in_state(Screen::Activities)),
             ),
         )
-        .add_systems(Update, count_victory.run_if(in_state(Screen::Battle)));
+        .add_systems(Update, count_victory.run_if(in_state(Screen::Battle)))
+        .add_systems(Update, ship_mips);
     #[cfg(feature = "dev")]
     app.add_systems(Update, dev_hull_key.run_if(in_state(Screen::Menu)));
 }
@@ -1802,6 +1803,95 @@ fn frame_ship(
         transform.translation = Val2::px(slide.by.x * away, slide.by.y * away);
         vis.set_if_neq(shown(away > 0.98));
     }
+}
+
+/// Рисунки корабля (1024 px) на главной сжаты втрое и качаются: без мип-уровней край рябит
+/// и мерцает. Bevy их сам не строит — строим при загрузке картинок из `ship/`.
+fn ship_mips(
+    mut events: MessageReader<AssetEvent<Image>>,
+    mut images: ResMut<Assets<Image>>,
+    server: Res<AssetServer>,
+) {
+    for event in events.read() {
+        let AssetEvent::LoadedWithDependencies { id } = event else {
+            continue;
+        };
+        let ours = server
+            .get_path(*id)
+            .is_some_and(|p| p.path().starts_with("ship"));
+        if !ours {
+            continue;
+        }
+        let Some(mut image) = images.get_mut(*id) else {
+            continue;
+        };
+        add_mips(&mut image);
+    }
+}
+
+fn add_mips(image: &mut Image) {
+    use bevy::image::ImageSampler;
+    use bevy::render::render_resource::TextureFormat;
+    let desc = &image.texture_descriptor;
+    let srgb = match desc.format {
+        TextureFormat::Rgba8UnormSrgb => true,
+        TextureFormat::Rgba8Unorm => false,
+        _ => return,
+    };
+    if desc.mip_level_count > 1 || desc.size.depth_or_array_layers > 1 {
+        return;
+    }
+    let Some(base) = image.data.as_ref() else {
+        return;
+    };
+    let (mut w, mut h) = (desc.size.width as usize, desc.size.height as usize);
+    // Усреднение — в линейном свете и с весом по альфе: прозрачный фон не красит край.
+    let to_lin = |c: u8| {
+        let c = c as f32 / 255.0;
+        if srgb { c.powf(2.2) } else { c }
+    };
+    let to_byte = |c: f32| {
+        let c = if srgb { c.powf(1.0 / 2.2) } else { c };
+        (c * 255.0).round().clamp(0.0, 255.0) as u8
+    };
+    let mut level: Vec<[f32; 4]> = base
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|p| {
+            let a = p[3] as f32 / 255.0;
+            [to_lin(p[0]) * a, to_lin(p[1]) * a, to_lin(p[2]) * a, a]
+        })
+        .collect();
+    let mut data = base.clone();
+    let mut levels = 1;
+    while w > 1 || h > 1 {
+        let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
+        let mut next = vec![[0.0f32; 4]; nw * nh];
+        for y in 0..nh {
+            for x in 0..nw {
+                let mut sum = [0.0f32; 4];
+                for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                    let p = level[(2 * y + dy).min(h - 1) * w + (2 * x + dx).min(w - 1)];
+                    for c in 0..4 {
+                        sum[c] += p[c] / 4.0;
+                    }
+                }
+                next[y * nw + x] = sum;
+            }
+        }
+        for p in &next {
+            let a = p[3];
+            let un = |c: f32| if a > 0.0 { c / a } else { 0.0 };
+            data.extend([to_byte(un(p[0])), to_byte(un(p[1])), to_byte(un(p[2]))]);
+            data.push((a * 255.0).round() as u8);
+        }
+        (level, w, h) = (next, nw, nh);
+        levels += 1;
+    }
+    image.data = Some(data);
+    image.texture_descriptor.mip_level_count = levels;
+    image.sampler = ImageSampler::linear();
 }
 
 /// Сдвиг на осмотре: корабль можно двигать, пока его край не отойдёт от края экрана дальше
