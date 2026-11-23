@@ -31,14 +31,28 @@ const HOME_NODE: f32 = 64.0;
 const PULSE_PERIOD: f32 = 1.4;
 const PULSE: f32 = 0.08;
 
-/// Карта: `data/map.json`. Координаты — центр точки на экране 540×960.
+/// Карта: `data/map.json` — по карте на главу. Координаты — центр точки на экране 540×960.
 #[derive(Resource, Deserialize)]
 pub struct MapData {
+    pub chapters: Vec<ChapterMap>,
+}
+
+#[derive(Deserialize)]
+pub struct ChapterMap {
+    pub name: String,
     pub background: String,
-    pub chapter: String,
     pub home: Spot,
+    /// Где на этой карте Торговый путь; без поля — как в `convoys.json`.
+    #[serde(default)]
+    pub convoy: Option<Pos>,
     pub stages: Vec<StageSpot>,
     pub locked: Vec<LockedSpot>,
+}
+
+#[derive(Deserialize, Clone, Copy)]
+pub struct Pos {
+    pub x: f32,
+    pub y: f32,
 }
 
 #[derive(Deserialize)]
@@ -62,6 +76,9 @@ pub struct LockedSpot {
     pub note: String,
     pub x: f32,
     pub y: f32,
+    /// Остров ведёт в эту главу (номер в `chapters`), когда она открыта.
+    #[serde(default)]
+    pub chapter: Option<usize>,
 }
 
 impl MapData {
@@ -69,7 +86,37 @@ impl MapData {
         serde_json::from_str(include_str!("../../../data/map.json"))
             .expect("data/map.json корректен")
     }
+
+    /// Глава, в которой этап `id`.
+    fn chapter_of(&self, id: &str) -> usize {
+        self.chapters
+            .iter()
+            .position(|c| c.stages.iter().any(|s| s.id == id))
+            .unwrap_or(0)
+    }
+
+    /// Глава открыта, когда открыт её первый этап.
+    fn open(&self, chapter: usize, stages: &[game_data::StageDef], cleared: usize) -> bool {
+        let Some(first) = self.chapters.get(chapter).and_then(|c| c.stages.first()) else {
+            return false;
+        };
+        stages
+            .iter()
+            .position(|s| s.id == first.id)
+            .is_some_and(|i| i <= cleared)
+    }
 }
+
+/// Какая глава открыта на карте.
+#[derive(Resource, Default)]
+pub struct MapChapter(pub usize);
+
+/// Карту надо собрать заново (переключили главу).
+#[derive(Resource, Default)]
+struct MapDirty(bool);
+
+#[derive(Component)]
+struct MapRoot;
 
 /// Этап, открытый в карточке (индекс в `stages.json`).
 #[derive(Resource, Default)]
@@ -102,33 +149,94 @@ pub fn plugin(app: &mut App) {
     app.insert_resource(MapData::bundled())
         .init_resource::<Selected>()
         .init_resource::<ConvoyPick>()
-        .add_systems(OnEnter(Screen::Map), spawn_map)
+        .init_resource::<MapChapter>()
+        .init_resource::<MapDirty>()
+        .add_systems(OnEnter(Screen::Map), enter_map)
         .add_systems(
             Update,
-            (refresh_card, refresh_convoy_label, pulse).run_if(in_state(Screen::Map)),
+            (rebuild_map, refresh_card, refresh_convoy_label, pulse)
+                .chain()
+                .run_if(in_state(Screen::Map)),
         );
+}
+
+/// На карту — к главе следующего этапа, с открытой карточкой этого этапа.
+fn enter_map(
+    map: Res<MapData>,
+    progress: Res<Progress>,
+    screen: Res<BattleScreen>,
+    mut chapter: ResMut<MapChapter>,
+    mut selected: ResMut<Selected>,
+    mut pick: ResMut<ConvoyPick>,
+    mut dirty: ResMut<MapDirty>,
+) {
+    let stages = &screen.data.stages;
+    let next = progress.next_stage(stages.len());
+    chapter.0 = map.chapter_of(&stages[next].id);
+    selected.0 = Some(next);
+    pick.0 = false;
+    dirty.0 = true;
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rebuild_map(
+    mut commands: Commands,
+    mut dirty: ResMut<MapDirty>,
+    roots: Query<Entity, With<MapRoot>>,
+    assets: Res<AssetServer>,
+    fonts: Res<Fonts>,
+    map: Res<MapData>,
+    chapter: Res<MapChapter>,
+    progress: Res<Progress>,
+    screen: Res<BattleScreen>,
+    convoy: Res<ConvoyData>,
+    profile: Res<crate::menu::Profile>,
+) {
+    if !dirty.0 {
+        return;
+    }
+    dirty.0 = false;
+    for root in &roots {
+        commands.entity(root).despawn();
+    }
+    spawn_map(
+        &mut commands,
+        &assets,
+        &fonts,
+        &map,
+        chapter.0,
+        &progress,
+        &screen,
+        &convoy,
+        &profile,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
 fn spawn_map(
-    mut commands: Commands,
-    assets: Res<AssetServer>,
-    fonts: Res<Fonts>,
-    map: Res<MapData>,
-    progress: Res<Progress>,
-    screen: Res<BattleScreen>,
-    convoy: Res<ConvoyData>,
-    mut selected: ResMut<Selected>,
-    mut pick: ResMut<ConvoyPick>,
-    profile: Res<crate::menu::Profile>,
+    commands: &mut Commands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    map: &MapData,
+    chapter: usize,
+    progress: &Progress,
+    screen: &BattleScreen,
+    convoy: &ConvoyData,
+    profile: &crate::menu::Profile,
 ) {
     let stages = &screen.data.stages;
     let next = progress.next_stage(stages.len());
-    selected.0 = Some(next);
-    pick.0 = false;
+    let page = &map.chapters[chapter];
+    let in_chapter: Vec<usize> = page
+        .stages
+        .iter()
+        .filter_map(|spot| stages.iter().position(|s| s.id == spot.id))
+        .collect();
+    let done = in_chapter.iter().filter(|&&i| i < progress.cleared).count();
 
     commands
         .spawn((
+            MapRoot,
             DespawnOnExit(Screen::Map),
             Node {
                 width: percent(100),
@@ -137,14 +245,14 @@ fn spawn_map(
             },
             ImageNode {
                 image_mode: NodeImageMode::Stretch,
-                ..ImageNode::new(assets.load(map.background.clone()))
+                ..ImageNode::new(assets.load(page.background.clone()))
             },
         ))
         .with_children(|root| {
             crate::style::top_bar(
                 root,
-                &assets,
-                &fonts,
+                assets,
+                fonts,
                 &[
                     ("doubloons", profile.doubloons),
                     ("silver", profile.silver),
@@ -153,27 +261,30 @@ fn spawn_map(
             );
             crate::style::title(
                 root,
-                &fonts,
-                &format!(
-                    "{} · {} из {}",
-                    map.chapter,
-                    progress.cleared.min(stages.len()),
-                    stages.len()
-                ),
+                fonts,
+                &format!("{} · {} из {}", page.name, done, in_chapter.len()),
                 56.0,
             );
-            home(root, &assets, &fonts, &map.home);
-            for spot in &map.locked {
-                locked(root, &fonts, spot);
+            chapter_arrows(root, fonts, map, chapter, stages, progress.cleared);
+            home(root, assets, fonts, &page.home);
+            for spot in &page.locked {
+                let open = spot
+                    .chapter
+                    .is_some_and(|c| map.open(c, stages, progress.cleared));
+                locked(root, fonts, spot, open);
             }
-            convoy_spot(root, &assets, &fonts, &convoy.spot);
-            for spot in &map.stages {
+            let mut spot = convoy.spot.clone();
+            if let Some(pos) = page.convoy {
+                (spot.x, spot.y) = (pos.x, pos.y);
+            }
+            convoy_spot(root, assets, fonts, &spot);
+            for spot in &page.stages {
                 let Some(index) = stages.iter().position(|s| s.id == spot.id) else {
                     continue;
                 };
                 stage_node(
                     root,
-                    &fonts,
+                    fonts,
                     spot,
                     index,
                     &stages[index].name,
@@ -181,10 +292,64 @@ fn spawn_map(
                     next,
                 );
             }
-            card(root, &fonts);
-            bottom_nav(root, &assets, &fonts, Screen::Map);
-            spawn_toast(root, &fonts);
+            card(root, fonts);
+            bottom_nav(root, assets, fonts, Screen::Map);
+            spawn_toast(root, fonts);
         });
+}
+
+/// Стрелки «« »» по бокам заголовка: соседняя глава, если она открыта.
+fn chapter_arrows(
+    root: &mut ChildSpawnerCommands,
+    fonts: &Fonts,
+    map: &MapData,
+    chapter: usize,
+    stages: &[game_data::StageDef],
+    cleared: usize,
+) {
+    for (left, to) in [(true, chapter.checked_sub(1)), (false, Some(chapter + 1))] {
+        let Some(to) = to.filter(|&c| c < map.chapters.len()) else {
+            continue;
+        };
+        let open = map.open(to, stages, cleared);
+        let name = map.chapters[to].name.clone();
+        let mut arrow = root.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(60),
+                left: if left { px(8) } else { auto() },
+                right: if left { auto() } else { px(8) },
+                width: px(48),
+                height: px(44),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            Skin(if open { Look::Dark } else { Look::Off }),
+        ));
+        arrow.with_child(crate::style::heading(
+            fonts,
+            if left { "«" } else { "»" },
+            24.0,
+            if open { PARCHMENT } else { MUTED },
+        ));
+        pressable(&mut arrow);
+        arrow.observe(
+            move |_: On<PointerClick>,
+                  mut chapter: ResMut<MapChapter>,
+                  mut dirty: ResMut<MapDirty>,
+                  mut selected: ResMut<Selected>,
+                  mut toast: ResMut<Toast>| {
+                if open {
+                    chapter.0 = to;
+                    selected.0 = None;
+                    dirty.0 = true;
+                } else {
+                    toast.show(&format!("{name} откроется после босса предыдущей главы"));
+                }
+            },
+        );
+    }
 }
 
 /// Подпись под точкой на карте.
@@ -260,15 +425,41 @@ fn home(root: &mut ChildSpawnerCommands, assets: &AssetServer, fonts: &Fonts, sp
         });
 }
 
-fn locked(root: &mut ChildSpawnerCommands, fonts: &Fonts, spot: &LockedSpot) {
+/// Закрытый остров. Если он ведёт в уже открытую главу — тап переключает карту на неё.
+fn locked(root: &mut ChildSpawnerCommands, fonts: &Fonts, spot: &LockedSpot, open: bool) {
     let message = format!("{} — {}, пока закрыто", spot.name, spot.note);
+    let go = spot.chapter.filter(|_| open);
     let mut column = root.spawn(spot_column(spot.x, spot.y, NODE));
     column.with_children(|col| {
-        plate(col, fonts, &spot.name, &spot.note, MUTED);
+        let note = if go.is_some() {
+            "открыта »"
+        } else {
+            &spot.note
+        };
+        plate(
+            col,
+            fonts,
+            &spot.name,
+            note,
+            if go.is_some() { GOLD } else { MUTED },
+        );
     });
-    column.observe(move |_: On<PointerClick>, mut toast: ResMut<Toast>| {
-        toast.show(&message);
-    });
+    column.observe(
+        move |_: On<PointerClick>,
+              mut toast: ResMut<Toast>,
+              mut chapter: ResMut<MapChapter>,
+              mut dirty: ResMut<MapDirty>,
+              mut selected: ResMut<Selected>| {
+            match go {
+                Some(c) => {
+                    chapter.0 = c;
+                    selected.0 = None;
+                    dirty.0 = true;
+                }
+                None => toast.show(&message),
+            }
+        },
+    );
 }
 
 fn stage_node(
@@ -553,7 +744,16 @@ fn refresh_card(
                     format!("{} · {}", def.id, def.name)
                 }
             }
-            CardText::Enemies => enemies_line(&screen, stage),
+            CardText::Enemies => match def.wind {
+                // Ветер боя: его стихия бьёт на 25% сильнее — подсказка, кого брать в отряд.
+                Some(wind) => format!(
+                    "{} · ветер боя: {} +{}%",
+                    enemies_line(&screen, stage),
+                    crate::crew::element_label(wind),
+                    (battle_core::WIND_BONUS * 100.0).round()
+                ),
+                None => enemies_line(&screen, stage),
+            },
             CardText::Level => {
                 color.0 = if ready { READY } else { WEAK };
                 format!(

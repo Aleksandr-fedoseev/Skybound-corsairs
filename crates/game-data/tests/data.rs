@@ -28,7 +28,7 @@ fn win_rate(data: &GameData, stage: &str, level: u32, runs: u64) -> f64 {
 #[test]
 fn bundled_data_is_valid() {
     let data = GameData::bundled().expect("данные из data/ корректны");
-    assert_eq!(data.heroes.len(), 6);
+    assert_eq!(data.heroes.len(), 7);
     for stage in &data.stages {
         assert!(!data.stage_enemies(&stage.id).unwrap().is_empty());
     }

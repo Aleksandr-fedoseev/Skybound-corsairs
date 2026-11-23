@@ -4,5 +4,5 @@
   "rates": { "ssr": 0.02, "sr": 0.18 },
   "ssr_pity": 60,
   "sr_every": 10,
-  "pool": ["ren", "sora", "kaya", "lira", "mei", "borg"]
+  "pool": ["ren", "sora", "kaya", "lira", "mei", "borg", "tess"]
 }

@@ -128,5 +128,129 @@
         }
       ]
     }
+  },
+  {
+    "id": "aeromancer",
+    "name": "Имперский аэромант",
+    "element": "wind",
+    "base_stats": {
+      "max_hp": 420,
+      "atk": 95,
+      "def": 40,
+      "spd": 110
+    },
+    "growth": {
+      "max_hp": 40,
+      "atk": 9,
+      "def": 2,
+      "spd": 0
+    },
+    "basic": {
+      "name": "Порыв",
+      "effects": [
+        {
+          "target": "single_enemy",
+          "type": "damage",
+          "multiplier": 1.0
+        }
+      ]
+    },
+    "skill": {
+      "name": "Вихрь",
+      "cooldown": 3,
+      "effects": [
+        {
+          "target": "all_enemies",
+          "type": "damage",
+          "multiplier": 0.45
+        },
+        {
+          "target": "all_allies",
+          "type": "advance",
+          "fraction": 0.15
+        }
+      ]
+    }
+  },
+  {
+    "id": "mist_hound",
+    "name": "Туманная ищейка",
+    "element": "mist",
+    "base_stats": {
+      "max_hp": 360,
+      "atk": 110,
+      "def": 30,
+      "spd": 135
+    },
+    "growth": {
+      "max_hp": 34,
+      "atk": 10,
+      "def": 2,
+      "spd": 0
+    },
+    "basic": {
+      "name": "Укус",
+      "effects": [
+        {
+          "target": "single_enemy",
+          "type": "damage",
+          "multiplier": 1.0
+        }
+      ]
+    },
+    "skill": {
+      "name": "Загрызть",
+      "cooldown": 2,
+      "effects": [
+        {
+          "target": "single_enemy",
+          "type": "damage",
+          "multiplier": 1.6
+        }
+      ]
+    }
+  },
+  {
+    "id": "archive_guardian",
+    "name": "Страж архива",
+    "element": "steel",
+    "base_stats": {
+      "max_hp": 3200,
+      "atk": 190,
+      "def": 110,
+      "spd": 95
+    },
+    "growth": {
+      "max_hp": 230,
+      "atk": 14,
+      "def": 6,
+      "spd": 0
+    },
+    "basic": {
+      "name": "Железный кулак",
+      "effects": [
+        {
+          "target": "single_enemy",
+          "type": "damage",
+          "multiplier": 1.2
+        }
+      ]
+    },
+    "skill": {
+      "name": "Таран старого мира",
+      "cooldown": 3,
+      "effects": [
+        {
+          "target": "all_enemies",
+          "type": "damage",
+          "multiplier": 0.8
+        },
+        {
+          "target": "single_enemy",
+          "type": "delay",
+          "fraction": 0.3
+        }
+      ]
+    }
   }
 ]

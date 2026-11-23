@@ -18,6 +18,16 @@
       "from_cleared": 8, "name": "Караван под охраной", "recommended_level": 6,
       "enemies": [["imperial_marine", 19], ["imperial_gunner", 19], ["imperial_marine", 19], ["imperial_gunner", 19]],
       "silver": 240, "planks": 150
+    },
+    {
+      "from_cleared": 12, "name": "Городской транспорт", "recommended_level": 11,
+      "enemies": [["imperial_marine", 27], ["imperial_gunner", 27], ["imperial_marine", 27], ["imperial_gunner", 27]],
+      "silver": 340, "planks": 210
+    },
+    {
+      "from_cleared": 16, "name": "Казначейский галеон", "recommended_level": 15,
+      "enemies": [["imperial_marine", 32], ["aeromancer", 32], ["imperial_gunner", 32], ["imperial_marine", 32]],
+      "silver": 460, "planks": 280
     }
   ]
 }

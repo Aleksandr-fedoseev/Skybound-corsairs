@@ -236,5 +236,260 @@
         "level": 14
       }
     ]
+  },
+  {
+    "id": "2-1",
+    "name": "Подход к городу",
+    "recommended_level": 11,
+    "enemies": [
+      {
+        "enemy": "imperial_marine",
+        "level": 27
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 27
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 27
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 27
+      }
+    ]
+  },
+  {
+    "id": "2-2",
+    "name": "Таможенные доки",
+    "recommended_level": 12,
+    "wind": "powder",
+    "enemies": [
+      {
+        "enemy": "imperial_marine",
+        "level": 22
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 22
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 22
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 22
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 22
+      }
+    ]
+  },
+  {
+    "id": "2-3",
+    "name": "Ветряные башни",
+    "recommended_level": 13,
+    "wind": "wind",
+    "enemies": [
+      {
+        "enemy": "aeromancer",
+        "level": 27
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 27
+      },
+      {
+        "enemy": "aeromancer",
+        "level": 27
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 27
+      }
+    ]
+  },
+  {
+    "id": "2-4",
+    "name": "Крыши квартала",
+    "recommended_level": 14,
+    "wind": "mist",
+    "enemies": [
+      {
+        "enemy": "mist_hound",
+        "level": 20
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 20
+      },
+      {
+        "enemy": "mist_hound",
+        "level": 20
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 20
+      }
+    ]
+  },
+  {
+    "id": "2-5",
+    "name": "Площадь гарнизона",
+    "recommended_level": 15,
+    "wind": "wind",
+    "enemies": [
+      {
+        "enemy": "aeromancer",
+        "level": 18
+      },
+      {
+        "enemy": "mist_hound",
+        "level": 18
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 18
+      },
+      {
+        "enemy": "mist_hound",
+        "level": 18
+      },
+      {
+        "enemy": "aeromancer",
+        "level": 18
+      }
+    ]
+  },
+  {
+    "id": "2-6",
+    "name": "Сточные каналы",
+    "recommended_level": 15,
+    "wind": "mist",
+    "enemies": [
+      {
+        "enemy": "mist_hound",
+        "level": 18
+      },
+      {
+        "enemy": "storm_ray",
+        "level": 18
+      },
+      {
+        "enemy": "mist_hound",
+        "level": 18
+      },
+      {
+        "enemy": "storm_ray",
+        "level": 18
+      },
+      {
+        "enemy": "mist_hound",
+        "level": 18
+      }
+    ]
+  },
+  {
+    "id": "2-7",
+    "name": "Шпиль маяка",
+    "recommended_level": 16,
+    "wind": "lightning",
+    "enemies": [
+      {
+        "enemy": "storm_ray",
+        "level": 33
+      },
+      {
+        "enemy": "aeromancer",
+        "level": 33
+      },
+      {
+        "enemy": "storm_ray",
+        "level": 33
+      },
+      {
+        "enemy": "storm_ray",
+        "level": 33
+      }
+    ]
+  },
+  {
+    "id": "2-8",
+    "name": "Ворота архива",
+    "recommended_level": 17,
+    "wind": "steel",
+    "enemies": [
+      {
+        "enemy": "imperial_marine",
+        "level": 29
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 29
+      },
+      {
+        "enemy": "aeromancer",
+        "level": 29
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 29
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 29
+      }
+    ]
+  },
+  {
+    "id": "2-9",
+    "name": "Зал карт",
+    "recommended_level": 18,
+    "wind": "mist",
+    "enemies": [
+      {
+        "enemy": "mist_hound",
+        "level": 16
+      },
+      {
+        "enemy": "aeromancer",
+        "level": 16
+      },
+      {
+        "enemy": "mist_hound",
+        "level": 16
+      },
+      {
+        "enemy": "aeromancer",
+        "level": 16
+      },
+      {
+        "enemy": "mist_hound",
+        "level": 16
+      }
+    ]
+  },
+  {
+    "id": "2-boss",
+    "name": "Страж архива",
+    "recommended_level": 19,
+    "wind": "steel",
+    "enemies": [
+      {
+        "enemy": "mist_hound",
+        "level": 23
+      },
+      {
+        "enemy": "archive_guardian",
+        "level": 23
+      },
+      {
+        "enemy": "mist_hound",
+        "level": 23
+      }
+    ]
   }
 ]

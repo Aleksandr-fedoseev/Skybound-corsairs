@@ -148,5 +148,31 @@
         { "target": "all_enemies", "type": "damage", "multiplier": 0.8 }
       ]
     }
+  },
+  {
+    "id": "tess",
+    "name": "Тэсс",
+    "title": "Крышная тень",
+    "rarity": "R",
+    "role": "duelist",
+    "element": "mist",
+    "base_stats": { "max_hp": 980, "atk": 92, "def": 42, "spd": 122 },
+    "growth": { "max_hp": 55, "atk": 5, "def": 3, "spd": 0 },
+    "basic": {
+      "name": "Кинжал",
+      "effects": [{ "target": "single_enemy", "type": "damage", "multiplier": 1.0 }]
+    },
+    "skill": {
+      "name": "Дымовая бомба",
+      "cooldown": 3,
+      "effects": [
+        { "target": "all_enemies", "type": "damage", "multiplier": 0.4 },
+        { "target": "all_enemies", "type": "delay", "fraction": 0.15 }
+      ]
+    },
+    "ultimate": {
+      "name": "Тысяча теней",
+      "effects": [{ "target": "single_enemy", "type": "damage", "multiplier": 2.6 }]
+    }
   }
 ]

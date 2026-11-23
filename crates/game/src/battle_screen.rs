@@ -200,7 +200,15 @@ impl BattleScreen {
     pub fn title(&self) -> String {
         match &self.custom {
             Some(fight) => fight.title.clone(),
-            None => format!("{} · {}", self.stage_id(), self.stage_name()),
+            None => match self.battle.wind() {
+                Some(wind) => format!(
+                    "{} · {} · ветер боя: {}",
+                    self.stage_id(),
+                    self.stage_name(),
+                    crate::crew::element_label(wind)
+                ),
+                None => format!("{} · {}", self.stage_id(), self.stage_name()),
+            },
         }
     }
 

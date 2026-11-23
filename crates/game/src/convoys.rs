@@ -19,7 +19,7 @@ pub struct ConvoyData {
     pub tiers: Vec<Tier>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct Spot {
     pub name: String,
     pub x: f32,
