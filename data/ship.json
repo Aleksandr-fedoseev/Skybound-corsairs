@@ -96,7 +96,17 @@
   ],
   "scene": {
     "look": { "seconds": 0.75, "outside_width": 380, "outside_center": [270, 440], "inside_frame": [10, 150, 530, 640] },
-    "backdrop": { "image": "menu/sky_pano.jpg", "width": 2049, "speed": 9 },
+    "backdrop": {
+      "image": "menu/sky_pano.jpg",
+      "width": 2049,
+      "speed": 9,
+      "waterfall": { "image": "menu/waterfall.png", "rect": [488, 508, 64, 140], "frames": 48, "columns": 8, "fps": 24 },
+      "mills": [
+        { "image": "fx/mill_sails.png", "at": [768, 444], "size": 30, "turns_per_second": 0.17 },
+        { "image": "fx/mill_sails.png", "at": [722, 462], "size": 34, "turns_per_second": 0.15 },
+        { "image": "fx/mill_sails.png", "at": [816, 432], "size": 74, "turns_per_second": 0.12 }
+      ]
+    },
     "birds": { "image": "fx/bird.png", "count": 5, "speed": 38, "every": 22, "top": 250 },
     "clouds": [
       { "image": "menu/cloud_1.png", "top": 150, "width": 190, "speed": 14, "phase": 0.1, "alpha": 0.9 },

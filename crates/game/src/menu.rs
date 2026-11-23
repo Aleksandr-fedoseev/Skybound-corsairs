@@ -972,7 +972,45 @@ fn backdrop(root: &mut ChildSpawnerCommands, assets: &AssetServer, view: &crate:
             ImageNode::new(assets.load(sky.image.clone())),
             UiTransform::default(),
             Pickable::IGNORE,
-        ));
+        ))
+        .with_children(|pano| {
+            // Водопад и мельницы — дети копии панорамы: едут вместе с ней.
+            if let Some(fall) = &sky.waterfall {
+                let [x, y, w, h] = fall.rect;
+                pano.spawn((
+                    FallingWater,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: px(x),
+                        top: px(y),
+                        width: px(w),
+                        height: px(h),
+                        ..default()
+                    },
+                    ImageNode {
+                        rect: Some(Rect::new(0.0, 0.0, w, h)),
+                        ..ImageNode::new(assets.load(fall.image.clone()))
+                    },
+                    Pickable::IGNORE,
+                ));
+            }
+            for mill in &sky.mills {
+                pano.spawn((
+                    MillSails(mill.turns_per_second),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: px(mill.at[0] - mill.size / 2.0),
+                        top: px(mill.at[1] - mill.size / 2.0),
+                        width: px(mill.size),
+                        height: px(mill.size),
+                        ..default()
+                    },
+                    ImageNode::new(assets.load(mill.image.clone())),
+                    UiTransform::default(),
+                    Pickable::IGNORE,
+                ));
+            }
+        });
     }
     if let Some(birds) = &view.birds {
         for i in 0..birds.count {
@@ -1014,17 +1052,39 @@ struct Bird {
     phase: f32,
 }
 
+/// Водопад на панораме: кадр берётся из листа по часам.
+#[derive(Component)]
+struct FallingWater;
+
+/// Крылья мельницы на панораме, оборотов в секунду.
+#[derive(Component)]
+struct MillSails(f32);
+
 /// Фон едет от часов: после пересборки меню не прыгает.
+#[allow(clippy::type_complexity)]
 fn scroll_backdrop(
     time: Res<Time>,
     data: Res<ShipData>,
-    mut skies: Query<(&Backdrop, &mut UiTransform), Without<Bird>>,
-    mut birds: Query<(&Bird, &mut UiTransform), Without<Backdrop>>,
+    mut skies: Query<(&Backdrop, &mut UiTransform), (Without<Bird>, Without<MillSails>)>,
+    mut birds: Query<(&Bird, &mut UiTransform), (Without<Backdrop>, Without<MillSails>)>,
+    mut mills: Query<(&MillSails, &mut UiTransform), (Without<Backdrop>, Without<Bird>)>,
+    mut water: Query<&mut ImageNode, With<FallingWater>>,
 ) {
     let t = time.elapsed_secs();
     for (sky, mut transform) in &mut skies {
         let x = -(t * sky.speed).rem_euclid(sky.width) + sky.copy * sky.width;
         transform.translation = Val2::px(x, 0.0);
+    }
+    for (mill, mut transform) in &mut mills {
+        transform.rotation = Rot2::radians(-t * mill.0 * std::f32::consts::TAU);
+    }
+    if let Some(fall) = &data.scene.backdrop.waterfall {
+        let frame = (t * fall.fps) as u32 % fall.frames;
+        let [_, _, w, h] = fall.rect;
+        let corner = Vec2::new((frame % fall.columns) as f32 * w, (frame / fall.columns) as f32 * h);
+        for mut image in &mut water {
+            image.rect = Some(Rect::from_corners(corner, corner + Vec2::new(w, h)));
+        }
     }
     let Some(flock) = &data.scene.birds else {
         return;

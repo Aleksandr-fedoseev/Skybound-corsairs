@@ -201,6 +201,30 @@ pub struct Backdrop {
     /// Ширина кольца панорамы (логические px при высоте экрана) и скорость (px/с).
     pub width: f32,
     pub speed: f32,
+    /// Живые места панорамы (координаты — px панорамы, она во всю высоту экрана): едут вместе с ней.
+    #[serde(default)]
+    pub waterfall: Option<Waterfall>,
+    #[serde(default)]
+    pub mills: Vec<Mill>,
+}
+
+/// Водопад: кадры в листе по `columns` в ряд, окно `rect` (x, y, ширина, высота) на панораме.
+#[derive(Deserialize)]
+pub struct Waterfall {
+    pub image: String,
+    pub rect: [f32; 4],
+    pub frames: u32,
+    pub columns: u32,
+    pub fps: f32,
+}
+
+/// Крылья мельницы вокруг втулки `at`; `size` — размах.
+#[derive(Deserialize)]
+pub struct Mill {
+    pub image: String,
+    pub at: [f32; 2],
+    pub size: f32,
+    pub turns_per_second: f32,
 }
 
 #[derive(Deserialize)]
