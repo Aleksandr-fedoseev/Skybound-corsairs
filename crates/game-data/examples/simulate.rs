@@ -49,6 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
                 seed,
             );
+            battle.set_wind(stage.wind);
             let mut turn_count = 0;
             while battle.outcome().is_none() && turn_count < 500 {
                 turn_count += battle

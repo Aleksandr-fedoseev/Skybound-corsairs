@@ -351,6 +351,9 @@ fn new_battle(
             .expect("этап есть в data/stages.json"),
     };
     let mut battle = Battle::new(team, enemies, Ship { broadside_power }, seed);
+    if custom.is_none() {
+        battle.set_wind(data.stages[stage].wind);
+    }
     if let Some(fight) = custom {
         battle.set_energy_rate(fight.energy_rate);
         for (i, member) in team_ids.iter().enumerate() {

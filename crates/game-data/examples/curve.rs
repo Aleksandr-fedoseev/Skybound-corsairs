@@ -7,15 +7,15 @@
 
 use std::path::Path;
 
-use battle_core::{Battle, Outcome, Ship, UnitDef};
+use battle_core::{Battle, Element, Outcome, Ship, UnitDef};
 use game_data::GameData;
 use serde_json::Value;
 
 const TEAM: [&str; 4] = ["ren", "kaya", "borg", "mei"];
 const MAX_LEVEL: u32 = 60;
 
-/// Бой: подпись, враги (id, уровень), уровень из данных.
-type Fight = (String, Vec<(String, u32)>, Option<u64>);
+/// Бой: подпись, враги (id, уровень), уровень из данных, ветер.
+type Fight = (String, Vec<(String, u32)>, Option<u64>, Option<Element>);
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let runs: u64 = std::env::args()
@@ -42,6 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             format!("{} {}", stage.id, stage.name),
             enemies,
             Some(stage.recommended_level as u64),
+            stage.wind,
         ));
     }
     let convoys = read("convoys.json")?;
@@ -54,6 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ),
             pairs(&tier["enemies"]),
             tier["recommended_level"].as_u64(),
+            None,
         ));
     }
     // Состав этажа — как в crates/game/src/abyss.rs (AbyssData::enemies).
@@ -89,12 +91,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let boss = abyss["boss"].as_str().unwrap_or("").to_string();
             enemies.insert(1, (boss, level.saturating_sub(3).max(1)));
         }
-        fights.push((format!("Бездна, этаж {floor}"), enemies, None));
+        fights.push((format!("Бездна, этаж {floor}"), enemies, None, None));
     }
 
     println!("Отряд: {} · боёв на точку: {runs}\n", TEAM.join(", "));
     println!("{:<42} {:>6} {:>6} {:>6}", "Бой", "50%", "80%", "в данных");
-    for (name, enemies, written) in fights {
+    for (name, enemies, written, wind) in fights {
         let foes: Vec<UnitDef> = enemies
             .iter()
             .map(|(id, level)| {
@@ -106,7 +108,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut at50 = None;
         let mut at80 = None;
         for level in 1..=MAX_LEVEL {
-            let rate = win_rate(&data, level, &foes, runs);
+            let rate = win_rate(&data, level, &foes, wind, runs);
             if at50.is_none() && rate >= 0.5 {
                 at50 = Some(level);
             }
@@ -134,7 +136,13 @@ fn pairs(v: &Value) -> Vec<(String, u32)> {
         .collect()
 }
 
-fn win_rate(data: &GameData, level: u32, foes: &[UnitDef], runs: u64) -> f64 {
+fn win_rate(
+    data: &GameData,
+    level: u32,
+    foes: &[UnitDef],
+    wind: Option<Element>,
+    runs: u64,
+) -> f64 {
     let team: Vec<UnitDef> = TEAM
         .iter()
         .map(|id| data.hero(id).expect("герой из TEAM").to_unit(level))
@@ -149,6 +157,7 @@ fn win_rate(data: &GameData, level: u32, foes: &[UnitDef], runs: u64) -> f64 {
                 },
                 seed,
             );
+            battle.set_wind(wind);
             let mut steps = 0;
             while battle.outcome().is_none() && steps < 2000 {
                 battle.auto_step();

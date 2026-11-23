@@ -92,6 +92,9 @@ pub struct StageDef {
     /// Уровень отряда, с которым этап проходится уверенно (показывается игроку).
     #[serde(default = "first_level")]
     pub recommended_level: u32,
+    /// Ветер боя: стихия, которая на этом этапе бьёт сильнее (`Battle::set_wind`).
+    #[serde(default)]
+    pub wind: Option<Element>,
     pub enemies: Vec<StageEnemy>,
 }
 

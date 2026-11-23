@@ -32,6 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         seed,
     );
+    battle.set_wind(data.stage(&stage).and_then(|s| s.wind));
 
     let hp = |b: &Battle| {
         b.units()

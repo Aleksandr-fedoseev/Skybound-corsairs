@@ -10,10 +10,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::ai;
 use crate::rng::Rng;
-use crate::unit::{Ability, Effect, Side, Target, Unit, UnitDef, UnitId};
+use crate::unit::{Ability, Effect, Element, Side, Target, Unit, UnitDef, UnitId};
 use crate::{
     BROADSIDE_MAX, BROADSIDE_PER_ACTION, CRIT_CHANCE, CRIT_MULTIPLIER, ENERGY_BASIC, ENERGY_MAX,
-    ENERGY_ON_HIT, ENERGY_SKILL, WEAKNESS_MULTIPLIER,
+    ENERGY_ON_HIT, ENERGY_SKILL, WEAKNESS_MULTIPLIER, WIND_BONUS,
 };
 
 /// Корабль игрока в бою. Сила залпа зависит от уровня пушечной палубы.
@@ -146,12 +146,23 @@ pub struct Battle {
     turn: u32,
     /// Во сколько раз быстрее копится энергия ульт (особые правила ивентов).
     energy_rate: u32,
+    /// Ветер боя: стихия, чьи бойцы бьют сильнее.
+    wind: Option<Element>,
 }
 
 impl Battle {
     /// Особое правило боя: ульты копятся в `rate` раз быстрее.
     pub fn set_energy_rate(&mut self, rate: u32) {
         self.energy_rate = rate.max(1);
+    }
+
+    /// Ветер боя: бойцы этой стихии (с обеих сторон) наносят на `WIND_BONUS` больше урона.
+    pub fn set_wind(&mut self, wind: Option<Element>) {
+        self.wind = wind;
+    }
+
+    pub fn wind(&self) -> Option<Element> {
+        self.wind
     }
 
     /// Особое правило боя: бойец начинает с части здоровья (оборона в несколько волн).
@@ -200,6 +211,7 @@ impl Battle {
             outcome: None,
             turn: 0,
             energy_rate: 1,
+            wind: None,
         };
         let mut events = Vec::new();
         battle.check_outcome(&mut events);
@@ -545,7 +557,12 @@ impl Battle {
                 match te.effect {
                     Effect::Damage { multiplier } => {
                         let attacker = &self.units[actor.0];
-                        let raw = attacker.def.stats.atk as f32 * multiplier;
+                        let tailwind = if self.wind == Some(attacker.def.element) {
+                            1.0 + WIND_BONUS
+                        } else {
+                            1.0
+                        };
+                        let raw = attacker.def.stats.atk as f32 * multiplier * tailwind;
                         let weakness = attacker
                             .def
                             .element

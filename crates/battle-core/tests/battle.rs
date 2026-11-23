@@ -109,6 +109,41 @@ fn weakness_increases_damage_by_half() {
 }
 
 #[test]
+fn wind_strengthens_only_its_element() {
+    // Попутный ветер стихии атакующего — урон на WIND_BONUS больше; чужой ветер не влияет.
+    let total = |wind: Option<Element>| {
+        (0..300u64)
+            .map(|seed| {
+                let attacker = unit("a", Element::Powder, 1000, 100, 200);
+                let target = unit("t", Element::Steel, 100_000, 1, 1);
+                let mut battle = Battle::new(vec![attacker], vec![target], SHIP, seed);
+                battle.set_wind(wind);
+                let events = battle.act(Action::basic(None)).unwrap();
+                events
+                    .iter()
+                    .find_map(|e| match e {
+                        Event::Damage {
+                            amount,
+                            source: Some(_),
+                            ..
+                        } => Some(*amount as u64),
+                        _ => None,
+                    })
+                    .unwrap()
+            })
+            .sum::<u64>()
+    };
+    let calm = total(None);
+    let ratio = total(Some(Element::Powder)) as f64 / calm as f64;
+    let want = 1.0 + WIND_BONUS as f64;
+    assert!(
+        (want - 0.02..want + 0.02).contains(&ratio),
+        "отношение урона {ratio}"
+    );
+    assert_eq!(total(Some(Element::Wind)), calm);
+}
+
+#[test]
 fn skill_fires_on_every_nth_turn() {
     let mut hero = unit("hero", Element::Wind, 1000, 10, 1000);
     hero.skill = Some(Ability {

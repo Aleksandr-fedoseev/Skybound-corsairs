@@ -36,3 +36,5 @@ pub const BROADSIDE_PER_ACTION: u32 = 15;
 pub const CRIT_CHANCE: f32 = 0.10;
 pub const CRIT_MULTIPLIER: f32 = 1.5;
 pub const WEAKNESS_MULTIPLIER: f32 = 1.5;
+/// Ветер боя: бойцы стихии ветра бьют сильнее на эту долю (обе стороны, залп — нет).
+pub const WIND_BONUS: f32 = 0.25;
