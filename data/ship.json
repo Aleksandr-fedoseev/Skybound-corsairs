@@ -95,7 +95,7 @@
     { "id": "lookout", "name": "Подзорная башня", "icon": "menu/module_lookout.png", "start_level": 0, "rank": 3 }
   ],
   "scene": {
-    "look": { "seconds": 0.75, "outside_width": 380, "outside_center": [270, 440], "inside_frame": [10, 150, 530, 640] },
+    "look": { "seconds": 0.75, "outside_width": 270, "outside_center": [270, 470], "inside_frame": [10, 150, 530, 745] },
     "backdrop": {
       "image": "menu/sky_pano.jpg",
       "width": 2049,

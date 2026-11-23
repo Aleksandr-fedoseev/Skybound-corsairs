@@ -397,9 +397,10 @@ fn build(commands: &mut Commands, view: &MenuView) {
             slide(root, Vec2::new(0.0, -260.0), false, |r| {
                 side_buttons(r, fonts, view.contracts.claimable(&view.contract_data));
             });
-            slide(root, Vec2::new(0.0, 290.0), false, |r| {
+            slide(root, Vec2::new(0.0, 200.0), false, |r| voyage(r, fonts, next, done));
+            // Улучшения отсеков — только на осмотре: выезжают снизу на место «В поход».
+            slide(root, Vec2::new(0.0, 200.0), true, |r| {
                 compartments(r, assets, fonts, ship_data, ship, view.page.0);
-                voyage(r, fonts, next, done);
             });
             slide(root, Vec2::new(-130.0, 0.0), true, |r| {
                 back_button(r, fonts)
@@ -1359,7 +1360,7 @@ fn compartments(
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
-            top: px(682),
+            top: px(762),
             left: px(10),
             width: px(520),
             height: px(108),
