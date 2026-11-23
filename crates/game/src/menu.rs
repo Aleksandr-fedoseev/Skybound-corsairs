@@ -20,7 +20,6 @@ use crate::ship::{Compartment, OpenCompartment, RoomTimer, Ship, ShipData};
 use crate::story::{StoryQueue, VoyageRequest};
 use crate::view::{Fonts, ResultNote};
 
-pub(crate) const WOOD: Color = Color::srgba(0.11, 0.075, 0.05, 0.90);
 pub(crate) const DARK_WOOD: Color = Color::srgb(0.09, 0.06, 0.04);
 pub(crate) const BRASS: Color = Color::srgb(0.79, 0.59, 0.25);
 pub(crate) const PARCHMENT: Color = Color::srgb(0.965, 0.906, 0.784);

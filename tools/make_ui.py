@@ -38,7 +38,7 @@ ELEMENT = {
     "steel": (158, 173, 191),
     "mist": (204, 224, 250),
 }
-RARITY = {"R": (180, 189, 204), "SR": (178, 140, 255), "SSR": (242, 193, 78)}
+RARITY = {"R": (180, 189, 204), "SR": (178, 140, 255), "SSR": (242, 193, 78), "ENEMY": (205, 70, 58)}
 
 
 def noise(w, h, blur=1.5, scale=1.0):
@@ -191,6 +191,29 @@ def portrait_crop(hero, anim):
     return frame.crop((left, y0 - side // 12, left + side, y0 - side // 12 + side))
 
 
+def enemy_face(unit, anim):
+    """Враг для медальона: существо (широкий рисунок) — целиком, человек — голова и плечи."""
+    info = anim.get(unit)
+    path = UNITS / f"{unit}.png"
+    if not info or not path.exists():
+        return None
+    fw, fh = info["frame"]
+    frame = Image.open(path).convert("RGBA").crop((0, 0, fw, fh))
+    frame = frame.crop(frame.getbbox())
+    w, h = frame.size
+    if w > h * 0.9:
+        side = max(w, h)
+        square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+        square.alpha_composite(frame, ((side - w) // 2, (side - h) // 2))
+        return square
+    side = int(h * 0.42)
+    top = np.asarray(frame.crop((0, int(h * 0.04), w, int(h * 0.2))))[:, :, 3] > 40
+    cols = np.where(top.sum(axis=0) > top.shape[0] * 0.5)[0]
+    cx = int(np.median(cols)) if len(cols) else w // 2
+    left = min(max(cx - side // 2, 0), max(w - side, 0))
+    return frame.crop((left, 0, left + side, side))
+
+
 def medallion(hero, element, rarity, name, anim, size=192):
     """Круг цвета стихии, портрет и кольцо редкости — одной картинкой."""
     big = size * 2
@@ -203,7 +226,7 @@ def medallion(hero, element, rarity, name, anim, size=192):
     rgb = np.array(col, float)[None, None, :] * shade
     bg = finish(rgb, (r < 0.94) * 255)
     im.alpha_composite(bg)
-    face = portrait_crop(hero, anim)
+    face = enemy_face(hero, anim) if rarity == "ENEMY" else portrait_crop(hero, anim)
     if face is not None:
         face = face.resize((int(big * 0.92), int(big * 0.92)), Image.LANCZOS)
         layer = Image.new("RGBA", (big, big), (0, 0, 0, 0))
@@ -486,6 +509,9 @@ def main():
     for h in heroes:
         save(f"hero_{h['id']}.png", medallion(h["id"], h["element"], h["rarity"], h["name"], anim))
         save(f"full_{h['id']}.png", figure(h["id"], anim))
+    # Враги в очереди ходов — медальоны в красном кольце.
+    for e in json.load(open("data/enemies.json")):
+        save(f"unit_{e['id']}.png", medallion(e["id"], e["element"], "ENEMY", e["name"], anim))
     # Листы из Gemini — поверх временных иконок.
     cut_sheets()
 
