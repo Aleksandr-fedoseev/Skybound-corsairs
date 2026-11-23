@@ -397,7 +397,9 @@ fn build(commands: &mut Commands, view: &MenuView) {
             slide(root, Vec2::new(0.0, -260.0), false, |r| {
                 side_buttons(r, fonts, view.contracts.claimable(&view.contract_data));
             });
-            slide(root, Vec2::new(0.0, 200.0), false, |r| voyage(r, fonts, next, done));
+            slide(root, Vec2::new(0.0, 200.0), false, |r| {
+                voyage(r, fonts, next, done)
+            });
             // Улучшения отсеков — только на осмотре: выезжают снизу на место «В поход».
             slide(root, Vec2::new(0.0, 200.0), true, |r| {
                 compartments(r, assets, fonts, ship_data, ship, view.page.0);
@@ -496,73 +498,112 @@ fn ship_view(
         UiTransform::default(),
     ));
     sprite.with_children(|deck| {
-        ship_rooms(deck, assets, fonts, ship_data, ship, selected);
+        // Главная: маленький упрощённый корабль. На осмотре он гаснет, за ним — большой.
+        let [x0, y0, x1, y1] = view.bounds;
         deck.spawn((
-            Exterior,
+            FarShip,
+            Node {
+                position_type: PositionType::Absolute,
+                left: pct(x0),
+                top: pct(y0),
+                width: pct(x1 - x0),
+                height: pct(y1 - y0),
+                ..default()
+            },
+            ImageNode::new(assets.load(view.far())),
+        ))
+        .observe(open_ship);
+        deck.spawn((
+            ShipBody,
             Node {
                 position_type: PositionType::Absolute,
                 width: percent(100),
                 height: percent(100),
                 ..default()
             },
+            Visibility::Hidden,
+            Pickable::IGNORE,
         ))
-        .with_children(|outside| {
-            outside.spawn((
-                ExteriorImage,
+        .with_children(|deck| {
+            ship_rooms(deck, assets, fonts, ship_data, ship, selected);
+            deck.spawn((
+                Exterior,
                 Node {
                     position_type: PositionType::Absolute,
                     width: percent(100),
                     height: percent(100),
                     ..default()
                 },
-                ImageNode::new(assets.load(view.exterior())),
-                Pickable::IGNORE,
-            ));
-            // Улучшения над палубой (ветроловы) видны и снаружи.
-            for room in view.rooms.iter().filter(|r| r.outside) {
-                let Some(image) = room.image(ship.level(&room.id)) else {
-                    continue;
-                };
-                let [x, y, w, h] = room.rect;
+            ))
+            .with_children(|outside| {
                 outside.spawn((
                     ExteriorImage,
                     Node {
                         position_type: PositionType::Absolute,
-                        left: pct(x),
-                        top: pct(y),
-                        width: pct(w),
-                        height: pct(h),
+                        width: percent(100),
+                        height: percent(100),
                         ..default()
                     },
-                    ImageNode::new(assets.load(image.to_string())),
+                    ImageNode::new(assets.load(view.exterior())),
                     Pickable::IGNORE,
                 ));
-            }
-            if let Some(sails) = &view.sails {
-                for (index, sail) in sails.layers.iter().enumerate() {
-                    spawn_sail(outside, assets, SHIP_ART, sails.slices, index, sail);
+                // Улучшения над палубой (ветроловы) видны и снаружи.
+                for room in view.rooms.iter().filter(|r| r.outside) {
+                    let Some(image) = room.image(ship.level(&room.id)) else {
+                        continue;
+                    };
+                    let [x, y, w, h] = room.rect;
+                    outside.spawn((
+                        ExteriorImage,
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: pct(x),
+                            top: pct(y),
+                            width: pct(w),
+                            height: pct(h),
+                            ..default()
+                        },
+                        ImageNode::new(assets.load(image.to_string())),
+                        Pickable::IGNORE,
+                    ));
                 }
-            }
-        })
-        .observe(
-            |_: On<PointerClick>,
-             mut cam: ResMut<ShipCam>,
-             mut sfx: MessageWriter<Sfx>,
-             mut rebuild: ResMut<MenuRebuild>| {
-                if cam.open {
-                    return;
+                if let Some(sails) = &view.sails {
+                    for (index, sail) in sails.layers.iter().enumerate() {
+                        spawn_sail(outside, assets, SHIP_ART, sails.slices, index, sail);
+                    }
                 }
-                cam.open = true;
-                sfx.write(Sfx("click"));
-                rebuild.0 = true;
-            },
-        );
-        propeller(deck, assets, view);
+            })
+            .observe(open_ship);
+            propeller(deck, assets, view);
+        });
         // Ветроловы накопили эфир — пузырь над кораблём, тап собирает.
         let [x, y] = view.bubble;
         ether_bubble(deck, fonts, pct(x), pct(y));
     });
 }
+
+/// Тап по кораблю на главной — к осмотру.
+fn open_ship(
+    _: On<PointerClick>,
+    mut cam: ResMut<ShipCam>,
+    mut sfx: MessageWriter<Sfx>,
+    mut rebuild: ResMut<MenuRebuild>,
+) {
+    if cam.open {
+        return;
+    }
+    cam.open = true;
+    sfx.write(Sfx("click"));
+    rebuild.0 = true;
+}
+
+/// Упрощённый корабль главной.
+#[derive(Component)]
+struct FarShip;
+
+/// Большой корабль (разрез, облик снаружи, винт): виден только на осмотре и по пути к нему.
+#[derive(Component)]
+struct ShipBody;
 
 /// Парус: скатка на рее и полотно, нарезанное на полосы (каждая колышется сама).
 fn spawn_sail(
@@ -1082,7 +1123,10 @@ fn scroll_backdrop(
     if let Some(fall) = &data.scene.backdrop.waterfall {
         let frame = (t * fall.fps) as u32 % fall.frames;
         let [_, _, w, h] = fall.rect;
-        let corner = Vec2::new((frame % fall.columns) as f32 * w, (frame / fall.columns) as f32 * h);
+        let corner = Vec2::new(
+            (frame % fall.columns) as f32 * w,
+            (frame / fall.columns) as f32 * h,
+        );
         for mut image in &mut water {
             image.rect = Some(Rect::from_corners(corner, corner + Vec2::new(w, h)));
         }
@@ -1865,6 +1909,17 @@ fn frame_ship(
     mut exterior: Query<&mut Visibility, (With<Exterior>, Without<Slide>)>,
     mut images: Query<&mut ImageNode, With<ExteriorImage>>,
     mut slides: Query<(&Slide, &mut UiTransform, &mut Visibility), Without<ShipSprite>>,
+    mut body: Query<&mut Visibility, (With<ShipBody>, Without<Exterior>, Without<Slide>)>,
+    mut far: Query<
+        (&mut ImageNode, &mut Visibility),
+        (
+            With<FarShip>,
+            Without<ExteriorImage>,
+            Without<ShipBody>,
+            Without<Exterior>,
+            Without<Slide>,
+        ),
+    >,
 ) {
     let def = ship.current(&data);
     let look = &data.scene.look;
@@ -1901,6 +1956,19 @@ fn frame_ship(
     };
     for mut vis in &mut exterior {
         vis.set_if_neq(shown(e > 0.98));
+    }
+    // Маленький корабль главной гаснет в начале приближения, за ним уже большой.
+    for mut vis in &mut body {
+        vis.set_if_neq(if e > 0.01 {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        });
+    }
+    let far_alpha = 1.0 - smoothstep(0.0, 0.3, e);
+    for (mut image, mut vis) in &mut far {
+        image.color = Color::WHITE.with_alpha(far_alpha);
+        vis.set_if_neq(shown(far_alpha < 0.01));
     }
     for mut image in &mut images {
         image.color = Color::WHITE.with_alpha(1.0 - e);

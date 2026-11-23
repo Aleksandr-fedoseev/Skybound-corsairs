@@ -95,7 +95,7 @@
     { "id": "lookout", "name": "Подзорная башня", "icon": "menu/module_lookout.png", "start_level": 0, "rank": 3 }
   ],
   "scene": {
-    "look": { "seconds": 0.75, "outside_width": 270, "outside_center": [270, 470], "inside_frame": [10, 150, 530, 745] },
+    "look": { "seconds": 0.75, "outside_width": 180, "outside_center": [270, 470], "inside_frame": [10, 150, 530, 745] },
     "backdrop": {
       "image": "menu/sky_pano.jpg",
       "width": 2049,
@@ -142,7 +142,7 @@
       "max_level": 3,
       "art": "ships/lastochka",
       "bounds": [77, 69, 954, 904],
-      "bubble": [800, 300],
+      "bubble": [256, -161],
       "rooms": [
         { "id": "navigation", "rect": [160, 462, 130, 116] },
         { "id": "lookout", "rect": [295, 462, 165, 116] },
@@ -166,7 +166,7 @@
       "price": { "silver": 6000, "planks": 1500, "ether": 300 },
       "art": "ships/petrel",
       "bounds": [11, 109, 1010, 823],
-      "bubble": [120, 400],
+      "bubble": [250, -121],
       "rooms": [
         { "id": "navigation", "rect": [278, 505, 144, 92] },
         { "id": "tavern", "rect": [428, 505, 132, 92] },
@@ -193,7 +193,7 @@
       "price": { "silver": 15000, "planks": 4000, "ether": 1500 },
       "art": "ships/leviathan",
       "bounds": [36, 102, 1007, 885],
-      "bubble": [860, 330],
+      "bubble": [262, -128],
       "rooms": [
         { "id": "navigation", "rect": [100, 448, 122, 62] },
         { "id": "lookout", "rect": [226, 448, 136, 62] },
@@ -226,7 +226,7 @@
       "doubloons": 980,
       "art": "ships/falcon",
       "bounds": [22, 62, 967, 872],
-      "bubble": [110, 330],
+      "bubble": [234, -168],
       "rooms": [
         { "id": "navigation", "rect": [275, 495, 130, 85] },
         { "id": "throne", "rect": [410, 495, 145, 85] },

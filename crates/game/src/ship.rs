@@ -98,6 +98,10 @@ impl ShipDef {
     pub fn exterior(&self) -> String {
         format!("{}/exterior.png", self.art)
     }
+    /// Упрощённый корабль для главной: там он маленький. Вписан в рамку `bounds`.
+    pub fn far(&self) -> String {
+        format!("{}/far.png", self.art)
+    }
     pub fn hull(&self) -> String {
         format!("{}/hull.png", self.art)
     }
