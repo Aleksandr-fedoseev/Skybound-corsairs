@@ -151,6 +151,8 @@ pub fn offline(save: &mut SaveData, data: &ShipData, convoy: &ConvoyData, second
 /// Поставить загруженное сохранение в игру (после плагинов — заменяет стартовые ресурсы).
 pub fn apply(app: &mut App, mut save: SaveData) {
     let data = ShipData::bundled();
+    // Старые сохранения: Корпус — в купленные корабли.
+    save.ship.migrate(&data);
     let away = now().saturating_sub(save.saved_at);
     let report = offline(&mut save, &data, &ConvoyData::bundled(), away);
     app.insert_resource(save.profile)
@@ -279,15 +281,15 @@ mod tests {
         let mut save = fresh();
         save.profile.ether_pending = 0.0;
         save.ship.build = Some(Build {
-            id: "hull".into(),
+            id: "hold".into(),
             to: 2,
             left: 60.0,
         });
         let report = offline(&mut save, &data, &ConvoyData::bundled(), 600);
         assert!(save.ship.build.is_none());
-        assert_eq!(save.ship.hull(), 2);
+        assert_eq!(save.ship.level("hold"), 2);
         assert!(save.profile.ether_pending > 0.0);
-        assert!(report.contains("Корпус"));
+        assert!(report.contains("Трюм"));
     }
 
     #[test]

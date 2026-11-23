@@ -1,7 +1,6 @@
 {
   "max_level": 7,
   "speedup_doubloons_per_minute": 5,
-  "hull_cost_factor": 1.5,
   "levels": [
     { "level": 1, "seconds": 60, "silver": 150, "planks": 40, "ether": 0 },
     { "level": 2, "seconds": 60, "silver": 200, "planks": 40, "ether": 0 },
@@ -13,88 +12,227 @@
   ],
   "compartments": [
     {
-      "id": "hull", "name": "Корпус", "icon": "menu/ship_lvl1.png", "unlock_hull": 1, "start_level": 1,
-      "effect": { "kind": "hull" }
+      "id": "cannon_deck",
+      "name": "Пушечная палуба",
+      "short": "Пушки",
+      "icon": "menu/module_cannon_deck.png",
+      "start_level": 1,
+      "effect": { "kind": "broadside", "values": [120, 150, 185, 225, 270, 320, 380] },
+      "rank": 1
     },
     {
-      "id": "cannon_deck", "name": "Пушечная палуба", "short": "Пушки", "icon": "menu/module_cannon_deck.png", "unlock_hull": 1, "start_level": 1,
-      "effect": { "kind": "broadside", "values": [120, 150, 185, 225, 270, 320, 380] }
-    },
-    {
-      "id": "hold", "name": "Трюм", "icon": "menu/module_hold.png", "unlock_hull": 1, "start_level": 1,
+      "id": "hold",
+      "name": "Трюм",
+      "icon": "menu/module_hold.png",
+      "start_level": 1,
       "effect": {
         "kind": "hold",
         "silver": [2000, 3500, 6000, 10000, 16000, 25000, 40000],
         "planks": [600, 1000, 1700, 2800, 4500, 7000, 11000],
         "ether": [300, 500, 900, 1500, 2500, 4000, 6500]
-      }
+      },
+      "rank": 1
     },
     {
-      "id": "windcatchers", "name": "Ветроловы", "icon": "menu/module_windcatchers.png", "unlock_hull": 1, "start_level": 1,
-      "effect": { "kind": "ether_per_minute", "values": [6, 9, 13, 18, 24, 31, 40] }
+      "id": "windcatchers",
+      "name": "Ветроловы",
+      "icon": "menu/module_windcatchers.png",
+      "start_level": 1,
+      "effect": { "kind": "ether_per_minute", "values": [6, 9, 13, 18, 24, 31, 40] },
+      "rank": 1
     },
     {
-      "id": "tavern", "name": "Таверна", "icon": "menu/module_tavern.png", "unlock_hull": 1, "start_level": 1, "opens": "tavern",
-      "effect": { "kind": "free_hires", "values": [1, 1, 2, 2, 2, 3, 3] }
+      "id": "tavern",
+      "name": "Таверна",
+      "icon": "menu/module_tavern.png",
+      "start_level": 1,
+      "opens": "tavern",
+      "effect": { "kind": "free_hires", "values": [1, 1, 2, 2, 2, 3, 3] },
+      "rank": 1
     },
     {
-      "id": "training_deck", "name": "Тренировочная палуба", "short": "Тренировка", "icon": "menu/module_training_deck.png", "unlock_hull": 2, "start_level": 0,
-      "effect": { "kind": "journals_per_minute", "values": [2, 3, 4, 6, 8, 10, 13] }
-    },
-    { "id": "navigation", "name": "Штурманская рубка", "short": "Рубка", "icon": "menu/module_navigation.png", "unlock_hull": 2, "start_level": 0 },
-    {
-      "id": "boats", "name": "Шлюпки", "icon": "menu/module_boats.png", "unlock_hull": 4, "start_level": 0,
-      "effect": { "kind": "boats", "values": [1, 1, 2, 2, 3, 3, 3] }
-    },
-    {
-      "id": "workshop", "name": "Мастерская", "icon": "menu/module_navigation.png", "unlock_hull": 3, "start_level": 0,
-      "effect": { "kind": "workshop", "values": [1, 1, 2, 2, 3, 3, 3] }
+      "id": "training_deck",
+      "name": "Тренировочная палуба",
+      "short": "Тренировка",
+      "icon": "menu/module_training_deck.png",
+      "start_level": 0,
+      "effect": { "kind": "journals_per_minute", "values": [2, 3, 4, 6, 8, 10, 13] },
+      "rank": 1
     },
     {
-      "id": "cabins", "name": "Каюты", "icon": "menu/module_infirmary.png", "unlock_hull": 4, "start_level": 0,
-      "effect": { "kind": "cabins", "values": [1, 2, 3, 4, 5, 5, 5] }
+      "id": "navigation",
+      "name": "Штурманская рубка",
+      "short": "Рубка",
+      "icon": "menu/module_navigation.png",
+      "start_level": 0,
+      "rank": 1
     },
-    { "id": "infirmary", "name": "Лазарет", "icon": "menu/module_infirmary.png", "unlock_hull": 6, "start_level": 0 },
-    { "id": "lookout", "name": "Подзорная башня", "icon": "menu/module_lookout.png", "unlock_hull": 7, "start_level": 0 }
+    {
+      "id": "boats",
+      "name": "Шлюпки",
+      "icon": "menu/module_boats.png",
+      "start_level": 0,
+      "effect": { "kind": "boats", "values": [1, 1, 2, 2, 3, 3, 3] },
+      "rank": 2
+    },
+    {
+      "id": "workshop",
+      "name": "Мастерская",
+      "icon": "menu/module_navigation.png",
+      "start_level": 0,
+      "effect": { "kind": "workshop", "values": [1, 1, 2, 2, 3, 3, 3] },
+      "rank": 1
+    },
+    {
+      "id": "cabins",
+      "name": "Каюты",
+      "icon": "menu/module_infirmary.png",
+      "start_level": 0,
+      "effect": { "kind": "cabins", "values": [1, 2, 3, 4, 5, 5, 5] },
+      "rank": 2
+    },
+    { "id": "infirmary", "name": "Лазарет", "icon": "menu/module_infirmary.png", "start_level": 0, "rank": 3 },
+    { "id": "lookout", "name": "Подзорная башня", "icon": "menu/module_lookout.png", "start_level": 0, "rank": 3 }
   ],
-  "view": {
-    "exterior": "ship/exterior.png",
-    "look": {
-      "seconds": 0.75,
-      "bounds": [21, 67, 1005, 851],
-      "viewport": [0, 120, 540, 880],
-      "outside": { "side": 360, "focus": [513, 459], "center": [270, 445] },
-      "inside": { "side": 990, "focus": [513, 459], "center": [270, 500] }
-    },
-    "sails": {
-      "unfurl": 2.4, "furl": 1.0, "stagger": 0.45, "slices": 16, "ripple": 0.035,
-      "layers": [
-        { "furled": "ship/sail_1_furled.png", "open": "ship/sail_1_open.png", "rect": [136, 193, 212, 235] },
-        { "furled": "ship/sail_2_furled.png", "open": "ship/sail_2_open.png", "rect": [524, 274, 260, 179] }
-      ]
-    },
+  "scene": {
+    "look": { "seconds": 0.75, "outside_width": 380, "outside_center": [270, 440], "inside_frame": [10, 150, 530, 640] },
     "backdrop": { "image": "menu/sky_pano.jpg", "width": 2263, "speed": 9 },
     "birds": { "image": "fx/bird.png", "count": 5, "speed": 38, "every": 22, "top": 250 },
     "clouds": [
       { "image": "menu/cloud_1.png", "top": 150, "width": 190, "speed": 14, "phase": 0.1, "alpha": 0.9 },
       { "image": "menu/cloud_2.png", "top": 270, "width": 150, "speed": 18, "phase": 0.55, "alpha": 0.9 },
       { "image": "menu/cloud_3.png", "top": 430, "width": 170, "speed": 16, "phase": 0.85, "alpha": 0.9 },
-      { "image": "menu/cloud_4.png", "top": 610, "width": 560, "speed": 34, "phase": 0.3, "alpha": 1.0, "front": true },
-      { "image": "menu/cloud_2.png", "top": 650, "width": 260, "speed": 28, "phase": 0.8, "alpha": 1.0, "front": true }
+      {
+        "image": "menu/cloud_4.png",
+        "top": 610,
+        "width": 560,
+        "speed": 34,
+        "phase": 0.3,
+        "alpha": 1.0,
+        "front": true
+      },
+      {
+        "image": "menu/cloud_2.png",
+        "top": 650,
+        "width": 260,
+        "speed": 28,
+        "phase": 0.8,
+        "alpha": 1.0,
+        "front": true
+      }
     ],
-    "hull": "ship/hull.png",
-    "size": 1024,
-    "locked": "ship/locked.png",
-    "scaffold": "ship/scaffold.png",
-    "propeller": { "image": "ship/propeller.png", "at": [96, 722], "size": 150, "turns_per_second": 1.3 },
-    "rooms": [
-      { "id": "tavern", "rect": [176, 490, 196, 150], "tiers": [{ "from": 2, "image": "ship/tavern_2.png" }] },
-      { "id": "cannon_deck", "rect": [390, 490, 188, 150], "tiers": [{ "from": 2, "image": "ship/cannon_deck_2.png" }] },
-      { "id": "training_deck", "rect": [592, 490, 190, 150], "tiers": [] },
-      { "id": "hold", "rect": [160, 648, 212, 168], "tiers": [{ "from": 2, "image": "ship/hold_2.png" }] },
-      { "id": "workshop", "rect": [390, 648, 188, 168], "tiers": [] },
-      { "id": "cabins", "rect": [592, 648, 190, 168], "tiers": [] },
-      { "id": "windcatchers", "rect": [21, 166, 452, 304], "tag": [0.17, 0.12], "outside": true, "tiers": [{ "from": 2, "image": "ship/windcatchers_2.png" }] }
-    ]
-  }
+    "scaffold": "ship/scaffold.png"
+  },
+  "ships": [
+    {
+      "id": "lastochka",
+      "name": "Ласточка",
+      "about": "Маленькая и вёрткая: с неё начинают все корсары.",
+      "rank": 1,
+      "max_level": 3,
+      "art": "ships/lastochka",
+      "bounds": [77, 69, 954, 904],
+      "bubble": [800, 300],
+      "rooms": [
+        { "id": "navigation", "rect": [160, 462, 130, 116] },
+        { "id": "lookout", "rect": [295, 462, 165, 116] },
+        { "id": "tavern", "rect": [465, 462, 167, 116] },
+        { "id": "cannon_deck", "rect": [640, 500, 160, 78] },
+        { "id": "infirmary", "rect": [228, 590, 200, 115] },
+        { "id": "cabins", "rect": [433, 590, 189, 115] },
+        { "id": "workshop", "rect": [627, 590, 173, 115] },
+        { "id": "training_deck", "rect": [228, 718, 200, 122] },
+        { "id": "hold", "rect": [433, 718, 189, 122] },
+        { "id": "windcatchers", "rect": [627, 718, 173, 122] }
+      ]
+    },
+    {
+      "id": "petrel",
+      "name": "Буревестник",
+      "about": "Быстрый клипер с крыльями-парусами: шлюпки и каюты для экипажа.",
+      "rank": 2,
+      "max_level": 5,
+      "after_chapter": 1,
+      "price": { "silver": 6000, "planks": 1500, "ether": 300 },
+      "art": "ships/petrel",
+      "bounds": [11, 109, 1010, 823],
+      "bubble": [120, 400],
+      "rooms": [
+        { "id": "navigation", "rect": [278, 505, 144, 92] },
+        { "id": "tavern", "rect": [428, 505, 132, 92] },
+        { "id": "cannon_deck", "rect": [568, 505, 130, 92] },
+        { "id": "training_deck", "rect": [705, 505, 140, 92] },
+        { "id": "workshop", "rect": [278, 605, 144, 80] },
+        { "id": "cabins", "rect": [428, 605, 132, 80] },
+        { "id": "hold", "rect": [568, 605, 130, 80] },
+        { "id": "boats", "rect": [705, 605, 140, 80] },
+        { "id": "windcatchers", "rect": [278, 693, 144, 89] },
+        { "id": "infirmary", "rect": [428, 693, 132, 89] },
+        { "id": "galley", "rect": [568, 693, 130, 89] },
+        { "id": "armory", "rect": [705, 693, 140, 89] },
+        { "id": "lookout", "rect": [742, 392, 90, 66] }
+      ]
+    },
+    {
+      "id": "leviathan",
+      "name": "Левиафан",
+      "about": "Летучий флагман: на борту найдётся место для каждого отсека.",
+      "rank": 3,
+      "max_level": 7,
+      "after_chapter": 2,
+      "price": { "silver": 15000, "planks": 4000, "ether": 1500 },
+      "art": "ships/leviathan",
+      "bounds": [36, 102, 1007, 885],
+      "bubble": [860, 330],
+      "rooms": [
+        { "id": "navigation", "rect": [100, 448, 122, 62] },
+        { "id": "lookout", "rect": [226, 448, 136, 62] },
+        { "id": "tavern", "rect": [368, 448, 148, 62] },
+        { "id": "cannon_deck", "rect": [520, 448, 162, 62] },
+        { "id": "training_deck", "rect": [686, 448, 146, 62] },
+        { "id": "armory", "rect": [100, 525, 122, 65] },
+        { "id": "workshop", "rect": [226, 525, 136, 65] },
+        { "id": "drafting", "rect": [366, 525, 150, 65] },
+        { "id": "cabins", "rect": [520, 525, 162, 65] },
+        { "id": "quarters", "rect": [686, 525, 146, 65] },
+        { "id": "hold", "rect": [226, 600, 136, 70] },
+        { "id": "boats", "rect": [366, 600, 150, 70] },
+        { "id": "windcatchers", "rect": [520, 600, 162, 70] },
+        { "id": "infirmary", "rect": [686, 600, 146, 70] },
+        { "id": "galley", "rect": [226, 680, 136, 65] },
+        { "id": "arsenal", "rect": [366, 680, 150, 65] },
+        { "id": "library", "rect": [520, 680, 162, 65] },
+        { "id": "brig", "rect": [686, 680, 146, 65] },
+        { "id": "captain", "rect": [366, 755, 150, 65] },
+        { "id": "archive", "rect": [520, 755, 162, 65] }
+      ]
+    },
+    {
+      "id": "falcon",
+      "name": "Золотой сокол",
+      "about": "Особый корабль: роскошь, золото и эфирные паруса.",
+      "rank": 2,
+      "max_level": 5,
+      "doubloons": 980,
+      "art": "ships/falcon",
+      "bounds": [22, 62, 967, 872],
+      "bubble": [110, 330],
+      "rooms": [
+        { "id": "navigation", "rect": [275, 495, 130, 85] },
+        { "id": "throne", "rect": [410, 495, 145, 85] },
+        { "id": "galley", "rect": [565, 495, 135, 85] },
+        { "id": "infirmary", "rect": [710, 495, 145, 85] },
+        { "id": "cannon_deck", "rect": [255, 595, 150, 85] },
+        { "id": "armory", "rect": [415, 595, 140, 85] },
+        { "id": "workshop", "rect": [565, 595, 135, 85] },
+        { "id": "tavern", "rect": [710, 595, 145, 85] },
+        { "id": "training_deck", "rect": [275, 690, 165, 95] },
+        { "id": "hold", "rect": [445, 690, 190, 95] },
+        { "id": "windcatchers", "rect": [645, 690, 160, 95] },
+        { "id": "boats", "rect": [665, 800, 150, 58] },
+        { "id": "lookout", "rect": [600, 335, 125, 50] },
+        { "id": "cabins", "rect": [600, 395, 125, 80] }
+      ]
+    }
+  ]
 }
