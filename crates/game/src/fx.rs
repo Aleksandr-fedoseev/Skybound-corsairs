@@ -516,6 +516,12 @@ pub fn animate_band(
         }
         None => (0.0, 0.0),
     };
+    // Бой окончен — полоса не спорит с панелью итога.
+    let alpha = if screen.shown_outcome.is_some() {
+        0.0
+    } else {
+        alpha
+    };
     for (mut bg, mut transform) in &mut band {
         bg.0 = BAND.with_alpha(BAND.alpha() * alpha);
         transform.translation = Val2::px(-BAND_SLIDE * slide, 0.0);

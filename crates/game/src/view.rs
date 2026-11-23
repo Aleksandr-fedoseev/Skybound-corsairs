@@ -40,6 +40,9 @@ pub fn element_color(element: Element) -> Color {
     }
 }
 
+/// Отступ панели итога боя от верха экрана (под полосами здоровья и очередью ходов).
+const RESULT_TOP: f32 = 140.0;
+
 #[derive(Resource)]
 pub struct Fonts {
     pub regular: Handle<Font>,
@@ -274,12 +277,14 @@ fn spawn_hud(
                 width: percent(100),
                 height: percent(100),
                 flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::Center,
+                // Панель — наверху, где стояли враги: отряд в позах победы виден под ней.
+                justify_content: JustifyContent::FlexStart,
+                padding: UiRect::top(px(RESULT_TOP)),
                 align_items: AlignItems::Center,
                 row_gap: px(12),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.55)),
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.25)),
             Visibility::Hidden,
             GlobalZIndex(10),
         ))
