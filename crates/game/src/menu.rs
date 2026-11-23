@@ -304,6 +304,7 @@ struct MenuView<'w> {
     gear: Res<'w, crate::gear::Gear>,
     page: Res<'w, TilePage>,
     ship_open: Res<'w, ShipOpen>,
+    event_data: Res<'w, EventData>,
 }
 
 fn spawn_menu(mut commands: Commands, view: MenuView) {
@@ -420,7 +421,12 @@ fn build(commands: &mut Commands, view: &MenuView) {
             clouds(root, assets, &ship_data.view, false);
             top_bar(root, assets, fonts, profile);
             if !open_ship {
-                side_buttons(root, fonts, view.contracts.claimable(&view.contract_data));
+                side_buttons(
+                    root,
+                    fonts,
+                    view.event_data.current_short(),
+                    view.contracts.claimable(&view.contract_data),
+                );
             }
 
             // Имя корабля над ним.
@@ -1113,7 +1119,14 @@ fn top_bar(
     });
 }
 
-fn side_buttons(root: &mut ChildSpawnerCommands, fonts: &Fonts, contracts_ready: bool) {
+/// Кнопки по бокам главной: слева — ивент недели, справа — контракты.
+/// Боевой пропуск и почта появятся здесь, когда будут готовы (сейчас кнопок нет).
+fn side_buttons(
+    root: &mut ChildSpawnerCommands,
+    fonts: &Fonts,
+    event: &str,
+    contracts_ready: bool,
+) {
     let column = |left: bool| Node {
         position_type: PositionType::Absolute,
         top: px(76),
@@ -1123,21 +1136,13 @@ fn side_buttons(root: &mut ChildSpawnerCommands, fonts: &Fonts, contracts_ready:
         row_gap: px(10),
         ..default()
     };
-    let items: [(&str, &str, Color, bool, &'static str); 4] = [
-        ("Буря", "ивент", STORM, false, "Ивенты появятся позже"),
-        (
-            "Пропуск",
-            "сезон",
-            BRASS,
-            false,
-            "Боевой пропуск появится позже",
-        ),
-        ("Контракты", "задания", BRASS, contracts_ready, ""),
-        ("Почта", "", BRASS, false, "Почта появится позже"),
+    let items: [(&str, &str, Color, bool); 2] = [
+        (event, "ивент", STORM, false),
+        ("Контракты", "задания", BRASS, contracts_ready),
     ];
-    for (left, chunk) in [(true, &items[..2]), (false, &items[2..])] {
+    for (left, chunk) in [(true, &items[..1]), (false, &items[1..])] {
         root.spawn(column(left)).with_children(|col| {
-            for &(title, sub, edge, dot, message) in chunk {
+            for &(title, sub, edge, dot) in chunk {
                 let mut button = col.spawn((
                     Node {
                         width: px(84),
@@ -1174,12 +1179,18 @@ fn side_buttons(root: &mut ChildSpawnerCommands, fonts: &Fonts, contracts_ready:
                         ));
                     }
                 });
-                if title == "Буря" {
+                if edge == STORM {
+                    // Сразу на страницу ивента недели, а не в список Активностей.
                     pressable(&mut button);
-                    button.observe(|_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
-                        next.set(Screen::Activities);
-                    });
-                } else if title == "Контракты" {
+                    button.observe(
+                        |_: On<PointerClick>,
+                         mut page: ResMut<crate::abyss::ActivitiesPage>,
+                         mut next: ResMut<NextState<Screen>>| {
+                            page.0 = Some(crate::abyss::Page::Event);
+                            next.set(Screen::Activities);
+                        },
+                    );
+                } else {
                     pressable(&mut button);
                     button.observe(
                         |_: On<PointerClick>,
@@ -1191,8 +1202,6 @@ fn side_buttons(root: &mut ChildSpawnerCommands, fonts: &Fonts, contracts_ready:
                             rebuild.0 = true;
                         },
                     );
-                } else {
-                    later(&mut button, message);
                 }
             }
         });
@@ -1501,7 +1510,11 @@ pub(crate) fn bottom_nav(
             if !here {
                 pressable(&mut tab);
                 tab.observe(
-                    move |_: On<PointerClick>, mut next: ResMut<NextState<Screen>>| {
+                    move |_: On<PointerClick>,
+                          mut next: ResMut<NextState<Screen>>,
+                          mut page: ResMut<crate::abyss::ActivitiesPage>| {
+                        // Вкладка «Активности» открывает список, а не последний раздел.
+                        page.0 = None;
                         next.set(screen);
                     },
                 );

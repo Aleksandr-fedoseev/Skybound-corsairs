@@ -33,6 +33,9 @@ pub struct Scene {
     /// Герой, который присоединяется к команде в конце сцены.
     #[serde(default)]
     pub join: Option<String>,
+    /// Картинка во весь экран за диалогом (путь в assets/); без неё — текущий экран игры.
+    #[serde(default)]
+    pub backdrop: Option<String>,
     pub lines: Vec<Line>,
 }
 
@@ -85,6 +88,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<StoryQueue>()
         .init_resource::<Active>()
         .add_message::<VoyageRequest>()
+        .add_systems(OnEnter(Screen::Menu), new_game_intro.run_if(run_once))
         .add_systems(
             Update,
             (
@@ -94,6 +98,28 @@ pub fn plugin(app: &mut App) {
             )
                 .chain(),
         );
+}
+
+/// Новая игра: не показывать меню корабля, которого у героев ещё нет, — сразу бунт на барже
+/// (сцена перед 1-1 и первый бой). В режиме скриншота не срабатывает: кадры меню — с чистого старта.
+fn new_game_intro(
+    progress: Res<Progress>,
+    story: Res<Story>,
+    mut voyage: ResMut<Voyage>,
+    mut requests: MessageWriter<VoyageRequest>,
+) {
+    if std::env::var_os("SKYBOUND_SCREENSHOT").is_some() || progress.cleared > 0 {
+        return;
+    }
+    let intro_seen = story
+        .0
+        .iter()
+        .filter(|s| s.before.as_deref() == Some("1-1"))
+        .all(|s| progress.seen.contains(&s.id));
+    if !intro_seen {
+        *voyage = Voyage::default();
+        requests.write(VoyageRequest);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -175,7 +201,8 @@ fn show_dialogue(
     let Some(playing) = active.0 else {
         return;
     };
-    let Some(line) = story.0[playing.scene].lines.get(playing.line) else {
+    let scene = &story.0[playing.scene];
+    let Some(line) = scene.lines.get(playing.line) else {
         return;
     };
     let hero = screen.data.hero(&line.who);
@@ -198,6 +225,19 @@ fn show_dialogue(
         GlobalZIndex(60),
     ));
     root.with_children(|r| {
+        // Место действия сцены — под всем остальным, чуть притушено.
+        if let Some(image) = &scene.backdrop {
+            r.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: percent(100),
+                    height: percent(100),
+                    ..default()
+                },
+                ImageNode::new(assets.load(image.clone())).with_color(Color::srgb(0.62, 0.62, 0.7)),
+                Pickable::IGNORE,
+            ));
+        }
         // Говорящий герой во весь рост над окном реплики, как в визуальной новелле.
         if hero.is_some() {
             r.spawn((
