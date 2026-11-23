@@ -14,6 +14,14 @@ pub enum Element {
 }
 
 impl Element {
+    pub const ALL: [Element; 5] = [
+        Element::Wind,
+        Element::Mist,
+        Element::Lightning,
+        Element::Steel,
+        Element::Powder,
+    ];
+
     /// Круг стихий: каждая сильна против следующей.
     /// Ветер → Туман → Молния → Сталь → Порох → Ветер.
     pub fn beats(self) -> Element {
@@ -79,6 +87,8 @@ pub enum Effect {
     Advance { fraction: f32 },
     /// Отодвинуть цель назад по шкале ходов.
     Delay { fraction: f32 },
+    /// Развернуть ветер боя на стихию, которой больше всего в своём отряде.
+    SeizeWind,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]

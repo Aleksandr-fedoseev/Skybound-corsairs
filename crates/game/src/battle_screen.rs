@@ -134,6 +134,8 @@ pub struct BattleScreen {
     pub shown_hp: Vec<u32>,
     pub shown_current: Option<UnitId>,
     pub shown_outcome: Option<Outcome>,
+    /// Ветер боя, который видит игрок (меняется событием `WindChanged`).
+    pub shown_wind: Option<battle_core::Element>,
     pub queue: VecDeque<Event>,
     pub wait: f32,
     pub speed: u32,
@@ -175,6 +177,7 @@ impl BattleScreen {
             shown_hp: Vec::new(),
             shown_current: None,
             shown_outcome: None,
+            shown_wind: None,
             queue: VecDeque::new(),
             wait: 0.0,
             speed: 1,
@@ -200,7 +203,7 @@ impl BattleScreen {
     pub fn title(&self) -> String {
         match &self.custom {
             Some(fight) => fight.title.clone(),
-            None => match self.battle.wind() {
+            None => match self.shown_wind {
                 Some(wind) => format!(
                     "{} · {} · ветер боя: {}",
                     self.stage_id(),
@@ -236,6 +239,7 @@ impl BattleScreen {
         self.shown_hp = self.battle.units().iter().map(|u| u.hp).collect();
         self.shown_current = self.battle.current();
         self.shown_outcome = None;
+        self.shown_wind = self.battle.wind();
         self.queue.clear();
         self.spell = None;
         self.wait = self.look.step_pause;
@@ -285,6 +289,7 @@ impl BattleScreen {
             }
             Event::Healed { .. } | Event::Advanced { .. } | Event::Delayed { .. } => look.hit_gap,
             Event::Defeated { .. } => look.defeat_pause,
+            Event::WindChanged { .. } => look.broadside_windup,
             Event::TurnStarted { .. } | Event::BattleEnded { .. } => 0.0,
         }
     }
@@ -302,6 +307,7 @@ impl BattleScreen {
                 *hp = (*hp + amount).min(max);
             }
             Event::Defeated { unit } => self.shown_hp[unit.0] = 0,
+            Event::WindChanged { wind, .. } => self.shown_wind = Some(wind),
             Event::TurnStarted { unit } => self.shown_current = Some(unit),
             Event::BattleEnded { outcome } => {
                 self.shown_outcome = Some(outcome);

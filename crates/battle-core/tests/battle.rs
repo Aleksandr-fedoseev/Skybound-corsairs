@@ -144,6 +144,45 @@ fn wind_strengthens_only_its_element() {
 }
 
 #[test]
+fn wind_shifts_after_a_while() {
+    let a = unit("a", Element::Wind, 100_000, 1, 100);
+    let b = unit("b", Element::Wind, 100_000, 1, 100);
+    let mut battle = Battle::new(vec![a], vec![b], SHIP, 3);
+    battle.set_wind(Some(Element::Steel));
+    let mut events = Vec::new();
+    while battle.turn() < WIND_SHIFT_TURNS + 1 {
+        events.extend(battle.auto_step());
+    }
+    let changes: Vec<Element> = events
+        .iter()
+        .filter_map(|e| match e {
+            Event::WindChanged { wind, by: None } => Some(*wind),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(changes.len(), 1, "{changes:?}");
+    assert_ne!(changes[0], Element::Steel);
+    assert_eq!(battle.wind(), Some(changes[0]));
+}
+
+#[test]
+fn seize_wind_picks_the_squad_majority() {
+    let mut lira = unit("lira", Element::Mist, 1000, 1, 300);
+    lira.basic = ability("Манёвр", vec![(Target::Myself, Effect::SeizeWind)]);
+    let powder = unit("p", Element::Powder, 1000, 1, 1);
+    let mut battle = Battle::new(vec![lira, powder.clone(), powder], vec![sandbag()], SHIP, 1);
+    let events = battle.act(Action::basic(None)).unwrap();
+    assert!(events.iter().any(|e| matches!(
+        e,
+        Event::WindChanged {
+            wind: Element::Powder,
+            by: Some(_)
+        }
+    )));
+    assert_eq!(battle.wind(), Some(Element::Powder));
+}
+
+#[test]
 fn skill_fires_on_every_nth_turn() {
     let mut hero = unit("hero", Element::Wind, 1000, 10, 1000);
     hero.skill = Some(Ability {

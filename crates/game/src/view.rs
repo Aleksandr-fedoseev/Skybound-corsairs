@@ -146,6 +146,19 @@ pub struct ResultText;
 #[derive(Component)]
 pub struct ResultNote;
 
+/// Заголовок боя: этап и ветер (ветер меняется посреди боя).
+#[derive(Component)]
+pub struct BattleTitle;
+
+pub fn refresh_title(screen: Res<BattleScreen>, mut titles: Query<&mut Text, With<BattleTitle>>) {
+    let title = screen.title();
+    for mut text in &mut titles {
+        if text.0 != title {
+            text.0 = title.clone();
+        }
+    }
+}
+
 /// Строка тестовой сцены (только с фичей dev).
 #[cfg(feature = "dev")]
 #[derive(Component)]
@@ -235,7 +248,10 @@ fn spawn_hud(
             })
             .with_children(|top| {
                 spawn_squads(top, fonts);
-                top.spawn(crate::style::heading(fonts, screen.title(), 16.0, BRIGHT));
+                top.spawn((
+                    BattleTitle,
+                    crate::style::heading(fonts, screen.title(), 16.0, BRIGHT),
+                ));
                 spawn_turn_order(top);
             });
             spawn_bottom(root, assets, &heroes, screen, fonts);

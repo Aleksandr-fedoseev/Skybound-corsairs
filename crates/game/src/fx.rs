@@ -233,6 +233,17 @@ pub fn spawn_effects(
                     );
                 }
             }
+            Event::WindChanged { wind, by } => {
+                let element = crate::crew::element_label(*wind).to_uppercase();
+                let label = match by {
+                    Some(id) => format!(
+                        "{} РАЗВОРАЧИВАЕТ ВЕТЕР: {element}",
+                        screen.battle.unit(*id).def.name.to_uppercase()
+                    ),
+                    None => format!("ВЕТЕР МЕНЯЕТСЯ: {element}"),
+                };
+                set_band(label, crate::view::element_color(*wind), look.banner_ult);
+            }
             Event::BroadsideFired => {
                 set_band("ЗАЛП КОРАБЛЯ!".into(), BROADSIDE, look.banner_ult);
                 screen_fx.shake = Some((once(look.screen_shake_time), look.screen_shake_px * 1.3));

@@ -144,6 +144,9 @@ fn battle_sounds(
             Event::BroadsideFired => {
                 sfx.write(Sfx("broadside"));
             }
+            Event::WindChanged { .. } => {
+                sfx.write(Sfx("skill"));
+            }
             Event::Damage { weakness, crit, .. } => {
                 if now - *last_hit < data.hit_gap {
                     continue;

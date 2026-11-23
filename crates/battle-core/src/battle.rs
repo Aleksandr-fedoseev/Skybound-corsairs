@@ -13,7 +13,7 @@ use crate::rng::Rng;
 use crate::unit::{Ability, Effect, Element, Side, Target, Unit, UnitDef, UnitId};
 use crate::{
     BROADSIDE_MAX, BROADSIDE_PER_ACTION, CRIT_CHANCE, CRIT_MULTIPLIER, ENERGY_BASIC, ENERGY_MAX,
-    ENERGY_ON_HIT, ENERGY_SKILL, WEAKNESS_MULTIPLIER, WIND_BONUS,
+    ENERGY_ON_HIT, ENERGY_SKILL, WEAKNESS_MULTIPLIER, WIND_BONUS, WIND_SHIFT_TURNS,
 };
 
 /// Корабль игрока в бою. Сила залпа зависит от уровня пушечной палубы.
@@ -102,6 +102,11 @@ pub enum Event {
         unit: UnitId,
     },
     BroadsideFired,
+    /// Ветер боя сменился: сам (`by == None`) или его развернул боец.
+    WindChanged {
+        wind: Element,
+        by: Option<UnitId>,
+    },
     BattleEnded {
         outcome: Outcome,
     },
@@ -148,6 +153,8 @@ pub struct Battle {
     energy_rate: u32,
     /// Ветер боя: стихия, чьи бойцы бьют сильнее.
     wind: Option<Element>,
+    /// Ход, с которого дует текущий ветер.
+    wind_since: u32,
 }
 
 impl Battle {
@@ -159,6 +166,7 @@ impl Battle {
     /// Ветер боя: бойцы этой стихии (с обеих сторон) наносят на `WIND_BONUS` больше урона.
     pub fn set_wind(&mut self, wind: Option<Element>) {
         self.wind = wind;
+        self.wind_since = self.turn;
     }
 
     pub fn wind(&self) -> Option<Element> {
@@ -212,6 +220,7 @@ impl Battle {
             turn: 0,
             energy_rate: 1,
             wind: None,
+            wind_since: 0,
         };
         let mut events = Vec::new();
         battle.check_outcome(&mut events);
@@ -483,6 +492,19 @@ impl Battle {
         }
         self.current = Some(next);
         self.turn += 1;
+        if let Some(wind) = self.wind
+            && self.turn - self.wind_since >= WIND_SHIFT_TURNS
+        {
+            let others: Vec<Element> = Element::ALL.into_iter().filter(|e| *e != wind).collect();
+            let pick =
+                (self.rng.range_f32(0.0, others.len() as f32) as usize).min(others.len() - 1);
+            self.wind = Some(others[pick]);
+            self.wind_since = self.turn;
+            events.push(Event::WindChanged {
+                wind: others[pick],
+                by: None,
+            });
+        }
         events.push(Event::TurnStarted { unit: next });
     }
 
@@ -595,6 +617,22 @@ impl Battle {
                         events.push(Event::Delayed {
                             unit: target,
                             fraction,
+                        });
+                    }
+                    Effect::SeizeWind => {
+                        // Стихия, которой больше всего среди живых своих; при равенстве — своя.
+                        let own = self.units[actor.0].def.element;
+                        let count =
+                            |e: Element| self.alive(side).filter(|u| u.def.element == e).count();
+                        let wind = Element::ALL
+                            .into_iter()
+                            .max_by_key(|&e| (count(e), e == own))
+                            .unwrap_or(own);
+                        self.wind = Some(wind);
+                        self.wind_since = self.turn;
+                        events.push(Event::WindChanged {
+                            wind,
+                            by: Some(actor),
                         });
                     }
                 }

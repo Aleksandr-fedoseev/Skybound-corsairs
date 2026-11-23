@@ -89,7 +89,8 @@
       "name": "Штурманский манёвр",
       "effects": [
         { "target": "all_allies", "type": "advance", "fraction": 0.5 },
-        { "target": "all_enemies", "type": "delay", "fraction": 0.3 }
+        { "target": "all_enemies", "type": "delay", "fraction": 0.3 },
+        { "target": "myself", "type": "seize_wind" }
       ]
     }
   },

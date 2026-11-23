@@ -268,23 +268,23 @@
     "enemies": [
       {
         "enemy": "imperial_marine",
-        "level": 22
+        "level": 23
       },
       {
         "enemy": "imperial_gunner",
-        "level": 22
+        "level": 23
       },
       {
         "enemy": "imperial_gunner",
-        "level": 22
+        "level": 23
       },
       {
         "enemy": "imperial_marine",
-        "level": 22
+        "level": 23
       },
       {
         "enemy": "imperial_gunner",
-        "level": 22
+        "level": 23
       }
     ]
   },
@@ -320,19 +320,19 @@
     "enemies": [
       {
         "enemy": "mist_hound",
-        "level": 20
+        "level": 21
       },
       {
         "enemy": "imperial_marine",
-        "level": 20
+        "level": 21
       },
       {
         "enemy": "mist_hound",
-        "level": 20
+        "level": 21
       },
       {
         "enemy": "imperial_marine",
-        "level": 20
+        "level": 21
       }
     ]
   },
@@ -372,23 +372,23 @@
     "enemies": [
       {
         "enemy": "mist_hound",
-        "level": 18
+        "level": 21
       },
       {
         "enemy": "storm_ray",
-        "level": 18
+        "level": 21
       },
       {
         "enemy": "mist_hound",
-        "level": 18
+        "level": 21
       },
       {
         "enemy": "storm_ray",
-        "level": 18
+        "level": 21
       },
       {
         "enemy": "mist_hound",
-        "level": 18
+        "level": 21
       }
     ]
   },
@@ -400,19 +400,19 @@
     "enemies": [
       {
         "enemy": "storm_ray",
-        "level": 33
+        "level": 35
       },
       {
         "enemy": "aeromancer",
-        "level": 33
+        "level": 35
       },
       {
         "enemy": "storm_ray",
-        "level": 33
+        "level": 35
       },
       {
         "enemy": "storm_ray",
-        "level": 33
+        "level": 35
       }
     ]
   },
@@ -452,23 +452,23 @@
     "enemies": [
       {
         "enemy": "mist_hound",
-        "level": 16
+        "level": 18
       },
       {
         "enemy": "aeromancer",
-        "level": 16
+        "level": 18
       },
       {
         "enemy": "mist_hound",
-        "level": 16
+        "level": 18
       },
       {
         "enemy": "aeromancer",
-        "level": 16
+        "level": 18
       },
       {
         "enemy": "mist_hound",
-        "level": 16
+        "level": 18
       }
     ]
   },
@@ -480,15 +480,15 @@
     "enemies": [
       {
         "enemy": "mist_hound",
-        "level": 23
+        "level": 24
       },
       {
         "enemy": "archive_guardian",
-        "level": 23
+        "level": 24
       },
       {
         "enemy": "mist_hound",
-        "level": 23
+        "level": 24
       }
     ]
   }

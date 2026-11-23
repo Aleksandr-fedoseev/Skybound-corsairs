@@ -85,6 +85,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Event::Defeated { unit } => println!("    {} повержен", name(unit)),
                 Event::BroadsideFired => println!("  ЗАЛП КОРАБЛЯ"),
+                Event::WindChanged { wind, by } => match by {
+                    Some(id) => println!("  {} разворачивает ветер: {wind:?}", name(id)),
+                    None => println!("  Ветер меняется: {wind:?}"),
+                },
                 Event::BattleEnded { outcome } => println!("\nИтог: {outcome:?}"),
             }
         }

@@ -132,6 +132,7 @@ fn main() {
                 view::refresh_skill_badges,
                 view::refresh_controls,
                 view::refresh_result,
+                view::refresh_title,
                 battlefield::refresh_overhead,
             ),
             (

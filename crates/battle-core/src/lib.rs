@@ -38,3 +38,5 @@ pub const CRIT_MULTIPLIER: f32 = 1.5;
 pub const WEAKNESS_MULTIPLIER: f32 = 1.5;
 /// Ветер боя: бойцы стихии ветра бьют сильнее на эту долю (обе стороны, залп — нет).
 pub const WIND_BONUS: f32 = 0.25;
+/// Ветер боя меняется на другую стихию раз в столько ходов (если у боя есть ветер).
+pub const WIND_SHIFT_TURNS: u32 = 12;
