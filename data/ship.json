@@ -63,7 +63,7 @@
       "seconds": 0.75,
       "bounds": [21, 67, 1005, 851],
       "viewport": [0, 120, 540, 880],
-      "outside": { "side": 450, "focus": [513, 459], "center": [270, 445] },
+      "outside": { "side": 360, "focus": [513, 459], "center": [270, 445] },
       "inside": { "side": 990, "focus": [513, 459], "center": [270, 500] }
     },
     "sails": {
