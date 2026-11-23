@@ -44,6 +44,9 @@ pub struct AbyssData {
     /// Каждые столько этажей — на одного врага больше (до `max_count`).
     pub more_every: u32,
     pub max_count: u32,
+    /// На столько уровней слабее враги, когда их становится на одного больше — без скачка.
+    #[serde(default)]
+    pub level_drop_per_extra: u32,
     pub silver: u32,
     pub silver_per_floor: u32,
     pub journals: u32,
@@ -79,8 +82,11 @@ impl AbyssData {
 
     /// Враги этажа: уровень растёт с глубиной, на каждом 10-м — босс.
     pub fn enemies(&self, floor: u32) -> Vec<(String, u32)> {
-        let level = self.base_level + ((floor - 1) as f32 * self.level_per_floor) as u32;
         let count = (self.base_count + (floor - 1) / self.more_every).min(self.max_count);
+        let extra = count.saturating_sub(self.base_count);
+        let level = (self.base_level + ((floor - 1) as f32 * self.level_per_floor) as u32)
+            .saturating_sub(extra * self.level_drop_per_extra)
+            .max(1);
         let pool = &self.enemy_pool;
         let mut out: Vec<(String, u32)> = (0..count)
             .map(|i| (pool[((floor + i) as usize) % pool.len()].clone(), level))
@@ -603,7 +609,6 @@ fn abyss_card(
         .iter()
         .map(|(id, _)| screen.data.enemy(id).map_or(id.clone(), |e| e.name.clone()))
         .collect();
-    let level = enemies.iter().map(|(_, l)| *l).max().unwrap_or(1);
     col.spawn((
         Node {
             padding: UiRect::axes(px(18), px(16)),
@@ -637,7 +642,7 @@ fn abyss_card(
         ));
         card.spawn(text(
             fonts,
-            format!("{} · ур. {level}", names.join(" · ")),
+            names.join(" · "),
             false,
             13.0,
             PARCHMENT,

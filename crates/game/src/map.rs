@@ -476,18 +476,28 @@ fn refresh_card(
             Visibility::Hidden
         });
     }
+    // Средний уровень отряда против рекомендуемого: ниже — бой, скорее всего, не выиграть.
+    // Уровни врагов не показываем: у врагов и героев разный рост за уровень.
+    let team = roster.team_levels();
+    let team_level = team.iter().map(|(_, l)| l).sum::<u32>() / team.len().max(1) as u32;
     if pick.0 {
         let (data, convoys) = convoy;
         let tier = data.tier(&progress);
         let ids: Vec<&str> = tier.enemies.iter().map(|(id, _)| id.as_str()).collect();
-        let level = tier.enemies.iter().map(|(_, l)| *l).max().unwrap_or(1);
         for (kind, mut text, mut color) in &mut texts {
             let value = match kind {
                 CardText::Title => format!("Конвой · {}", tier.name),
-                CardText::Enemies => format!("{} · ур. {level}", enemies_text(&screen, &ids)),
+                CardText::Enemies => enemies_text(&screen, &ids),
                 CardText::Supplies => {
-                    color.0 = PARCHMENT;
-                    "Абордаж не тратит припасов — нужны суда".to_string()
+                    color.0 = if team_level >= tier.recommended_level {
+                        READY
+                    } else {
+                        WEAK
+                    };
+                    format!(
+                        "Рекомендуемый уровень отряда: {} · у вас {team_level}",
+                        tier.recommended_level
+                    )
                 }
                 CardText::Level => {
                     color.0 = if convoys.ready > 0 { READY } else { WEAK };
@@ -533,9 +543,6 @@ fn refresh_card(
     let (supply, profile) = supply;
     let wins = progress.wins_today(stage, crate::cabins::today());
     let percent = supply.percent(wins);
-    // Средний уровень отряда против рекомендуемого: ниже — этап, скорее всего, не пройти.
-    let team = roster.team_levels();
-    let team_level = team.iter().map(|(_, l)| l).sum::<u32>() / team.len().max(1) as u32;
     let ready = team_level >= def.recommended_level;
     for (kind, mut text, mut color) in &mut texts {
         let value = match kind {

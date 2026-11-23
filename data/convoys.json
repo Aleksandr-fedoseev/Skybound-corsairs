@@ -5,18 +5,18 @@
   "spot": { "name": "Торговый путь", "x": 80, "y": 690 },
   "tiers": [
     {
-      "from_cleared": 0, "name": "Торговый бриг",
+      "from_cleared": 0, "name": "Торговый бриг", "recommended_level": 1,
       "enemies": [["imperial_marine", 4], ["imperial_gunner", 4], ["imperial_marine", 4]],
       "silver": 100, "planks": 60
     },
     {
-      "from_cleared": 2, "name": "Имперский галеон",
-      "enemies": [["imperial_marine", 10], ["imperial_gunner", 10], ["imperial_gunner", 10], ["imperial_marine", 10]],
+      "from_cleared": 4, "name": "Имперский галеон", "recommended_level": 3,
+      "enemies": [["imperial_marine", 15], ["imperial_gunner", 15], ["imperial_gunner", 15], ["imperial_marine", 15]],
       "silver": 160, "planks": 100
     },
     {
-      "from_cleared": 4, "name": "Караван под охраной",
-      "enemies": [["imperial_marine", 16], ["imperial_gunner", 16], ["imperial_marine", 16], ["imperial_gunner", 16]],
+      "from_cleared": 8, "name": "Караван под охраной", "recommended_level": 6,
+      "enemies": [["imperial_marine", 19], ["imperial_gunner", 19], ["imperial_marine", 19], ["imperial_gunner", 19]],
       "silver": 240, "planks": 150
     }
   ]

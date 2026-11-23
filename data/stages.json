@@ -65,21 +65,175 @@
     ]
   },
   {
-    "id": "1-boss",
-    "name": "Грозовой левиафан",
+    "id": "1-4",
+    "name": "Сторожевой бриг",
+    "recommended_level": 3,
+    "enemies": [
+      {
+        "enemy": "imperial_marine",
+        "level": 15
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 15
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 15
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 15
+      }
+    ]
+  },
+  {
+    "id": "1-5",
+    "name": "Грозовой фронт",
     "recommended_level": 4,
     "enemies": [
       {
         "enemy": "storm_ray",
-        "level": 6
-      },
-      {
-        "enemy": "storm_leviathan",
-        "level": 7
+        "level": 12
       },
       {
         "enemy": "storm_ray",
-        "level": 6
+        "level": 12
+      },
+      {
+        "enemy": "storm_ray",
+        "level": 12
+      },
+      {
+        "enemy": "storm_ray",
+        "level": 12
+      },
+      {
+        "enemy": "storm_ray",
+        "level": 12
+      }
+    ]
+  },
+  {
+    "id": "1-6",
+    "name": "Канонерская лодка",
+    "recommended_level": 5,
+    "enemies": [
+      {
+        "enemy": "imperial_gunner",
+        "level": 15
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 15
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 15
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 15
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 15
+      }
+    ]
+  },
+  {
+    "id": "1-7",
+    "name": "Гнездо скатов",
+    "recommended_level": 6,
+    "enemies": [
+      {
+        "enemy": "storm_ray",
+        "level": 20
+      },
+      {
+        "enemy": "storm_ray",
+        "level": 20
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 20
+      },
+      {
+        "enemy": "storm_ray",
+        "level": 20
+      }
+    ]
+  },
+  {
+    "id": "1-8",
+    "name": "Имперский заслон",
+    "recommended_level": 7,
+    "enemies": [
+      {
+        "enemy": "imperial_marine",
+        "level": 17
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 17
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 17
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 17
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 17
+      }
+    ]
+  },
+  {
+    "id": "1-9",
+    "name": "Перед бурей",
+    "recommended_level": 8,
+    "enemies": [
+      {
+        "enemy": "storm_ray",
+        "level": 21
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 21
+      },
+      {
+        "enemy": "imperial_marine",
+        "level": 21
+      },
+      {
+        "enemy": "imperial_gunner",
+        "level": 21
+      },
+      {
+        "enemy": "storm_ray",
+        "level": 21
+      }
+    ]
+  },
+  {
+    "id": "1-boss",
+    "name": "Грозовой левиафан",
+    "recommended_level": 10,
+    "enemies": [
+      {
+        "enemy": "storm_ray",
+        "level": 14
+      },
+      {
+        "enemy": "storm_leviathan",
+        "level": 15
+      },
+      {
+        "enemy": "storm_ray",
+        "level": 14
       }
     ]
   }

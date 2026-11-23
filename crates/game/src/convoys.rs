@@ -31,6 +31,8 @@ pub struct Tier {
     /// С какого числа пройденных этапов главы появляется такой конвой.
     pub from_cleared: usize,
     pub name: String,
+    /// Уровень отряда, с которым абордаж проходится уверенно (`--example curve`).
+    pub recommended_level: u32,
     pub enemies: Vec<(String, u32)>,
     pub silver: u32,
     pub planks: u32,

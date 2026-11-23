@@ -27,6 +27,7 @@ VERIFIED: yes
 
 ## Commands
 RUN: cargo run -p game
+BALANCE: cargo run -p game-data --example curve --release  (порог уровня для этапов, конвоев, Бездны)
 TEST: cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings
 BUILD: cargo build --release -p game --no-default-features
 CAPTURE: mkdir -p .studioigor/captures/menu && SKYBOUND_SCREENSHOT=.studioigor/captures/menu/menu.png cargo run -p game
