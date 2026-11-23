@@ -964,7 +964,8 @@ fn backdrop(root: &mut ChildSpawnerCommands, assets: &AssetServer, view: &crate:
                 position_type: PositionType::Absolute,
                 left: px(0),
                 top: px(0),
-                width: px(sky.width),
+                // На 2 px шире шага: копии заходят друг на друга, без светлой нити на стыке.
+                width: px(sky.width + 2.0),
                 height: percent(100),
                 ..default()
             },

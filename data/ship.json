@@ -96,7 +96,7 @@
   ],
   "scene": {
     "look": { "seconds": 0.75, "outside_width": 380, "outside_center": [270, 440], "inside_frame": [10, 150, 530, 640] },
-    "backdrop": { "image": "menu/sky_pano.jpg", "width": 2263, "speed": 9 },
+    "backdrop": { "image": "menu/sky_pano.jpg", "width": 2049, "speed": 9 },
     "birds": { "image": "fx/bird.png", "count": 5, "speed": 38, "every": 22, "top": 250 },
     "clouds": [
       { "image": "menu/cloud_1.png", "top": 150, "width": 190, "speed": 14, "phase": 0.1, "alpha": 0.9 },
