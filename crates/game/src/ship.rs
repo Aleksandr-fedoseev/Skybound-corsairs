@@ -80,6 +80,9 @@ pub struct ShipDef {
     /// Пропеллер на корме: крутится всегда.
     #[serde(default)]
     pub propeller: Option<Propeller>,
+    /// Винты маленького корабля главной (в px рисунка `far.png`, он 512 в ширину).
+    #[serde(default)]
+    pub far_propellers: Vec<FarPropeller>,
     /// Комнаты: отсеки и просто жилые (без отсека — для красоты, не нажимаются).
     pub rooms: Vec<Room>,
 }
@@ -239,6 +242,13 @@ pub struct Birds {
     pub speed: f32,
     pub every: f32,
     pub top: f32,
+}
+
+/// Винт за кормой маленького корабля: на рисунке анфас, в игре сплющен (вид сбоку) и крутится.
+#[derive(Deserialize)]
+pub struct FarPropeller {
+    pub at: [f32; 2],
+    pub size: f32,
 }
 
 #[derive(Deserialize)]

@@ -13,11 +13,12 @@ art/2d/ship/scaffold.png — леса стройки на белом (общие
 Нужны Pillow и numpy.
 """
 import json
+import math
 import sys
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -62,6 +63,8 @@ def cut(ship):
 
 
 FAR_WIDTH = 512   # на главной корабль ~180 px — запас на плотные экраны
+# far.png уже носом вправо (корабль на главной летит вправо) и без винтов: их место занимают
+# вращающиеся винты из data/ship.json (ships[].far_propellers, в px готового far.png).
 
 
 def far(ship):
@@ -86,6 +89,28 @@ def far(ship):
     print(f"{ship}/far.png {rgb.size}")
 
 
+def propeller(size=128):
+    """Латунный трёхлопастной винт анфас; в игре он сплющен по ширине — вид сбоку — и крутится."""
+    k = 4
+    n = size * k
+    c = n / 2
+    img = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    for i in range(3):
+        a = i * 2 * math.pi / 3
+        blade = []
+        for t, w in ((0.1, 0.1), (0.45, 0.34), (0.8, 0.3), (0.97, 0.12)):
+            r = t * (n / 2 - k)
+            blade.append((c + r * math.cos(a) - w * r * math.sin(a), c + r * math.sin(a) + w * r * math.cos(a)))
+        for t, w in ((0.97, -0.08), (0.8, -0.16), (0.45, -0.18), (0.1, -0.08)):
+            r = t * (n / 2 - k)
+            blade.append((c + r * math.cos(a) - w * r * math.sin(a), c + r * math.sin(a) + w * r * math.cos(a)))
+        d.polygon(blade, fill=(226, 182, 92, 255), outline=(110, 76, 38, 255), width=2 * k)
+    d.ellipse([c - 0.16 * c, c - 0.16 * c, c + 0.16 * c, c + 0.16 * c], fill=(150, 110, 52, 255),
+              outline=(80, 56, 30, 255), width=3 * k)
+    return img.filter(ImageFilter.GaussianBlur(k * 0.3)).resize((size, size), Image.Resampling.LANCZOS)
+
+
 def scaffold():
     src = Image.open(ROOT / "art" / "2d" / "ship" / "scaffold.png").convert("RGB")
     rgba = src.convert("RGBA")
@@ -96,6 +121,7 @@ def scaffold():
 def main():
     if not sys.argv[1:]:
         scaffold()
+        propeller().save(OUT.parent / "fx" / "propeller.png", optimize=True)
     ships = sys.argv[1:] or sorted(p.name for p in ART.iterdir() if (p / "cutaway.png").exists())
     for ship in ships:
         cut(ship)

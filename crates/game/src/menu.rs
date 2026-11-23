@@ -43,6 +43,10 @@ const BOB_TILT_DEG: f32 = 1.2;
 /// Ширина экрана в логических px.
 const SCREEN_W: f32 = 540.0;
 const PRESSED_SCALE: f32 = 0.94;
+/// Ширина рисунка маленького корабля главной (`far.png`), винты сплющены до вида сбоку.
+const FAR_ART: f32 = 512.0;
+const FAR_PROP_SQUASH: f32 = 0.55;
+const FAR_PROP_TURNS: f32 = 1.6;
 
 /// Данные меню: `data/menu.json`.
 #[derive(Resource, Deserialize, Clone)]
@@ -513,6 +517,35 @@ fn ship_view(
             ImageNode::new(assets.load(view.far())),
         ))
         .observe(open_ship);
+        // Винты на корме — поверх корпуса: сплющены по ширине (вид сбоку) и крутятся.
+        let k = (x1 - x0) / FAR_ART;
+        for prop in &view.far_propellers {
+            let (cx, cy, side) = (x0 + prop.at[0] * k, y0 + prop.at[1] * k, prop.size * k);
+            deck.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: pct(cx - side / 2.0),
+                    top: pct(cy - side / 2.0),
+                    width: pct(side),
+                    height: pct(side),
+                    ..default()
+                },
+                UiTransform::from_scale(Vec2::new(FAR_PROP_SQUASH, 1.0)),
+                Pickable::IGNORE,
+            ))
+            .with_child((
+                FarShip,
+                Spinner(FAR_PROP_TURNS),
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    ..default()
+                },
+                ImageNode::new(assets.load("fx/propeller.png")),
+                UiTransform::default(),
+                Pickable::IGNORE,
+            ));
+        }
         deck.spawn((
             ShipBody,
             Node {

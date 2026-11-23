@@ -95,7 +95,7 @@
     { "id": "lookout", "name": "Подзорная башня", "icon": "menu/module_lookout.png", "start_level": 0, "rank": 3 }
   ],
   "scene": {
-    "look": { "seconds": 0.75, "outside_width": 180, "outside_center": [270, 470], "inside_frame": [10, 150, 530, 745] },
+    "look": { "seconds": 0.75, "outside_width": 230, "outside_center": [270, 470], "inside_frame": [10, 150, 530, 745] },
     "backdrop": {
       "image": "menu/sky_pano.jpg",
       "width": 2049,
@@ -143,6 +143,7 @@
       "art": "ships/lastochka",
       "bounds": [77, 69, 954, 904],
       "bubble": [256, -161],
+      "far_propellers": [{ "at": [34, 340], "size": 120 }],
       "rooms": [
         { "id": "navigation", "rect": [160, 462, 130, 116] },
         { "id": "lookout", "rect": [295, 462, 165, 116] },
@@ -167,6 +168,7 @@
       "art": "ships/petrel",
       "bounds": [11, 109, 1010, 823],
       "bubble": [250, -121],
+      "far_propellers": [{ "at": [80, 298], "size": 78 }],
       "rooms": [
         { "id": "navigation", "rect": [278, 505, 144, 92] },
         { "id": "tavern", "rect": [428, 505, 132, 92] },
@@ -194,6 +196,7 @@
       "art": "ships/leviathan",
       "bounds": [36, 102, 1007, 885],
       "bubble": [262, -128],
+      "far_propellers": [{ "at": [34, 262], "size": 88 }, { "at": [76, 345], "size": 76 }],
       "rooms": [
         { "id": "navigation", "rect": [100, 448, 122, 62] },
         { "id": "lookout", "rect": [226, 448, 136, 62] },
@@ -227,6 +230,7 @@
       "art": "ships/falcon",
       "bounds": [22, 62, 967, 872],
       "bubble": [234, -168],
+      "far_propellers": [{ "at": [18, 322], "size": 112 }],
       "rooms": [
         { "id": "navigation", "rect": [275, 495, 130, 85] },
         { "id": "throne", "rect": [410, 495, 145, 85] },
