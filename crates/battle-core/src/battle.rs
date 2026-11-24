@@ -12,8 +12,9 @@ use crate::ai;
 use crate::rng::Rng;
 use crate::unit::{Ability, Effect, Element, Side, Target, Unit, UnitDef, UnitId};
 use crate::{
-    BROADSIDE_MAX, BROADSIDE_PER_ACTION, CRIT_CHANCE, CRIT_MULTIPLIER, ENERGY_BASIC, ENERGY_MAX,
-    ENERGY_ON_HIT, ENERGY_SKILL, WEAKNESS_MULTIPLIER, WIND_BONUS, WIND_SHIFT_TURNS,
+    BROADSIDE_MAX, BROADSIDE_PER_ACTION, CHARGE_BREAK, CHARGE_STUN, CHARGE_TIME, CRIT_CHANCE,
+    CRIT_MULTIPLIER, ENERGY_BASIC, ENERGY_MAX, ENERGY_ON_HIT, ENERGY_SKILL, WEAKNESS_MULTIPLIER,
+    WIND_BONUS, WIND_SHIFT_TURNS,
 };
 
 /// Корабль игрока в бою. Сила залпа зависит от уровня пушечной палубы.
@@ -102,6 +103,15 @@ pub enum Event {
         unit: UnitId,
     },
     BroadsideFired,
+    /// Боец начал замах умения: следующим ходом ударит, если замах не сорвать.
+    Charging {
+        unit: UnitId,
+        name: String,
+    },
+    /// Замах сорван уроном — умение ушло на перезарядку.
+    ChargeBroken {
+        unit: UnitId,
+    },
     /// Ветер боя сменился: сам (`by == None`) или его развернул боец.
     WindChanged {
         wind: Element,
@@ -202,6 +212,7 @@ impl Battle {
                     action_value: 0.0,
                     turns_taken: 0,
                     skill_cooldown: 0,
+                    charging: None,
                     def,
                 };
                 unit.action_value = unit.base_action_value();
@@ -329,6 +340,20 @@ impl Battle {
         };
 
         let mut events = Vec::new();
+        // Умение с замахом: первый ход — только замах, удар — следующим ходом.
+        if kind == AbilityKind::Skill && ability.charge && self.units[actor.0].charging.is_none() {
+            let unit = &mut self.units[actor.0];
+            unit.charging = Some(0);
+            unit.action_value = unit.base_action_value() * CHARGE_TIME;
+            unit.turns_taken += 1;
+            events.push(Event::Charging {
+                unit: actor,
+                name: ability.name.clone(),
+            });
+            self.advance_to_next_turn(&mut events);
+            return Ok(events);
+        }
+        self.units[actor.0].charging = None;
         {
             // Умение уходит на перезарядку, обычная атака приближает его.
             let unit = &mut self.units[actor.0];
@@ -672,6 +697,23 @@ impl Battle {
         let unit = &mut self.units[target.0];
         unit.hp = unit.hp.saturating_sub(amount);
         let (side, alive) = (unit.side, unit.is_alive());
+        // Урон по замахивающемуся копится; набралось — замах сорван.
+        let mut broken = false;
+        if let Some(taken) = unit.charging.as_mut() {
+            *taken += amount;
+            let break_at = unit
+                .def
+                .skill
+                .as_ref()
+                .and_then(|s| s.break_at)
+                .unwrap_or(CHARGE_BREAK);
+            if *taken as f32 >= unit.def.stats.max_hp as f32 * break_at {
+                unit.charging = None;
+                unit.skill_cooldown = unit.skill_cooldown_start().max(1);
+                unit.action_value += unit.base_action_value() * CHARGE_STUN;
+                broken = alive;
+            }
+        }
         events.push(Event::Damage {
             source,
             target,
@@ -679,6 +721,9 @@ impl Battle {
             weakness,
             crit,
         });
+        if broken {
+            events.push(Event::ChargeBroken { unit: target });
+        }
 
         if !alive {
             events.push(Event::Defeated { unit: target });

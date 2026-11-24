@@ -23,10 +23,10 @@ const BRASS_EDGE: Color = Color::srgb(0.79, 0.59, 0.25);
 const WOOD_DARK: Color = Color::srgb(0.10, 0.07, 0.04);
 const BRIGHT: Color = Color::srgb(1.0, 0.93, 0.78);
 const TURN_CHIPS: usize = 8;
-const CHIP: f32 = 36.0;
-const ULT_SIZE: f32 = 70.0;
-const SMALL_BUTTON: f32 = 62.0;
-const SKILL_BADGE: f32 = 24.0;
+const CHIP: f32 = 50.0;
+const ULT_SIZE: f32 = 92.0;
+const SMALL_BUTTON: f32 = 76.0;
+const SKILL_BADGE: f32 = 32.0;
 /// Готовая ульта: портрет пульсирует.
 const READY_PULSE: f32 = 0.06;
 
@@ -47,9 +47,9 @@ const RESULT_TOP: f32 = 140.0;
 pub struct Fonts {
     pub regular: Handle<Font>,
     pub bold: Handle<Font>,
-    /// Засечка Alegreya (цифры по высоте прописных): заголовки, кнопки, крупные цифры.
+    /// Rubik ExtraBold: заголовки, кнопки, крупные цифры.
     pub display: Handle<Font>,
-    /// Засечка потоньше: имена, подписи и числа на пергаменте.
+    /// Rubik SemiBold: имена, подписи и числа на пергаменте.
     pub serif: Handle<Font>,
 }
 
@@ -168,10 +168,10 @@ impl FromWorld for Fonts {
     fn from_world(world: &mut World) -> Self {
         let assets = world.resource::<AssetServer>();
         Self {
-            regular: assets.load("fonts/NotoSans-Regular.ttf"),
-            bold: assets.load("fonts/NotoSans-Bold.ttf"),
-            display: assets.load("fonts/Alegreya-ExtraBold-Lining.ttf"),
-            serif: assets.load("fonts/Alegreya-Bold-Lining.ttf"),
+            regular: assets.load("fonts/Rubik-Medium.ttf"),
+            bold: assets.load("fonts/Rubik-SemiBold.ttf"),
+            display: assets.load("fonts/Rubik-ExtraBold.ttf"),
+            serif: assets.load("fonts/Rubik-SemiBold.ttf"),
         }
     }
 }
@@ -250,7 +250,7 @@ fn spawn_hud(
                 spawn_squads(top, fonts);
                 top.spawn((
                     BattleTitle,
-                    crate::style::heading(fonts, screen.title(), 16.0, BRIGHT),
+                    crate::style::heading(fonts, screen.title(), 20.0, BRIGHT),
                 ));
                 spawn_turn_order(top);
             });
@@ -415,9 +415,9 @@ fn spawn_squads(top: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 Node {
                     flex_grow: 1.0,
                     flex_basis: px(0),
-                    height: px(26),
+                    height: px(34),
                     border: UiRect::all(px(2)),
-                    border_radius: BorderRadius::all(px(9)),
+                    border_radius: BorderRadius::all(px(11)),
                     overflow: Overflow::clip(),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
@@ -443,7 +443,7 @@ fn spawn_squads(top: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 b.spawn((
                     SquadText(side),
                     Text::new(""),
-                    fonts.display(15.0),
+                    fonts.display(19.0),
                     TextColor(Color::WHITE),
                     shadow(),
                 ));
@@ -452,12 +452,12 @@ fn spawn_squads(top: &mut ChildSpawnerCommands, fonts: &Fonts) {
         bar(row, Side::Ally, HP_ALLY);
         row.spawn((
             Node {
-                width: px(52),
-                height: px(52),
+                width: px(64),
+                height: px(64),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 border: UiRect::all(px(3)),
-                border_radius: BorderRadius::all(px(26)),
+                border_radius: BorderRadius::all(px(32)),
                 ..default()
             },
             BackgroundColor(WOOD_DARK),
@@ -466,7 +466,7 @@ fn spawn_squads(top: &mut ChildSpawnerCommands, fonts: &Fonts) {
         .with_child((
             TurnBadge,
             Text::new(""),
-            fonts.display(22.0),
+            fonts.display(28.0),
             TextColor(BRIGHT),
         ));
         bar(row, Side::Enemy, HP_ENEMY);
@@ -478,12 +478,12 @@ fn spawn_turn_order(top: &mut ChildSpawnerCommands) {
     top.spawn(Node {
         flex_direction: FlexDirection::Row,
         align_items: AlignItems::Center,
-        column_gap: px(4),
+        column_gap: px(5),
         ..default()
     })
     .with_children(|row| {
         for i in 0..TURN_CHIPS {
-            let size = if i == 0 { CHIP * 1.3 } else { CHIP };
+            let size = if i == 0 { CHIP * 1.25 } else { CHIP };
             row.spawn((
                 TurnChip(i),
                 Node {
@@ -529,16 +529,16 @@ fn spawn_bottom(
                 row.spawn((
                     BroadsideLabel,
                     Text::new(""),
-                    fonts.display(15.0),
+                    fonts.display(19.0),
                     TextColor(BROADSIDE),
                     shadow(),
                 ));
                 row.spawn((
                     Node {
-                        width: px(130),
-                        height: px(14),
+                        width: px(170),
+                        height: px(18),
                         border: UiRect::all(px(2)),
-                        border_radius: BorderRadius::all(px(7)),
+                        border_radius: BorderRadius::all(px(9)),
                         overflow: Overflow::clip(),
                         ..default()
                     },
@@ -590,7 +590,7 @@ fn spawn_bottom(
                             },
                             Skin(Look::Dark),
                         ))
-                        .with_child((Text::new(""), fonts.display(15.0), TextColor(BRIGHT)))
+                        .with_child((Text::new(""), fonts.display(20.0), TextColor(BRIGHT)))
                         .observe(
                             move |_: On<PointerClick>, mut screen: ResMut<BattleScreen>| {
                                 press(&mut screen, kind);
@@ -652,8 +652,8 @@ fn spawn_ult_button(
                 SkillBadge(id),
                 Node {
                     position_type: PositionType::Absolute,
-                    top: px(-8),
-                    right: px(-8),
+                    top: px(-10),
+                    right: px(-10),
                     width: px(SKILL_BADGE),
                     height: px(SKILL_BADGE),
                     justify_content: JustifyContent::Center,
@@ -665,12 +665,12 @@ fn spawn_ult_button(
                 BackgroundColor(PANEL),
                 BorderColor::all(SKILL),
             ))
-            .with_child((Text::new(""), fonts.display(14.0), TextColor(Color::WHITE)));
+            .with_child((Text::new(""), fonts.display(18.0), TextColor(Color::WHITE)));
         });
         b.spawn((
             Node {
                 width: px(ULT_SIZE * 0.9),
-                height: px(10),
+                height: px(13),
                 border: UiRect::all(px(1)),
                 border_radius: BorderRadius::all(px(5)),
                 overflow: Overflow::clip(),
@@ -691,7 +691,7 @@ fn spawn_ult_button(
         b.spawn((
             UltLabel(id),
             Text::new(""),
-            fonts.display(14.0),
+            fonts.display(18.0),
             TextColor(Color::WHITE),
             shadow(),
         ));

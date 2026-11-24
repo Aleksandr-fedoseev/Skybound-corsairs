@@ -171,23 +171,23 @@
     "enemies": [
       {
         "enemy": "imperial_marine",
-        "level": 17
+        "level": 16
       },
       {
         "enemy": "imperial_gunner",
-        "level": 17
+        "level": 16
       },
       {
         "enemy": "imperial_marine",
-        "level": 17
+        "level": 16
       },
       {
         "enemy": "imperial_gunner",
-        "level": 17
+        "level": 16
       },
       {
         "enemy": "imperial_marine",
-        "level": 17
+        "level": 16
       }
     ]
   },
@@ -225,15 +225,15 @@
     "enemies": [
       {
         "enemy": "storm_ray",
-        "level": 14
+        "level": 13
       },
       {
         "enemy": "storm_leviathan",
-        "level": 15
+        "level": 14
       },
       {
         "enemy": "storm_ray",
-        "level": 14
+        "level": 13
       }
     ]
   },
@@ -296,19 +296,19 @@
     "enemies": [
       {
         "enemy": "aeromancer",
-        "level": 27
+        "level": 28
       },
       {
         "enemy": "imperial_gunner",
-        "level": 27
+        "level": 28
       },
       {
         "enemy": "aeromancer",
-        "level": 27
+        "level": 28
       },
       {
         "enemy": "imperial_gunner",
-        "level": 27
+        "level": 28
       }
     ]
   },

@@ -8,6 +8,8 @@ fn ability(name: &str, effects: Vec<(Target, Effect)>) -> Ability {
             .map(|(target, effect)| TargetedEffect { target, effect })
             .collect(),
         cooldown: 0,
+        charge: false,
+        break_at: None,
     }
 }
 
@@ -180,6 +182,76 @@ fn seize_wind_picks_the_squad_majority() {
         }
     )));
     assert_eq!(battle.wind(), Some(Element::Powder));
+}
+
+/// Враг с ударом-замахом по всем: умение готово сразу, первый ход — замах.
+fn charger(hp: u32) -> UnitDef {
+    let mut boss = unit("boss", Element::Steel, hp, 50, 100);
+    boss.skill = Some(Ability {
+        charge: true,
+        ..ability(
+            "Таран",
+            vec![(Target::AllEnemies, Effect::Damage { multiplier: 3.0 })],
+        )
+    });
+    boss
+}
+
+#[test]
+fn charged_skill_hits_on_the_next_turn() {
+    let hero = unit("hero", Element::Wind, 100_000, 1, 10);
+    let mut battle = Battle::new(vec![hero], vec![charger(100_000)], SHIP, 1);
+    let mut events = Vec::new();
+    while !events.iter().any(|e| {
+        matches!(
+            e,
+            Event::Damage {
+                target: UnitId(0),
+                ..
+            }
+        )
+    }) {
+        events.extend(battle.auto_step());
+    }
+    let charged = events
+        .iter()
+        .position(|e| matches!(e, Event::Charging { .. }));
+    let hit = events.iter().position(|e| {
+        matches!(
+            e,
+            Event::Damage {
+                target: UnitId(0),
+                ..
+            }
+        )
+    });
+    assert!(charged.is_some() && charged < hit, "{events:?}");
+}
+
+#[test]
+fn enough_damage_breaks_the_charge() {
+    // Герой бьёт сильно и часто: за замах снимает больше порога — замах сорван раньше удара.
+    let hero = unit("hero", Element::Wind, 100_000, 5_000, 400);
+    let mut battle = Battle::new(vec![hero], vec![charger(100_000)], SHIP, 1);
+    let mut events = Vec::new();
+    for _ in 0..12 {
+        events.extend(battle.auto_step());
+    }
+    let broken = events
+        .iter()
+        .position(|e| matches!(e, Event::ChargeBroken { .. }))
+        .expect("замах сорван");
+    let skill = events.iter().position(|e| {
+        matches!(
+            e,
+            Event::AbilityUsed {
+                unit: UnitId(1),
+                kind: AbilityKind::Skill,
+                ..
+            }
+        )
+    });
+    assert!(skill.is_none_or(|s| s > broken), "{events:?}");
 }
 
 #[test]

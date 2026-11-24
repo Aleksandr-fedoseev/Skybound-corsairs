@@ -85,6 +85,24 @@ impl Bundle {
         ]
     }
 
+    /// Первый ненулевой ресурс: имя иконки (`ui/icon_<имя>.png`) и сколько.
+    pub fn main(&self) -> Option<(&'static str, u32)> {
+        [
+            (self.silver, "silver"),
+            (self.planks, "planks"),
+            (self.ether, "ether"),
+            (self.journals, "journals"),
+            (self.details, "details"),
+            (self.doubloons, "doubloons"),
+            (self.charts, "charts"),
+            (self.storm_cores, "storm_cores"),
+            (self.supplies, "supplies"),
+        ]
+        .into_iter()
+        .find(|(n, _)| *n > 0)
+        .map(|(n, kind)| (kind, n))
+    }
+
     pub fn line(&self) -> String {
         self.fields()
             .iter()
@@ -118,7 +136,7 @@ impl Bundle {
         p.supplies -= self.supplies;
     }
 
-    fn put(&self, p: &mut Profile) {
+    pub(crate) fn put(&self, p: &mut Profile) {
         p.silver += self.silver;
         p.planks += self.planks;
         p.ether += self.ether;

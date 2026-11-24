@@ -7,13 +7,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use battle_core::Rng;
 use bevy::prelude::*;
-use game_data::GameData;
 use serde::{Deserialize, Serialize};
 
 use crate::Screen;
-use crate::battle_screen::{BattleScreen, random_seed};
+use crate::battle_screen::random_seed;
 use crate::crew::{CrewData, Roster};
-use crate::menu::{GOLD, PARCHMENT, Profile, Toast, bottom_nav, pressable, spawn_toast, text};
+use crate::menu::{PARCHMENT, Profile, Toast, bottom_nav, pressable, spawn_toast, text};
 use crate::ship::{Ship, ShipData};
 use crate::style::{self, Look, Skin};
 use crate::view::Fonts;
@@ -26,6 +25,32 @@ const SECONDS_PER_DAY: u64 = 86_400;
 pub struct TavernData {
     pub single_price: u32,
     pub ten_price: u32,
+    /// Шанс, что из сундука выйдет копия героя; иначе — ресурсы из `loot`.
+    pub copy_chance: f32,
+    pub loot: Vec<Loot>,
+}
+
+/// Ресурсы из сундука и их вес среди остальных.
+#[derive(Deserialize)]
+pub struct Loot {
+    pub weight: u32,
+    #[serde(flatten)]
+    pub bundle: crate::events::Bundle,
+}
+
+impl TavernData {
+    /// Ресурсы по броску `roll` в [0, 1).
+    pub fn loot_at(&self, roll: f32) -> crate::events::Bundle {
+        let total: u32 = self.loot.iter().map(|l| l.weight).sum();
+        let mut left = roll * total as f32;
+        for l in &self.loot {
+            if left < l.weight as f32 {
+                return l.bundle;
+            }
+            left -= l.weight as f32;
+        }
+        self.loot.last().map(|l| l.bundle).unwrap_or_default()
+    }
 }
 
 impl TavernData {
@@ -35,7 +60,7 @@ impl TavernData {
     }
 }
 
-/// Один найм: копия одного из героев команды, все поровну (`pick` в [0, 1)).
+/// Какой герой в копии: один из героев команды, все поровну (`pick` в [0, 1)).
 /// Новых героев Таверна не даёт — они приходят за главы (решения №69, №70).
 pub fn pull(pick: f32, owned: &[String]) -> String {
     let index = ((pick * owned.len() as f32) as usize).min(owned.len() - 1);
@@ -123,9 +148,6 @@ fn spawn_tavern(
     ship: Res<Ship>,
     ship_data: Res<ShipData>,
     profile: Res<Profile>,
-    roster: Res<Roster>,
-    screen: Res<BattleScreen>,
-    crew: Res<CrewData>,
 ) {
     build(
         &mut commands,
@@ -135,9 +157,6 @@ fn spawn_tavern(
         &state,
         ship.free_hires(&ship_data),
         &profile,
-        &roster,
-        &crew,
-        &screen.data,
     );
 }
 
@@ -153,9 +172,6 @@ fn rebuild_tavern(
     ship: Res<Ship>,
     ship_data: Res<ShipData>,
     profile: Res<Profile>,
-    roster: Res<Roster>,
-    screen: Res<BattleScreen>,
-    crew: Res<CrewData>,
 ) {
     if !dirty.0 {
         return;
@@ -172,9 +188,6 @@ fn rebuild_tavern(
         &state,
         ship.free_hires(&ship_data),
         &profile,
-        &roster,
-        &crew,
-        &screen.data,
     );
 }
 
@@ -187,9 +200,6 @@ fn build(
     state: &TavernState,
     free_per_day: u32,
     profile: &Profile,
-    roster: &Roster,
-    crew: &CrewData,
-    data: &GameData,
 ) {
     commands
         .spawn((
@@ -209,8 +219,8 @@ fn build(
                 &[("doubloons", profile.doubloons), ("silver", profile.silver)],
             );
             style::title(root, fonts, "Таверна · найм героев", 56.0);
-            poster(root, assets, fonts, roster, crew, data);
-            rules_strip(root, fonts);
+            how_it_works(root, assets, fonts, cfg);
+            chest_odds(root, assets, fonts, cfg);
             hire_buttons(
                 root,
                 assets,
@@ -218,202 +228,163 @@ fn build(
                 cfg,
                 state.free_left(free_per_day),
                 profile,
+                640.0,
             );
-            pool_row(root, assets, fonts, roster, crew);
             bottom_nav(root, assets, fonts, Screen::Tavern);
             spawn_toast(root, fonts);
         });
 }
 
-/// Баннер: герой, которому меньше всего не хватает копий до следующей звезды.
-fn poster(
+/// Как работает найм — три строки с иконками.
+fn how_it_works(
     root: &mut ChildSpawnerCommands,
     assets: &AssetServer,
     fonts: &Fonts,
-    roster: &Roster,
-    crew: &CrewData,
-    data: &GameData,
+    cfg: &TavernData,
 ) {
-    let need = |id: &str| {
-        let stars = roster.stars(id);
-        if stars >= crew.max_stars() {
-            return u32::MAX;
-        }
-        crew.rule(stars + 1)
-            .copies
-            .saturating_sub(roster.copies(id))
-    };
-    let owned = roster.owned();
-    let Some(hero) = owned
-        .iter()
-        .min_by_key(|id| need(id))
-        .and_then(|id| data.hero(id))
-    else {
-        return;
-    };
-    let glow = crate::view::element_color(hero.element);
-    let stars = roster.stars(&hero.id);
-    let left = need(&hero.id);
+    let copy_line = format!(
+        "Копия героя команды — шанс {}%, в найме ×10 — хотя бы одна",
+        (cfg.copy_chance * 100.0).round()
+    );
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
             top: px(108),
             left: px(10),
             right: px(10),
-            height: px(410),
-            overflow: Overflow::clip(),
+            padding: UiRect::axes(px(16), px(10)),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(6),
             ..default()
         },
         Skin(Look::Tile),
-        BackgroundGradient(vec![
-            RadialGradient::new(
-                UiPosition::new(Vec2::new(0.25, 0.0), Val::ZERO, Val::ZERO),
-                RadialGradientShape::FarthestCorner,
-                vec![
-                    ColorStop::auto(glow.with_alpha(0.8)),
-                    ColorStop::auto(Color::srgb(0.07, 0.05, 0.03)),
-                ],
-            )
-            .into(),
-        ]),
     ))
-    .with_children(|banner| {
-        // Герой во весь рост — справа.
-        banner.spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                right: px(-10),
-                bottom: px(0),
-                height: px(400),
-                ..default()
-            },
-            ImageNode::new(assets.load(format!("ui/full_{}.png", hero.id))),
-            Pickable::IGNORE,
-        ));
-        banner
-            .spawn(Node {
-                position_type: PositionType::Absolute,
-                left: px(22),
-                top: px(22),
-                width: px(250),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(6),
-                ..default()
-            })
-            .with_children(|col| {
-                col.spawn((
-                    Node {
-                        padding: UiRect::axes(px(12), px(3)),
-                        align_self: AlignSelf::FlexStart,
-                        ..default()
-                    },
-                    Skin(Look::Go),
-                ))
-                .with_child(style::heading(
-                    fonts,
-                    "Ближе всех к звезде",
-                    14.0,
-                    Color::WHITE,
-                ));
-                col.spawn(style::heading(fonts, hero.name.clone(), 40.0, BRIGHT));
-                col.spawn(style::heading(fonts, hero.title.clone(), 18.0, PARCHMENT));
-                col.spawn(text(
-                    fonts,
-                    if left == u32::MAX {
-                        "все звёзды уже собраны".to_string()
-                    } else if left == 0 {
-                        format!(
-                            "копий хватает на {}-ю звезду — слияние в Экипаже",
-                            stars + 1
-                        )
+    .with_children(|panel| {
+        for (icon, line) in [
+            (
+                "doubloons",
+                "Найм — сундук вольного бойца: ресурсы или копия героя",
+            ),
+            ("star", copy_line.as_str()),
+            (
+                "charts",
+                "Новые герои не нанимаются — они приходят за главы",
+            ),
+        ] {
+            panel
+                .spawn(Node {
+                    column_gap: px(10),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    let path = if icon == "star" {
+                        "ui/star.png".to_string()
                     } else {
-                        format!("до {}-й звезды не хватает копий: {left}", stars + 1)
-                    },
-                    false,
-                    13.0,
-                    PARCHMENT,
-                ));
-            });
-    });
-}
-
-/// Герои команды: звёзды и копии к следующей звезде — их и даёт Таверна.
-fn pool_row(
-    root: &mut ChildSpawnerCommands,
-    assets: &AssetServer,
-    fonts: &Fonts,
-    roster: &Roster,
-    crew: &CrewData,
-) {
-    root.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            bottom: px(86),
-            left: px(6),
-            right: px(6),
-            height: px(84),
-            padding: UiRect::axes(px(14), px(6)),
-            justify_content: JustifyContent::SpaceEvenly,
-            align_items: AlignItems::Center,
-            ..default()
-        },
-        Skin(Look::Tile),
-    ))
-    .with_children(|rail| {
-        for id in roster.owned() {
-            let stars = roster.stars(&id);
-            let line = if stars >= crew.max_stars() {
-                format!("зв. {stars}")
-            } else {
-                format!(
-                    "зв. {stars} · {}/{}",
-                    roster.copies(&id),
-                    crew.rule(stars + 1).copies
-                )
-            };
-            let ready = roster.star_copies_ready(&id, crew);
-            rail.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                ..default()
-            })
-            .with_children(|cell| {
-                cell.spawn(style::medallion(assets, &id, 50.0, false));
-                cell.spawn(text(
-                    fonts,
-                    line,
-                    true,
-                    11.0,
-                    if ready { GOLD } else { PARCHMENT },
-                ));
-            });
+                        format!("ui/icon_{icon}.png")
+                    };
+                    row.spawn((
+                        Node {
+                            width: px(26),
+                            height: px(26),
+                            flex_shrink: 0.0,
+                            ..default()
+                        },
+                        ImageNode::new(assets.load(path)),
+                    ));
+                    row.spawn(text(fonts, line, false, 14.0, PARCHMENT));
+                });
         }
     });
 }
 
-/// Правила найма одной строкой.
-fn rules_strip(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
+/// Что лежит в сундуке и с каким шансом.
+fn chest_odds(
+    root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    cfg: &TavernData,
+) {
+    let total: u32 = cfg.loot.iter().map(|l| l.weight).sum::<u32>().max(1);
+    let rest = 1.0 - cfg.copy_chance;
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
-            top: px(528),
+            top: px(236),
             left: px(10),
             right: px(10),
-            height: px(52),
-            padding: UiRect::axes(px(16), px(6)),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
+            padding: UiRect::axes(px(16), px(10)),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(6),
             ..default()
         },
         Skin(Look::Tile),
     ))
-    .with_child(text(
-        fonts,
-        "Найм даёт копии героев команды — все поровну. Копии нужны для звёзд. Новые герои приходят за главы.",
-        false,
-        13.0,
-        PARCHMENT,
-    ));
+    .with_children(|panel| {
+        panel.spawn(style::heading(fonts, "Что в сундуке", 19.0, BRIGHT));
+        let row = |panel: &mut ChildSpawnerCommands, path: String, label: String, chance: f32| {
+            panel
+                .spawn(Node {
+                    column_gap: px(10),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|r| {
+                    r.spawn((
+                        Node {
+                            width: px(30),
+                            height: px(30),
+                            flex_shrink: 0.0,
+                            ..default()
+                        },
+                        ImageNode::new(assets.load(path)),
+                    ));
+                    r.spawn((
+                        Node {
+                            flex_grow: 1.0,
+                            ..default()
+                        },
+                        style::heading(fonts, label, 17.0, PARCHMENT),
+                    ));
+                    r.spawn(style::heading(
+                        fonts,
+                        format!("{}%", (chance * 100.0).round()),
+                        17.0,
+                        BRIGHT,
+                    ));
+                });
+        };
+        row(
+            panel,
+            "ui/star.png".into(),
+            "Копия героя команды".into(),
+            cfg.copy_chance,
+        );
+        for l in &cfg.loot {
+            if let Some((kind, n)) = l.bundle.main() {
+                row(
+                    panel,
+                    format!("ui/icon_{kind}.png"),
+                    format!("{} {n}", resource_name(kind)),
+                    rest * l.weight as f32 / total as f32,
+                );
+            }
+        }
+    });
+}
+
+fn resource_name(kind: &str) -> &'static str {
+    match kind {
+        "journals" => "Судовые журналы",
+        "silver" => "Серебро",
+        "charts" => "Лоция",
+        "details" => "Детали",
+        "supplies" => "Припасы",
+        "planks" => "Доски",
+        "ether" => "Эфир",
+        "doubloons" => "Дублоны",
+        _ => "Ресурсы",
+    }
 }
 
 fn hire_buttons(
@@ -423,10 +394,11 @@ fn hire_buttons(
     cfg: &TavernData,
     free_left: u32,
     profile: &Profile,
+    top: f32,
 ) {
     root.spawn(Node {
         position_type: PositionType::Absolute,
-        top: px(590),
+        top: px(top),
         left: px(10),
         right: px(16),
         flex_direction: FlexDirection::Column,
@@ -435,21 +407,24 @@ fn hire_buttons(
     })
     .with_children(|col| {
         let free = free_left > 0;
-        hire_button(
-            col,
-            assets,
-            fonts,
-            Hire::Free,
-            if free {
-                "Бесплатный найм"
-            } else {
-                "Бесплатный найм — завтра"
-            },
-            None,
-            format!("осталось сегодня: {free_left}"),
-            if free { Look::Dark } else { Look::Off },
-            52.0,
-        );
+        // В строке: у кнопки flex_basis 0 — по ширине, а в колонке он схлопнул бы её высоту.
+        col.spawn(Node::default()).with_children(|row| {
+            hire_button(
+                row,
+                assets,
+                fonts,
+                Hire::Free,
+                &if free {
+                    format!("Бесплатный найм · осталось {free_left}")
+                } else {
+                    "Бесплатный найм — завтра".to_string()
+                },
+                None,
+                String::new(),
+                if free { Look::Dark } else { Look::Off },
+                54.0,
+            );
+        });
         col.spawn(Node {
             column_gap: px(12),
             ..default()
@@ -520,9 +495,10 @@ fn hire_button(
                     Color::srgb(0.50, 0.07, 0.04)
                 },
             ),
-            None => {
+            None if !sub.is_empty() => {
                 b.spawn(text(fonts, sub, false, 11.0, PARCHMENT));
             }
+            None => {}
         }
     });
     pressable(&mut button);
@@ -572,14 +548,36 @@ fn hire_heroes(
     };
     let owned = roster.owned();
     let state = &mut *state;
-    let list = (0..count)
-        .map(|_| {
-            let id = pull(state.rng.next_f32(), &owned);
-            // Порог звезды пересекла именно эта копия — подсветить её в показе.
-            let before = roster.star_copies_ready(&id, &crew);
-            roster.recruit(&id);
-            let star = !before && roster.star_copies_ready(&id, &crew);
-            crate::hire_reveal::Pulled { id, star }
+    // Сундук: копия героя с шансом `copy_chance`, иначе ресурсы; в найме ×10 копия хотя бы одна.
+    let mut copies = (0..count)
+        .map(|_| state.rng.next_f32() < cfg.copy_chance)
+        .collect::<Vec<_>>();
+    if count == 10 && !copies.contains(&true) {
+        copies[9] = true;
+    }
+    let list = copies
+        .into_iter()
+        .map(|copy| {
+            if copy {
+                let id = pull(state.rng.next_f32(), &owned);
+                // Порог звезды пересекла именно эта копия — подсветить её в показе.
+                let before = roster.star_copies_ready(&id, &crew);
+                roster.recruit(&id);
+                let star = !before && roster.star_copies_ready(&id, &crew);
+                crate::hire_reveal::Pulled {
+                    id,
+                    star,
+                    loot: None,
+                }
+            } else {
+                let loot = cfg.loot_at(state.rng.next_f32());
+                loot.put(&mut profile);
+                crate::hire_reveal::Pulled {
+                    id: String::new(),
+                    star: false,
+                    loot: Some(loot),
+                }
+            }
         })
         .collect();
     reveal.start(list);
@@ -601,5 +599,30 @@ mod tests {
         }
         assert!(counts.values().all(|&n| n == 100), "{counts:?}");
         assert_eq!(pull(0.9999, &owned), "d");
+    }
+
+    #[test]
+    fn chest_loot_follows_weights() {
+        let cfg = TavernData::bundled();
+        let total: u32 = cfg.loot.iter().map(|l| l.weight).sum();
+        // Бросок в начале и в конце диапазона — первая и последняя добыча.
+        assert_eq!(
+            cfg.loot_at(0.0).main(),
+            cfg.loot.first().and_then(|l| l.bundle.main())
+        );
+        assert_eq!(
+            cfg.loot_at(0.9999).main(),
+            cfg.loot.last().and_then(|l| l.bundle.main())
+        );
+        // Ровная сетка бросков даёт доли по весам.
+        let first = cfg.loot[0].bundle.main();
+        let hits = (0..1000)
+            .filter(|i| cfg.loot_at(*i as f32 / 1000.0).main() == first)
+            .count();
+        let want = 1000 * cfg.loot[0].weight / total;
+        assert!(
+            (hits as i64 - want as i64).abs() <= 2,
+            "{hits} против {want}"
+        );
     }
 }

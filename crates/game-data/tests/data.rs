@@ -1,7 +1,7 @@
 use battle_core::{Battle, Outcome, Ship};
 use game_data::GameData;
 
-const STARTER_TEAM: [&str; 4] = ["ren", "kaya", "borg", "mei"];
+const STARTER_TEAM: [&str; 4] = ["borg", "ren", "kaya", "mei"];
 
 fn win_rate(data: &GameData, stage: &str, level: u32, runs: u64) -> f64 {
     let team: Vec<_> = STARTER_TEAM

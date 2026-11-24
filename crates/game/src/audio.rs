@@ -147,6 +147,12 @@ fn battle_sounds(
             Event::WindChanged { .. } => {
                 sfx.write(Sfx("skill"));
             }
+            Event::Charging { .. } => {
+                sfx.write(Sfx("ultimate"));
+            }
+            Event::ChargeBroken { .. } => {
+                sfx.write(Sfx("crit"));
+            }
             Event::Damage { weakness, crit, .. } => {
                 if now - *last_hit < data.hit_gap {
                     continue;

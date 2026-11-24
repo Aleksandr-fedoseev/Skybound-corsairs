@@ -244,6 +244,22 @@ pub fn spawn_effects(
                 };
                 set_band(label, crate::view::element_color(*wind), look.banner_ult);
             }
+            Event::Charging { name, .. } => {
+                set_band(
+                    format!("ЗАМАХ: «{}»\nСОРВИТЕ УЛЬТАМИ!", name.to_uppercase()),
+                    Color::srgb(1.0, 0.35, 0.25),
+                    look.banner_ult * 1.5,
+                );
+            }
+            Event::ChargeBroken { unit } => {
+                let name = &screen.battle.unit(*unit).def.name;
+                set_band(
+                    format!("{} — ЗАМАХ СОРВАН!", name.to_uppercase()),
+                    crate::menu::GOLD,
+                    look.banner_ult,
+                );
+                screen_fx.shake = Some((once(look.screen_shake_time), look.screen_shake_px));
+            }
             Event::BroadsideFired => {
                 set_band("ЗАЛП КОРАБЛЯ!".into(), BROADSIDE, look.banner_ult);
                 screen_fx.shake = Some((once(look.screen_shake_time), look.screen_shake_px * 1.3));

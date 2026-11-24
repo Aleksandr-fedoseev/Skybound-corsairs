@@ -17,6 +17,7 @@ use crate::style::{self, INK, INK_SOFT, Look, Skin};
 use crate::view::Fonts;
 
 const BRASS_EDGE: Color = Color::srgb(0.79, 0.59, 0.25);
+const COPY_GLOW: Color = Color::srgb(0.70, 0.55, 1.0);
 const MUTED: Color = Color::srgb(0.75, 0.70, 0.62);
 /// Первая карта открывается через столько секунд, следующие — с шагом.
 const FIRST_FLIP: f32 = 0.7;
@@ -38,9 +39,18 @@ const RAYS_TURN: f32 = 0.03;
 /// Что выпало: герой, редкость, новый ли.
 #[derive(Clone)]
 pub struct Pulled {
+    /// Герой копии; у добычи из сундука пусто.
     pub id: String,
     /// Эта копия добрала героя до следующей звезды.
     pub star: bool,
+    /// Ресурсы из сундука вместо копии.
+    pub loot: Option<crate::events::Bundle>,
+}
+
+impl Pulled {
+    fn copy(&self) -> bool {
+        self.loot.is_none()
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -88,13 +98,13 @@ impl HireReveal {
                 t += SSR_SUSPENSE;
             }
             flips.push(t);
-            t += if !p.star { FLIP_STEP } else { RARE_AFTER };
+            // После копии — пауза подольше: это и есть «выпало!».
+            t += if p.copy() { RARE_AFTER } else { FLIP_STEP };
         }
-        let single = list.len() == 1;
         let shows = list
             .iter()
             .enumerate()
-            .filter(|(_, p)| single || p.star)
+            .filter(|(_, p)| p.copy())
             .map(|(i, _)| i)
             .collect();
         *self = Self {
@@ -312,9 +322,9 @@ fn cards(root: &mut ChildSpawnerCommands, fonts: &Fonts, list: &[Pulled]) {
     root.spawn(text(
         fonts,
         if single {
-            "Кто-то откликнулся на объявление…"
+            "Сундук вольного бойца…"
         } else {
-            "Десять вольных бойцов у стойки…"
+            "Десять сундуков у стойки…"
         },
         true,
         20.0,
@@ -330,9 +340,11 @@ fn cards(root: &mut ChildSpawnerCommands, fonts: &Fonts, list: &[Pulled]) {
     })
     .with_children(|grid| {
         for (i, p) in list.iter().enumerate() {
-            // Золотое свечение рубашки — эта копия добирает героя до звезды.
+            // Свечение рубашки: золото — копия на звезду, фиолет — копия героя, без свечения — ресурсы.
             let glow = if p.star {
                 GOLD.with_alpha(0.8)
+            } else if p.copy() {
+                COPY_GLOW.with_alpha(0.8)
             } else {
                 Color::NONE
             };
@@ -398,7 +410,17 @@ fn cards(root: &mut ChildSpawnerCommands, fonts: &Fonts, list: &[Pulled]) {
                         ..default()
                     },
                     Skin(Look::Parchment),
-                    Outline::new(px(3), px(0), if p.star { GOLD } else { BRASS_EDGE }),
+                    Outline::new(
+                        px(3),
+                        px(0),
+                        if p.star {
+                            GOLD
+                        } else if p.copy() {
+                            COPY_GLOW
+                        } else {
+                            BRASS_EDGE
+                        },
+                    ),
                     Visibility::Hidden,
                 ));
             });
@@ -426,10 +448,24 @@ fn card_face(
     p: &Pulled,
     big: bool,
 ) {
+    let k = if big { 1.8 } else { 1.0 };
+    if let Some((kind, n)) = p.loot.and_then(|l| l.main()) {
+        card.spawn((
+            Node {
+                width: px(56.0 * k),
+                height: px(56.0 * k),
+                margin: UiRect::top(px(4.0 * k)),
+                ..default()
+            },
+            ImageNode::new(assets.load(format!("ui/icon_{kind}.png"))),
+        ));
+        card.spawn(text(fonts, format!("+{n}"), true, 16.0 * k, INK));
+        card.spawn(text(fonts, "из сундука", false, 12.0 * k, INK_SOFT));
+        return;
+    }
     let Some(hero) = data.hero(&p.id) else {
         return;
     };
-    let k = if big { 1.8 } else { 1.0 };
     card.spawn(style::medallion(assets, &hero.id, 62.0 * k, false));
     card.spawn(text(fonts, hero.name.clone(), true, 14.0 * k, INK));
     card.spawn(text(
@@ -634,7 +670,17 @@ fn summary(
                     ..default()
                 },
                 Skin(Look::Parchment),
-                Outline::new(px(3), px(0), if p.star { GOLD } else { BRASS_EDGE }),
+                Outline::new(
+                    px(3),
+                    px(0),
+                    if p.star {
+                        GOLD
+                    } else if p.copy() {
+                        COPY_GLOW
+                    } else {
+                        BRASS_EDGE
+                    },
+                ),
             ))
             .with_children(|card| card_face(card, assets, fonts, data, p, false));
         }
@@ -689,10 +735,10 @@ fn animate_cards(
             Val2::ZERO
         };
         if let Some(style) = shadow.0.first_mut()
-            && p.star
+            && p.copy()
         {
             let pulse = 0.55 + 0.45 * (t * 5.0 + *i as f32).sin().abs();
-            style.color = GOLD.with_alpha(0.9 * pulse);
+            style.color = if p.star { GOLD } else { COPY_GLOW }.with_alpha(0.9 * pulse);
         }
         // Переворот: первая половина — рубашка сжимается, вторая — лицо разворачивается.
         transform.scale.x = if k < 0.5 {
@@ -714,7 +760,13 @@ fn animate_cards(
                     });
                 }
             }
-            sfx.write(Sfx(if p.star { "ssr" } else { "flip" }));
+            sfx.write(Sfx(if p.star {
+                "ssr"
+            } else if p.copy() {
+                "skill"
+            } else {
+                "flip"
+            }));
             if p.star {
                 ssr_opened = true;
             }

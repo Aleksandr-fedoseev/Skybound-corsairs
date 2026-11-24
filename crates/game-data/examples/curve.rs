@@ -3,6 +3,8 @@
 //! Запуск: `cargo run -p game-data --example curve --release -- [число боёв]`
 //! Для этапов главы, конвоев и этажей Бездны печатает уровень, с которого побед ≥ 50% и ≥ 80%.
 //! Второе число — то, что стоит писать в `recommended_level`.
+//! У боссов с замахом `recommended_level` — по ручной игре (`--example manual`): автобою нужно
+//! на 1–2 уровня больше, и здесь он это покажет.
 //! `-- [число боёв] abyss` — только Бездна, этажи 1–60 (таблица для tools/economy.py).
 
 use std::path::Path;
@@ -11,7 +13,7 @@ use battle_core::{Battle, Element, Outcome, Ship, UnitDef};
 use game_data::GameData;
 use serde_json::Value;
 
-const TEAM: [&str; 4] = ["ren", "kaya", "borg", "mei"];
+const TEAM: [&str; 4] = ["borg", "ren", "kaya", "mei"];
 const MAX_LEVEL: u32 = 60;
 
 /// Бой: подпись, враги (id, уровень), уровень из данных, ветер.

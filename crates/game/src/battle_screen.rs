@@ -136,6 +136,8 @@ pub struct BattleScreen {
     pub shown_outcome: Option<Outcome>,
     /// Ветер боя, который видит игрок (меняется событием `WindChanged`).
     pub shown_wind: Option<battle_core::Element>,
+    /// Кто сейчас замахивается (красное кольцо под ним).
+    pub shown_charging: Option<UnitId>,
     pub queue: VecDeque<Event>,
     pub wait: f32,
     pub speed: u32,
@@ -178,6 +180,7 @@ impl BattleScreen {
             shown_current: None,
             shown_outcome: None,
             shown_wind: None,
+            shown_charging: None,
             queue: VecDeque::new(),
             wait: 0.0,
             speed: 1,
@@ -240,6 +243,7 @@ impl BattleScreen {
         self.shown_current = self.battle.current();
         self.shown_outcome = None;
         self.shown_wind = self.battle.wind();
+        self.shown_charging = None;
         self.queue.clear();
         self.spell = None;
         self.wait = self.look.step_pause;
@@ -290,6 +294,9 @@ impl BattleScreen {
             Event::Healed { .. } | Event::Advanced { .. } | Event::Delayed { .. } => look.hit_gap,
             Event::Defeated { .. } => look.defeat_pause,
             Event::WindChanged { .. } => look.broadside_windup,
+            // Замах — пауза подольше: игрок успевает понять, что пора жать ульты.
+            Event::Charging { .. } => look.broadside_windup * 1.5,
+            Event::ChargeBroken { .. } => look.defeat_pause,
             Event::TurnStarted { .. } | Event::BattleEnded { .. } => 0.0,
         }
     }
@@ -308,6 +315,13 @@ impl BattleScreen {
             }
             Event::Defeated { unit } => self.shown_hp[unit.0] = 0,
             Event::WindChanged { wind, .. } => self.shown_wind = Some(wind),
+            Event::Charging { unit, .. } => self.shown_charging = Some(unit),
+            Event::ChargeBroken { unit } if self.shown_charging == Some(unit) => {
+                self.shown_charging = None;
+            }
+            Event::AbilityUsed { unit, .. } if self.shown_charging == Some(unit) => {
+                self.shown_charging = None;
+            }
             Event::TurnStarted { unit } => self.shown_current = Some(unit),
             Event::BattleEnded { outcome } => {
                 self.shown_outcome = Some(outcome);

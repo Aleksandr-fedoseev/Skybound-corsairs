@@ -182,6 +182,22 @@ pub fn costs(
 }
 
 /// Полоса ресурсов вверху экрана: тёмные плашки с иконкой слева.
+/// Число для плашки ресурса: до 10 000 — как есть, дальше — «12,5к», «125к», «1,2м».
+pub fn compact(n: u32) -> String {
+    let short = |v: f64, unit: &str| {
+        if v < 100.0 {
+            format!("{:.1}{unit}", (v * 10.0).floor() / 10.0).replace('.', ",")
+        } else {
+            format!("{}{unit}", v.floor())
+        }
+    };
+    match n {
+        0..10_000 => n.to_string(),
+        10_000..1_000_000 => short(n as f64 / 1000.0, "к"),
+        _ => short(n as f64 / 1_000_000.0, "м"),
+    }
+}
+
 pub fn top_bar(
     root: &mut ChildSpawnerCommands,
     assets: &AssetServer,
@@ -190,7 +206,7 @@ pub fn top_bar(
 ) {
     bar(root).with_children(|bar| {
         for (kind, n) in resources {
-            resource_slot(bar, assets, fonts, kind, n.to_string(), 18.0, ());
+            resource_slot(bar, assets, fonts, kind, compact(*n), 18.0, ());
         }
     });
 }

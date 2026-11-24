@@ -21,8 +21,6 @@ use crate::view::Fonts;
 
 const CLEARED: Color = Color::srgb(0.30, 0.62, 0.38);
 const CONVOY: Color = Color::srgb(0.20, 0.45, 0.62);
-const READY: Color = Color::srgb(0.55, 0.88, 0.55);
-const WEAK: Color = Color::srgb(1.0, 0.55, 0.45);
 const LOCKED: Color = Color::srgb(0.36, 0.38, 0.43);
 const NODE: f32 = 54.0;
 const BOSS_NODE: f32 = 66.0;
@@ -136,14 +134,22 @@ struct Pulse;
 #[derive(Component)]
 struct Card;
 
-#[derive(Component, Clone, Copy)]
-enum CardText {
-    Title,
-    Enemies,
-    Level,
-    Supplies,
-    Status,
-}
+/// Точка на карте; число — нижний край кружка (точки под открытой карточкой прячутся).
+#[derive(Component)]
+struct MapSpot(f32);
+
+/// Карточка этапа: постоянная высота, верхний край — чтобы знать, что она закрывает.
+const CARD_H: f32 = 204.0;
+const CARD_BOTTOM: f32 = 92.0;
+const CARD_TOP: f32 = 960.0 - CARD_BOTTOM - CARD_H;
+
+/// Содержимое карточки: пересобирается, когда меняется выбор или его состояние.
+#[derive(Component)]
+struct CardBody;
+
+/// Таймер следующего судна в карточке конвоя.
+#[derive(Component)]
+struct CardTimer;
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(MapData::bundled())
@@ -154,7 +160,13 @@ pub fn plugin(app: &mut App) {
         .add_systems(OnEnter(Screen::Map), enter_map)
         .add_systems(
             Update,
-            (rebuild_map, refresh_card, refresh_convoy_label, pulse)
+            (
+                rebuild_map,
+                refresh_card,
+                refresh_card_timer,
+                refresh_convoy_label,
+                pulse,
+            )
                 .chain()
                 .run_if(in_state(Screen::Map)),
         );
@@ -378,18 +390,21 @@ fn plate(parent: &mut ChildSpawnerCommands, fonts: &Fonts, title: &str, sub: &st
 }
 
 /// Колонка «круглая точка + подпись» с центром точки в (x, y).
-fn spot_column(x: f32, y: f32, size: f32) -> Node {
+fn spot_column(x: f32, y: f32, size: f32) -> impl Bundle {
     // Колонка шире точки, чтобы подпись не переносилась по словам.
     const LABEL_ROOM: f32 = 80.0;
-    Node {
-        position_type: PositionType::Absolute,
-        left: px(x - (size + LABEL_ROOM) / 2.0),
-        top: px(y - size / 2.0),
-        width: px(size + LABEL_ROOM),
-        flex_direction: FlexDirection::Column,
-        align_items: AlignItems::Center,
-        ..default()
-    }
+    (
+        MapSpot(y + size / 2.0),
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(x - (size + LABEL_ROOM) / 2.0),
+            top: px(y - size / 2.0),
+            width: px(size + LABEL_ROOM),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+    )
 }
 
 fn home(root: &mut ChildSpawnerCommands, assets: &AssetServer, fonts: &Fonts, spot: &Spot) {
@@ -545,8 +560,9 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
         Node {
             position_type: PositionType::Absolute,
             left: px(10),
-            bottom: px(92),
+            bottom: px(CARD_BOTTOM),
             width: px(520),
+            height: px(CARD_H),
             padding: UiRect::axes(px(18), px(10)),
             column_gap: px(12),
             align_items: AlignItems::Center,
@@ -556,23 +572,38 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
         Visibility::Hidden,
     ))
     .with_children(|card| {
-        card.spawn(Node {
-            flex_grow: 1.0,
-            flex_shrink: 1.0,
-            flex_direction: FlexDirection::Column,
-            row_gap: px(3),
-            ..default()
-        })
-        .with_children(|info| {
-            info.spawn((
-                CardText::Title,
-                crate::style::heading(fonts, "", 22.0, Color::srgb(1.0, 0.93, 0.78)),
-            ));
-            info.spawn((CardText::Enemies, text(fonts, "", false, 13.0, PARCHMENT)));
-            info.spawn((CardText::Level, text(fonts, "", true, 13.0, PARCHMENT)));
-            info.spawn((CardText::Supplies, text(fonts, "", false, 13.0, PARCHMENT)));
-            info.spawn((CardText::Status, text(fonts, "", false, 12.0, MUTED)));
-        });
+        // Закрыть карточку — открыть то, что под ней.
+        let mut close = card.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(-14),
+                right: px(-6),
+                width: px(36),
+                height: px(36),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            Skin(Look::Dark),
+        ));
+        close.with_child(crate::style::heading(fonts, "×", 22.0, PARCHMENT));
+        pressable(&mut close);
+        close.observe(
+            |_: On<PointerClick>, mut selected: ResMut<Selected>, mut pick: ResMut<ConvoyPick>| {
+                selected.0 = None;
+                pick.0 = false;
+            },
+        );
+        card.spawn((
+            CardBody,
+            Node {
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                flex_direction: FlexDirection::Column,
+                row_gap: px(7),
+                ..default()
+            },
+        ));
         let mut go = card.spawn((
             Node {
                 width: px(130),
@@ -622,186 +653,358 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
     });
 }
 
-/// Враги этапа одной строкой: «Имперский морпех ×2 · Имперский стрелок ×1».
-fn enemies_line(screen: &BattleScreen, stage: usize) -> String {
-    let ids: Vec<&str> = screen.data.stages[stage]
-        .enemies
-        .iter()
-        .map(|e| e.enemy.as_str())
-        .collect();
-    enemies_text(screen, &ids)
-}
-
-fn enemies_text(screen: &BattleScreen, ids: &[&str]) -> String {
-    let data = &screen.data;
-    let mut groups: Vec<(&str, usize)> = Vec::new();
-    for id in ids {
-        let name = data.enemy(id).map_or(*id, |e| e.name.as_str());
-        match groups.iter_mut().find(|(n, _)| *n == name) {
-            Some((_, count)) => *count += 1,
-            None => groups.push((name, 1)),
-        }
-    }
-    let names: Vec<String> = groups.iter().map(|(n, c)| format!("{n} ×{c}")).collect();
-    names.join(" · ")
+/// Что показывает карточка: если изменилось — собрать её заново.
+#[derive(PartialEq, Clone)]
+enum CardKey {
+    Hidden,
+    Stage {
+        stage: usize,
+        wins: u32,
+        supplies: u32,
+        team: u32,
+    },
+    Convoy {
+        ready: u32,
+        team: u32,
+    },
 }
 
 #[allow(clippy::too_many_arguments)]
 fn refresh_card(
+    mut commands: Commands,
     selected: Res<Selected>,
     pick: Res<ConvoyPick>,
     convoy: (Res<ConvoyData>, Res<Convoys>),
-    events: Res<crate::events::EventData>,
+    look: (Res<AssetServer>, Res<Fonts>, Res<crate::events::EventData>),
     screen: Res<BattleScreen>,
     progress: Res<Progress>,
     menu: Res<MenuData>,
     roster: Res<Roster>,
     supply: (Res<crate::supplies::SupplyData>, Res<crate::menu::Profile>),
     mut cards: Query<&mut Visibility, With<Card>>,
-    mut texts: Query<(&CardText, &mut Text, &mut TextColor)>,
+    bodies: Query<(Entity, Option<&Children>), With<CardBody>>,
+    mut spots: Query<(&MapSpot, &mut Visibility), Without<Card>>,
+    mut shown: Local<Option<CardKey>>,
 ) {
-    for mut vis in &mut cards {
-        vis.set_if_neq(if selected.0.is_some() || pick.0 {
-            Visibility::Inherited
-        } else {
+    // Точки, которые закрыла бы открытая карточка, прячем — не торчат из-под неё.
+    let open = selected.0.is_some() || pick.0;
+    for (MapSpot(bottom), mut vis) in &mut spots {
+        vis.set_if_neq(if open && *bottom > CARD_TOP - 6.0 {
             Visibility::Hidden
+        } else {
+            Visibility::Inherited
         });
     }
+    let (assets, fonts, events) = look;
+    let (data, convoys) = convoy;
+    let (supply, profile) = supply;
     // Средний уровень отряда против рекомендуемого: ниже — бой, скорее всего, не выиграть.
-    // Уровни врагов не показываем: у врагов и героев разный рост за уровень.
     let team = roster.team_levels();
     let team_level = team.iter().map(|(_, l)| l).sum::<u32>() / team.len().max(1) as u32;
-    if pick.0 {
-        let (data, convoys) = convoy;
-        let tier = data.tier(&progress);
-        let ids: Vec<&str> = tier.enemies.iter().map(|(id, _)| id.as_str()).collect();
-        for (kind, mut text, mut color) in &mut texts {
-            let value = match kind {
-                CardText::Title => format!("Конвой · {}", tier.name),
-                CardText::Enemies => enemies_text(&screen, &ids),
-                CardText::Supplies => {
-                    color.0 = if team_level >= tier.recommended_level {
-                        READY
+    let key = if pick.0 {
+        CardKey::Convoy {
+            ready: convoys.ready,
+            team: team_level,
+        }
+    } else if let Some(stage) = selected.0 {
+        CardKey::Stage {
+            stage,
+            wins: progress.wins_today(stage, crate::cabins::today()),
+            supplies: profile.supplies,
+            team: team_level,
+        }
+    } else {
+        CardKey::Hidden
+    };
+    let Some((body, children)) = bodies.iter().next() else {
+        return;
+    };
+    // Пустое тело — карту только что собрали заново: заполнить, даже если выбор тот же.
+    let empty = children.is_none_or(|c| c.is_empty());
+    if shown.as_ref() == Some(&key) && (!empty || key == CardKey::Hidden) {
+        return;
+    }
+    for mut vis in &mut cards {
+        vis.set_if_neq(if key == CardKey::Hidden {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        });
+    }
+    *shown = Some(key.clone());
+    commands.entity(body).despawn_children();
+    let ids_of = |list: &[(String, u32)]| list.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>();
+    commands.entity(body).with_children(|b| match key {
+        CardKey::Hidden => {}
+        CardKey::Convoy { ready, team } => {
+            let tier = data.tier(&progress);
+            b.spawn(crate::style::heading(
+                &fonts,
+                format!("Конвой · {}", tier.name),
+                22.0,
+                TITLE,
+            ));
+            enemies_row(b, &assets, &fonts, &ids_of(&tier.enemies), None);
+            chips(b, |row| {
+                level_chip(row, &fonts, tier.recommended_level, team);
+                chip(
+                    row,
+                    &fonts,
+                    &format!("суда {ready}/{}", data.max_ready),
+                    if ready > 0 { READY_BG } else { WEAK_BG },
+                    None,
+                );
+                row.spawn((CardTimer, text(&fonts, "", false, 13.0, PARCHMENT)));
+            });
+            let k = events.convoy_multiplier();
+            rewards(
+                b,
+                &assets,
+                &fonts,
+                &[("planks", tier.planks * k), ("silver", tier.silver * k)],
+                if k > 1 {
+                    "попутный ветер ×2"
+                } else {
+                    ""
+                },
+            );
+        }
+        CardKey::Stage {
+            stage, wins, team, ..
+        } => {
+            let def = &screen.data.stages[stage];
+            let title = if def.id.ends_with("boss") {
+                format!("Босс · {}", def.name)
+            } else {
+                format!("{} · {}", def.id, def.name)
+            };
+            b.spawn(crate::style::heading(&fonts, title, 22.0, TITLE));
+            let ids: Vec<String> = def.enemies.iter().map(|e| e.enemy.clone()).collect();
+            enemies_row(b, &assets, &fonts, &ids, def.wind);
+            chips(b, |row| {
+                level_chip(row, &fonts, def.recommended_level, team);
+                let enough = supply.check(&profile, wins).is_ok();
+                chip(
+                    row,
+                    &fonts,
+                    &format!("−{} · есть {}", supply.cost, profile.supplies),
+                    if enough { READY_BG } else { WEAK_BG },
+                    Some(("supplies", &assets)),
+                );
+                chip(
+                    row,
+                    &fonts,
+                    &format!("сегодня {wins}/{}", supply.daily_limit()),
+                    if wins < supply.daily_limit() {
+                        PLAIN_BG
                     } else {
-                        WEAK
-                    };
-                    format!(
-                        "Рекомендуемый уровень отряда: {} · у вас {team_level}",
-                        tier.recommended_level
-                    )
+                        WEAK_BG
+                    },
+                    None,
+                );
+            });
+            let reward = &menu.victory_reward;
+            match supply.percent(wins) {
+                None => {
+                    b.spawn(text(
+                        &fonts,
+                        "лимит побед на сегодня — новый день в полночь по UTC",
+                        false,
+                        13.0,
+                        MUTED,
+                    ));
                 }
-                CardText::Level => {
-                    color.0 = if convoys.ready > 0 { READY } else { WEAK };
-                    if convoys.ready >= data.max_ready {
-                        format!(
-                            "Судов: {} из {} — очередь полна",
-                            convoys.ready, data.max_ready
-                        )
-                    } else {
-                        format!(
-                            "Судов: {} из {} · следующее через {}",
-                            convoys.ready,
-                            data.max_ready,
-                            clock(convoys.next_in(&data))
-                        )
+                Some(p) => {
+                    let mut items = vec![
+                        ("silver", reward.silver * p / 100),
+                        ("planks", reward.planks * p / 100),
+                        ("journals", reward.journals * p / 100),
+                    ];
+                    if stage >= progress.cleared {
+                        items.push(("doubloons", menu.first_clear_doubloons));
                     }
-                }
-                CardText::Status => {
-                    let k = events.convoy_multiplier();
-                    let wind = if k > 1 {
-                        format!(" · попутный ветер ×{k}")
+                    let note = if p < 100 {
+                        format!("повтор {p}%")
                     } else {
                         String::new()
                     };
-                    format!(
-                        "Добыча: +{} досок · +{} серебра{wind}",
-                        tier.planks * k,
-                        tier.silver * k
-                    )
+                    rewards(b, &assets, &fonts, &items, &note);
                 }
-            };
-            if text.0 != value {
-                text.0 = value;
             }
         }
-        return;
-    }
-    let Some(stage) = selected.0 else {
-        return;
+    });
+}
+
+/// Таймер следующего судна — тикает каждую секунду.
+fn refresh_card_timer(
+    convoy: (Res<ConvoyData>, Res<Convoys>),
+    mut timers: Query<&mut Text, With<CardTimer>>,
+) {
+    let (data, convoys) = convoy;
+    let value = if convoys.ready >= data.max_ready {
+        "очередь полна".to_string()
+    } else {
+        format!("следующее через {}", clock(convoys.next_in(&data)))
     };
-    let def = &screen.data.stages[stage];
-    let reward = &menu.victory_reward;
-    let (supply, profile) = supply;
-    let wins = progress.wins_today(stage, crate::cabins::today());
-    let percent = supply.percent(wins);
-    let ready = team_level >= def.recommended_level;
-    for (kind, mut text, mut color) in &mut texts {
-        let value = match kind {
-            CardText::Title => {
-                if def.id.ends_with("boss") {
-                    format!("Босс главы · {}", def.name)
-                } else {
-                    format!("{} · {}", def.id, def.name)
-                }
-            }
-            CardText::Enemies => match def.wind {
-                // Ветер боя: его стихия бьёт на 25% сильнее — подсказка, кого брать в отряд.
-                Some(wind) => format!(
-                    "{} · ветер боя: {} +{}%",
-                    enemies_line(&screen, stage),
-                    crate::crew::element_label(wind),
-                    (battle_core::WIND_BONUS * 100.0).round()
-                ),
-                None => enemies_line(&screen, stage),
-            },
-            CardText::Level => {
-                color.0 = if ready { READY } else { WEAK };
-                format!(
-                    "Рекомендуемый уровень отряда: {} · у вас {team_level}",
-                    def.recommended_level
-                )
-            }
-            CardText::Supplies => {
-                color.0 = if supply.check(&profile, wins).is_ok() {
-                    READY
-                } else {
-                    WEAK
-                };
-                format!(
-                    "Победа: −{} припасов (есть {}) · побед сегодня {wins}/{}",
-                    supply.cost,
-                    profile.supplies,
-                    supply.daily_limit()
-                )
-            }
-            CardText::Status => {
-                let state = if stage < progress.cleared {
-                    "Пройден"
-                } else {
-                    "Новый"
-                };
-                match percent {
-                    None => format!("{state} · лимит побед на сегодня исчерпан"),
-                    Some(p) => {
-                        let replay = if p < 100 {
-                            format!(" · повтор {p}%")
-                        } else {
-                            String::new()
-                        };
-                        format!(
-                            "{state} · +{} серебра · +{} досок · +{} журналов{replay}",
-                            reward.silver * p / 100,
-                            reward.planks * p / 100,
-                            reward.journals * p / 100
-                        )
-                    }
-                }
-            }
-        };
+    for mut text in &mut timers {
         if text.0 != value {
-            text.0 = value;
+            text.0 = value.clone();
         }
     }
+}
+
+const TITLE: Color = Color::srgb(1.0, 0.93, 0.78);
+const READY_BG: Color = Color::srgb(0.18, 0.42, 0.22);
+const WEAK_BG: Color = Color::srgb(0.55, 0.16, 0.12);
+const PLAIN_BG: Color = Color::srgba(1.0, 1.0, 1.0, 0.10);
+
+/// Враги медальонами с числом, рядом — плашка ветра боя.
+fn enemies_row(
+    parent: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    ids: &[String],
+    wind: Option<battle_core::Element>,
+) {
+    let mut groups: Vec<(&str, usize)> = Vec::new();
+    for id in ids {
+        match groups.iter_mut().find(|(g, _)| *g == id.as_str()) {
+            Some((_, n)) => *n += 1,
+            None => groups.push((id.as_str(), 1)),
+        }
+    }
+    parent
+        .spawn(Node {
+            column_gap: px(10),
+            align_items: AlignItems::Center,
+            flex_wrap: FlexWrap::Wrap,
+            row_gap: px(4),
+            ..default()
+        })
+        .with_children(|row| {
+            for (id, n) in groups {
+                row.spawn(Node {
+                    align_items: AlignItems::Center,
+                    column_gap: px(2),
+                    ..default()
+                })
+                .with_children(|g| {
+                    g.spawn((
+                        Node {
+                            width: px(40),
+                            height: px(40),
+                            ..default()
+                        },
+                        ImageNode::new(assets.load(format!("ui/unit_{id}.png"))),
+                    ));
+                    g.spawn(crate::style::heading(
+                        fonts,
+                        format!("×{n}"),
+                        17.0,
+                        PARCHMENT,
+                    ));
+                });
+            }
+            if let Some(w) = wind {
+                let label = format!(
+                    "ветер боя: {} +{}%",
+                    crate::crew::element_label(w),
+                    (battle_core::WIND_BONUS * 100.0).round()
+                );
+                row.spawn((
+                    Node {
+                        padding: UiRect::axes(px(10), px(4)),
+                        border_radius: BorderRadius::all(px(12)),
+                        ..default()
+                    },
+                    BackgroundColor(crate::view::element_color(w).with_alpha(0.85)),
+                ))
+                .with_child(crate::style::heading(
+                    fonts,
+                    label,
+                    14.0,
+                    Color::srgb(0.08, 0.06, 0.05),
+                ));
+            }
+        });
+}
+
+fn chips(parent: &mut ChildSpawnerCommands, fill: impl FnOnce(&mut ChildSpawnerCommands)) {
+    parent
+        .spawn(Node {
+            column_gap: px(6),
+            align_items: AlignItems::Center,
+            flex_wrap: FlexWrap::Wrap,
+            row_gap: px(4),
+            ..default()
+        })
+        .with_children(fill);
+}
+
+/// Плашка: цветной фон, при желании — иконка ресурса слева.
+fn chip(
+    parent: &mut ChildSpawnerCommands,
+    fonts: &Fonts,
+    label: &str,
+    bg: Color,
+    icon: Option<(&str, &AssetServer)>,
+) {
+    parent
+        .spawn((
+            Node {
+                padding: UiRect::axes(px(9), px(4)),
+                column_gap: px(4),
+                align_items: AlignItems::Center,
+                border_radius: BorderRadius::all(px(12)),
+                ..default()
+            },
+            BackgroundColor(bg),
+        ))
+        .with_children(|c| {
+            if let Some((kind, assets)) = icon {
+                c.spawn(crate::style::icon(assets, kind, 20.0));
+            }
+            c.spawn(crate::style::heading(
+                fonts,
+                label.to_string(),
+                15.0,
+                Color::WHITE,
+            ));
+        });
+}
+
+/// Рекомендуемый уровень и уровень отряда: зелёная плашка — можно идти, красная — рано.
+fn level_chip(parent: &mut ChildSpawnerCommands, fonts: &Fonts, need: u32, team: u32) {
+    chip(
+        parent,
+        fonts,
+        &format!("ур. {need} · у вас {team}"),
+        if team >= need { READY_BG } else { WEAK_BG },
+        None,
+    );
+}
+
+/// Награда иконками: «серебро 120 · доски 40 · журналы 100».
+fn rewards(
+    parent: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    items: &[(&str, u32)],
+    note: &str,
+) {
+    parent
+        .spawn(Node {
+            column_gap: px(8),
+            align_items: AlignItems::Center,
+            ..default()
+        })
+        .with_children(|row| {
+            row.spawn(text(fonts, "награда", false, 13.0, MUTED));
+            crate::style::costs(row, assets, fonts, items, 15.0, PARCHMENT);
+            if !note.is_empty() {
+                row.spawn(text(fonts, note.to_string(), false, 13.0, MUTED));
+            }
+        });
 }
 
 /// Точка конвоя на карте: шлюпка и подпись с числом судов.

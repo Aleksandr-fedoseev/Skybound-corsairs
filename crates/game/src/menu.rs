@@ -1087,13 +1087,33 @@ fn top_bar(
         later(&mut avatar, "Профиль капитана появится позже");
 
         for (value, kind, size) in [
-            (Value::Silver, "silver", 15.0),
+            (Value::Silver, "silver", 16.0),
             (Value::Planks, "planks", 16.0),
             (Value::Ether, "ether", 16.0),
             (Value::Doubloons, "doubloons", 16.0),
         ] {
             let mut slot =
                 crate::style::resource_slot(bar, assets, fonts, kind, String::new(), size, value);
+            if !matches!(value, Value::Doubloons) {
+                // Тап — сколько есть и сколько вмещает Трюм.
+                slot.observe(
+                    move |_: On<PointerClick>,
+                          profile: Res<Profile>,
+                          ship: Res<Ship>,
+                          ship_data: Res<ShipData>,
+                          mut toast: ResMut<Toast>| {
+                        let cap = ship.capacity(&ship_data);
+                        let (name, n, max) = match value {
+                            Value::Silver => ("Серебро", profile.silver, cap.silver),
+                            Value::Planks => ("Доски", profile.planks, cap.planks),
+                            _ => ("Эфир", profile.ether, cap.ether),
+                        };
+                        toast.show(&format!(
+                            "{name}: {n} из {max} — больше Трюм не вмещает, улучшайте его"
+                        ));
+                    },
+                );
+            }
             if matches!(value, Value::Doubloons) {
                 slot.with_children(|s| {
                     let mut plus = s.spawn((
@@ -1527,19 +1547,26 @@ fn refresh_values(
     profile: Res<Profile>,
     ship: Res<Ship>,
     ship_data: Res<ShipData>,
-    mut texts: Query<(&Value, &mut Text)>,
+    mut texts: Query<(&Value, &mut Text, &mut TextColor)>,
 ) {
+    // Потолок Трюма не пишем (не влезает) — полный Трюм видно по цвету числа.
     let cap = ship.capacity(&ship_data);
-    for (value, mut text) in &mut texts {
-        let shown = match value {
-            Value::Silver => format!("{}/{}", profile.silver, cap.silver),
-            Value::Planks => profile.planks.to_string(),
-            Value::Ether => profile.ether.to_string(),
-            Value::Doubloons => profile.doubloons.to_string(),
+    for (value, mut text, mut color) in &mut texts {
+        let (n, cap) = match value {
+            Value::Silver => (profile.silver, cap.silver),
+            Value::Planks => (profile.planks, cap.planks),
+            Value::Ether => (profile.ether, cap.ether),
+            Value::Doubloons => (profile.doubloons, u32::MAX),
         };
+        let shown = crate::style::compact(n);
         if text.0 != shown {
             text.0 = shown;
         }
+        color.0 = if n >= cap {
+            Color::srgb(1.0, 0.55, 0.35)
+        } else {
+            Color::srgb(1.0, 0.93, 0.78)
+        };
     }
 }
 

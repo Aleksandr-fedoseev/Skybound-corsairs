@@ -124,9 +124,10 @@
         {
           "target": "all_enemies",
           "type": "damage",
-          "multiplier": 0.9
+          "multiplier": 2.4
         }
-      ]
+      ],
+      "charge": true
     }
   },
   {
@@ -215,15 +216,15 @@
     "name": "Страж архива",
     "element": "steel",
     "base_stats": {
-      "max_hp": 3200,
+      "max_hp": 3000,
       "atk": 190,
-      "def": 110,
+      "def": 70,
       "spd": 95
     },
     "growth": {
-      "max_hp": 230,
+      "max_hp": 180,
       "atk": 14,
-      "def": 6,
+      "def": 4,
       "spd": 0
     },
     "basic": {
@@ -243,14 +244,16 @@
         {
           "target": "all_enemies",
           "type": "damage",
-          "multiplier": 0.8
+          "multiplier": 2.4
         },
         {
           "target": "single_enemy",
           "type": "delay",
           "fraction": 0.3
         }
-      ]
+      ],
+      "charge": true,
+      "break_at": 0.06
     }
   }
 ]

@@ -7,7 +7,7 @@ use std::path::Path;
 use battle_core::{AbilityKind, Battle, Event, Ship};
 use game_data::GameData;
 
-const TEAM: [&str; 4] = ["ren", "kaya", "borg", "mei"];
+const TEAM: [&str; 4] = ["borg", "ren", "kaya", "mei"];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
@@ -85,6 +85,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Event::Defeated { unit } => println!("    {} повержен", name(unit)),
                 Event::BroadsideFired => println!("  ЗАЛП КОРАБЛЯ"),
+                Event::Charging { unit, name: n } => println!("  {} замахивается: {n}", name(unit)),
+                Event::ChargeBroken { unit } => println!("  {}: замах сорван!", name(unit)),
                 Event::WindChanged { wind, by } => match by {
                     Some(id) => println!("  {} разворачивает ветер: {wind:?}", name(id)),
                     None => println!("  Ветер меняется: {wind:?}"),

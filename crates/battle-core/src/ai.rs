@@ -27,13 +27,15 @@ pub fn choose_action(battle: &Battle, actor: UnitId) -> Action {
     Action::skill(enemy_target)
 }
 
-/// Цель атаки: сначала те, у кого слабость к стихии атакующего, затем с наименьшим здоровьем.
+/// Цель атаки: сначала тот, кто замахивается (его удар можно сорвать), затем те, у кого слабость
+/// к стихии атакующего, затем с наименьшим здоровьем.
 pub fn pick_enemy_target(battle: &Battle, actor: UnitId) -> Option<UnitId> {
     let attacker = battle.unit(actor);
     battle
         .alive(attacker.side.opposite())
         .min_by_key(|u| {
             (
+                u.charging.is_none(),
                 !attacker.def.element.is_strong_against(u.def.element),
                 u.hp,
                 u.id,

@@ -8,7 +8,7 @@ use std::path::Path;
 use battle_core::{Battle, Event, Outcome, Ship, Side};
 use game_data::GameData;
 
-const TEAM: [&str; 4] = ["ren", "kaya", "borg", "mei"];
+const TEAM: [&str; 4] = ["borg", "ren", "kaya", "mei"];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);

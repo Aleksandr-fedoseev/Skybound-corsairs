@@ -106,6 +106,13 @@ pub struct Ability {
     /// Для обычной атаки и ульты не используется.
     #[serde(default)]
     pub cooldown: u32,
+    /// Умение с замахом: сначала ход на замах (его видно), удар — следующим ходом.
+    /// Если за замах боец получил достаточно урона (`CHARGE_BREAK`), удар сорван.
+    #[serde(default)]
+    pub charge: bool,
+    /// Свой порог срыва замаха (доля здоровья); без него — `CHARGE_BREAK`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub break_at: Option<f32>,
 }
 
 impl Ability {
@@ -165,6 +172,8 @@ pub struct Unit {
     pub turns_taken: u32,
     /// Сколько своих ходов осталось до умения; 0 — умение готово.
     pub skill_cooldown: u32,
+    /// Идёт замах умения: сколько урона боец получил с его начала.
+    pub charging: Option<u32>,
 }
 
 impl Unit {

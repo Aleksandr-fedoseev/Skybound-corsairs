@@ -851,8 +851,11 @@ pub fn refresh_overhead(
     let pulse = 0.5 + 0.5 * (time.elapsed_secs() * 6.0).sin();
     for (Ring(id), material) in &rings {
         let alive = screen.shown_hp[id.0] > 0 && screen.shown_outcome.is_none();
+        let fast = 0.5 + 0.5 * (time.elapsed_secs() * 12.0).sin();
         let color = if !alive {
             Color::NONE
+        } else if screen.shown_charging == Some(*id) {
+            Color::srgba(1.0, 0.25, 0.15, 0.45 + 0.5 * fast)
         } else if screen.shown_current == Some(*id) {
             Color::srgba(1.0, 1.0, 1.0, 0.75)
         } else if battle.unit(*id).ultimate_ready() {

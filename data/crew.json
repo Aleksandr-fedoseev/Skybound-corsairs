@@ -1,9 +1,9 @@
 {
   "arrivals": { "lira": 2, "sora": 4, "tess": 6 },
   "start_team": [
+    "borg",
     "ren",
     "kaya",
-    "borg",
     "mei"
   ],
   "team_size": 4,

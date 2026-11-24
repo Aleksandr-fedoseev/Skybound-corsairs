@@ -1,4 +1,12 @@
 {
   "single_price": 150,
-  "ten_price": 1350
+  "ten_price": 1350,
+  "copy_chance": 0.15,
+  "loot": [
+    { "weight": 30, "journals": 150 },
+    { "weight": 25, "silver": 400 },
+    { "weight": 10, "charts": 1 },
+    { "weight": 10, "details": 30 },
+    { "weight": 10, "supplies": 20 }
+  ]
 }

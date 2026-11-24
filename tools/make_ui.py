@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 OUT = Path("crates/game/assets/ui")
 SRC = Path("assets/ui_src")
 UNITS = Path("crates/game/assets/units")
-FONT = "crates/game/assets/fonts/NotoSans-Bold.ttf"
+FONT = "crates/game/assets/fonts/Rubik-ExtraBold.ttf"
 rng = np.random.default_rng(11)
 
 WOOD_DARK = (58, 36, 22)
@@ -159,6 +159,12 @@ def icon(kind, size=64):
         d.rounded_rectangle((s * .12, s * .2, s * .88, s * .8), s // 14, fill=PARCHMENT, outline=(150, 110, 70), width=s // 30)
         d.line((s * .25, s * .62, s * .45, s * .4, s * .6, s * .55, s * .78, s * .32), fill=(160, 60, 40), width=s // 28)
         d.ellipse((s * .72, s * .26, s * .82, s * .36), fill=(160, 60, 40))
+    elif kind == "supplies":
+        # Мешок с провиантом, перевязанный бечёвкой.
+        d.ellipse((s * .16, s * .3, s * .84, s * .94), fill=(196, 150, 92), outline=(110, 72, 36), width=s // 26)
+        d.polygon([(s * .34, s * .34), (s * .5, s * .1), (s * .66, s * .34)], fill=(196, 150, 92), outline=(110, 72, 36))
+        d.rectangle((s * .34, s * .3, s * .66, s * .37), fill=(150, 60, 40))
+        d.ellipse((s * .3, s * .52, s * .46, s * .66), fill=(226, 190, 128))
     elif kind == "details":
         d.ellipse((s * .14, s * .14, s * .86, s * .86), fill=(150, 160, 175), outline=(80, 88, 100), width=s // 24)
         for k in range(8):
@@ -498,7 +504,7 @@ def main():
     save("tab_on.png", tab(True))
     save("tab_off.png", tab(False))
     save("plank.png", plank())
-    for kind in ("silver", "planks", "ether", "journals", "doubloons", "charts", "details"):
+    for kind in ("silver", "planks", "ether", "journals", "doubloons", "charts", "details", "supplies"):
         save(f"icon_{kind}.png", icon(kind))
     save("pill.png", pill())
     for kind in ("hp", "atk", "def", "spd"):
