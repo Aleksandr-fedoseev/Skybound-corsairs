@@ -45,6 +45,11 @@ def key_green(img):
     return Image.fromarray((out * 255).clip(0, 255).astype(np.uint8), "RGBA")
 
 
+# Эти корабли нарисованы носом влево, а на главной корабль летит вправо: разрез зеркалится,
+# чтобы на осмотре был тот же корабль, что и на главной. Рамки в data/ship.json — уже по зеркалу.
+FLIP = {"lastochka", "petrel", "falcon"}
+
+
 def cut(ship):
     src = ART / ship
     dst = OUT / ship
@@ -54,6 +59,8 @@ def cut(ship):
             print(f"{ship}: нет {name}.png — пропускаю")
             continue
         img = key_green(Image.open(src / f"{name}.png"))
+        if ship in FLIP:
+            img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         img = img.resize((1024, 1024), Image.Resampling.LANCZOS) if img.size != (1024, 1024) else img
         rgb = img.convert("RGB").filter(ImageFilter.UnsharpMask(1.2, 50, 2))
         rgb.putalpha(img.getchannel("A"))

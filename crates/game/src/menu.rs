@@ -4,6 +4,7 @@
 //! ресурсы пока живут только в памяти: сохранения и экономика на сервере будут позже.
 
 use battle_core::Outcome;
+use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -1028,6 +1029,37 @@ fn spawn_sky(
 /// Панорама неба за кораблём (два куска встык едут влево) и стайка птиц.
 fn backdrop(root: &mut ChildSpawnerCommands, assets: &AssetServer, view: &crate::ship::Scene) {
     let sky = &view.backdrop;
+    // Небо — один неподвижный узел на весь экран: едет окно в текстуре, а текстура повторяется
+    // по ширине. Краёв картинки на экране нет, поэтому нет и шва: кольцо замыкает сам сэмплер.
+    let image = assets
+        .load_builder()
+        .with_settings(|s: &mut ImageLoaderSettings| {
+            s.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                address_mode_u: ImageAddressMode::Repeat,
+                ..ImageSamplerDescriptor::linear()
+            });
+        })
+        .load(sky.image.clone());
+    root.spawn((
+        SkyScroll {
+            width: sky.width,
+            speed: sky.speed,
+        },
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(0),
+            top: px(0),
+            width: percent(100),
+            height: percent(100),
+            ..default()
+        },
+        ImageNode {
+            rect: Some(Rect::new(0.0, 0.0, 1.0, 1.0)),
+            ..ImageNode::new(image)
+        },
+        Pickable::IGNORE,
+    ));
+    // Водопад и мельницы — в двух прозрачных слоях шириной в панораму: едут вместе с небом.
     for copy in 0..2 {
         root.spawn((
             Backdrop {
@@ -1039,12 +1071,10 @@ fn backdrop(root: &mut ChildSpawnerCommands, assets: &AssetServer, view: &crate:
                 position_type: PositionType::Absolute,
                 left: px(0),
                 top: px(0),
-                // На 2 px шире шага: копии заходят друг на друга, без светлой нити на стыке.
-                width: px(sky.width + 2.0),
+                width: px(sky.width),
                 height: percent(100),
                 ..default()
             },
-            ImageNode::new(assets.load(sky.image.clone())),
             UiTransform::default(),
             Pickable::IGNORE,
         ))
@@ -1114,6 +1144,13 @@ fn backdrop(root: &mut ChildSpawnerCommands, assets: &AssetServer, view: &crate:
     }
 }
 
+/// Небо: окно в повторяющейся текстуре панорамы (px текстуры = логический px).
+#[derive(Component)]
+struct SkyScroll {
+    width: f32,
+    speed: f32,
+}
+
 #[derive(Component)]
 struct Backdrop {
     copy: f32,
@@ -1143,9 +1180,16 @@ fn scroll_backdrop(
     mut skies: Query<(&Backdrop, &mut UiTransform), (Without<Bird>, Without<MillSails>)>,
     mut birds: Query<(&Bird, &mut UiTransform), (Without<Backdrop>, Without<MillSails>)>,
     mut mills: Query<(&MillSails, &mut UiTransform), (Without<Backdrop>, Without<Bird>)>,
-    mut water: Query<&mut ImageNode, With<FallingWater>>,
+    mut water: Query<&mut ImageNode, (With<FallingWater>, Without<SkyScroll>)>,
+    mut sky_view: Query<(&SkyScroll, &ComputedNode, &mut ImageNode), Without<FallingWater>>,
 ) {
     let t = time.elapsed_secs();
+    for (sky, node, mut image) in &mut sky_view {
+        // Окно размером с узел в логических px; высота панорамы равна высоте экрана.
+        let size = node.size() * node.inverse_scale_factor();
+        let x = (t * sky.speed).rem_euclid(sky.width);
+        image.rect = Some(Rect::new(x, 0.0, x + size.x, size.y));
+    }
     for (sky, mut transform) in &mut skies {
         let x = -(t * sky.speed).rem_euclid(sky.width) + sky.copy * sky.width;
         transform.translation = Val2::px(x, 0.0);
