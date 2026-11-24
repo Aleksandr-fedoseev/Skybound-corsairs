@@ -369,7 +369,7 @@ fn spawn_hud(
                                         let (supply, profile, progress) = gate;
                                         let today = crate::cabins::today();
                                         let wins = progress.wins_today(screen.stage, today);
-                                        if let Err(why) = supply.check(&profile, wins) {
+                                        if let Err(why) = supply.check(&profile, wins, screen.stage == progress.cleared) {
                                             for mut text in &mut notes {
                                                 text.0 = why.clone();
                                             }

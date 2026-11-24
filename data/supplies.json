@@ -1,7 +1,8 @@
 {
-  "cap": 60,
+  "cap": 120,
   "regen_minutes": 6,
-  "cost": 6,
+  "cost": 12,
   "replay_percent": [100, 100, 60, 30, 10],
-  "galley_hours": 8
+  "galley_hours": 8,
+  "first_clear_free": true
 }

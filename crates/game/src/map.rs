@@ -783,11 +783,17 @@ fn refresh_card(
             enemies_row(b, &assets, &fonts, &ids, def.wind);
             chips(b, |row| {
                 level_chip(row, &fonts, def.recommended_level, team);
-                let enough = supply.check(&profile, wins).is_ok();
+                let first = stage == progress.cleared;
+                let enough = supply.check(&profile, wins, first).is_ok();
+                let cost = supply.cost_for(first);
                 chip(
                     row,
                     &fonts,
-                    &format!("−{} · есть {}", supply.cost, profile.supplies),
+                    &if cost == 0 {
+                        format!("новый этап — бесплатно · есть {}", profile.supplies)
+                    } else {
+                        format!("−{cost} · есть {}", profile.supplies)
+                    },
                     if enough { READY_BG } else { WEAK_BG },
                     Some(("supplies", &assets)),
                 );

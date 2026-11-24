@@ -2312,8 +2312,9 @@ fn count_victory(
             let today = crate::cabins::today();
             let wins = progress.wins_today(screen.stage, today);
             let percent = supply.percent(wins).unwrap_or(0);
+            let cost = supply.cost_for(screen.stage == progress.cleared);
             progress.add_win(screen.stage, today);
-            spoils.profile.supplies = spoils.profile.supplies.saturating_sub(supply.cost);
+            spoils.profile.supplies = spoils.profile.supplies.saturating_sub(cost);
             let cut = |n: u32| n * percent / 100;
             let reward = &data.victory_reward;
             let reward = crate::menu::Reward {
@@ -2350,7 +2351,7 @@ fn count_victory(
                 reward.silver,
                 reward.planks,
                 reward.journals,
-                supply.cost,
+                cost,
                 spoils.profile.supplies,
                 wins + 1,
                 supply.daily_limit()

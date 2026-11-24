@@ -183,8 +183,10 @@ class Player:
         r = menu["victory_reward"]
         self.give(int(r["silver"] * pct), int(r["planks"] * pct), int(r["journals"] * pct))
         self.wins_today[i] = wins + 1
-        self.supplies -= supply["cost"]
-        self.add("припасы: потрачено", supply["cost"])
+        # Первая победа на новом этапе — без припасов (если так в data/supplies.json).
+        cost = 0 if i == self.cleared and supply.get("first_clear_free") else supply["cost"]
+        self.supplies -= cost
+        self.add("припасы: потрачено", cost)
         self.add("побед на этапах", 1)
         self.deed("win")
         if i == self.cleared:
@@ -193,8 +195,9 @@ class Player:
             self.cleared_at[stages[i]["id"]] = f"день {day + 1}, {now % 24:02.0f}:00"
 
     def can_stage(self, i):
+        free = i == self.cleared and supply.get("first_clear_free")
         return (self.squad() >= stages[i]["recommended_level"]
-                and self.supplies >= supply["cost"]
+                and (free or self.supplies >= supply["cost"])
                 and self.wins_today.get(i, 0) < len(supply["replay_percent"]))
 
     def fight(self, day, now):

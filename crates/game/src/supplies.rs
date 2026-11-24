@@ -1,7 +1,7 @@
 //! Припасы — ограничитель фарма этапов главы (решение #70).
 //!
-//! Победа на этапе тратит припасы; поражение бесплатно — стену можно штурмовать сколько угодно,
-//! а фармить пройденное — нет. Припасы восстанавливаются со временем до потолка, их варит
+//! Победа на пройденном этапе тратит припасы; поражение и первая победа на новом этапе бесплатны —
+//! стену можно штурмовать сколько угодно, а фармить пройденное — нет. Припасы восстанавливаются со временем до потолка, их варит
 //! Камбуз (собираются тапом и могут превысить потолок), дают контракты и ивенты.
 //! Повторные победы на одном этапе за день приносят всё меньше, а после лимита этап закрыт
 //! до завтра. Настройки — `data/supplies.json`.
@@ -34,6 +34,9 @@ pub struct SupplyData {
     pub cost: u32,
     /// Награда за n-ю победу на этапе за день, в процентах; длина списка — дневной лимит.
     pub replay_percent: Vec<u32>,
+    /// Первая победа на новом этапе — без припасов: стену можно штурмовать и с пустым запасом.
+    #[serde(default)]
+    pub first_clear_free: bool,
     /// Сколько часов Камбуз варит, пока его не опустошат.
     pub galley_hours: f32,
 }
@@ -54,17 +57,27 @@ impl SupplyData {
     }
 
     /// Можно ли идти на этап: `Err` — почему нельзя.
-    pub fn check(&self, profile: &Profile, wins: u32) -> Result<(), String> {
+    /// Сколько припасов стоит победа: новый этап (`first`) — бесплатно, если так в данных.
+    pub fn cost_for(&self, first: bool) -> u32 {
+        if first && self.first_clear_free {
+            0
+        } else {
+            self.cost
+        }
+    }
+
+    pub fn check(&self, profile: &Profile, wins: u32, first: bool) -> Result<(), String> {
         if self.percent(wins).is_none() {
             return Err(format!(
                 "Этап взят {} раз за сегодня — команда вымоталась. Новый день — в полночь по UTC",
                 self.daily_limit()
             ));
         }
-        if profile.supplies < self.cost {
+        let cost = self.cost_for(first);
+        if profile.supplies < cost {
             return Err(format!(
-                "Не хватает припасов: нужно {}, есть {}. Камбуз, контракты и ивенты пополнят запас",
-                self.cost, profile.supplies
+                "Не хватает припасов: нужно {cost}, есть {}. Камбуз, контракты и ивенты пополнят запас",
+                profile.supplies
             ));
         }
         Ok(())
@@ -155,6 +168,8 @@ pub fn label(fonts: &Fonts, size: f32, color: Color) -> impl Bundle {
 fn refresh(
     profile: Res<Profile>,
     data: Res<SupplyData>,
+    progress: Res<Progress>,
+    screen: Res<crate::battle_screen::BattleScreen>,
     mut bubbles: Query<(&mut Visibility, &Children), With<GalleyBubble>>,
     mut labels: Query<&mut Text, (With<SuppliesLabel>, Without<GalleyBubble>)>,
     mut texts: Query<&mut Text, Without<SuppliesLabel>>,
@@ -175,10 +190,18 @@ fn refresh(
             }
         }
     }
-    let mut value = format!(
-        "Припасы {}/{} · победа −{}",
-        profile.supplies, data.cap, data.cost
-    );
+    // Следующий этап в «В поход» — новый? Тогда победа на нём бесплатна.
+    let stages = screen.data.stages.len();
+    let first = progress.cleared < stages;
+    let cost = data.cost_for(first);
+    let mut value = if cost == 0 {
+        format!(
+            "Припасы {}/{} · новый этап — бесплатно",
+            profile.supplies, data.cap
+        )
+    } else {
+        format!("Припасы {}/{} · победа −{cost}", profile.supplies, data.cap)
+    };
     if profile.supplies < data.cap {
         let left = (1.0 - profile.supplies_regen) * data.regen_minutes * 60.0;
         value.push_str(&format!(" · +1 через {}", clock(left)));
@@ -239,13 +262,13 @@ mod tests {
         let mut last = u32::MAX;
         for _ in 0..data.daily_limit() {
             let wins = progress.wins_today(0, 7);
-            assert!(data.check(&p, wins).is_ok());
+            assert!(data.check(&p, wins, false).is_ok());
             let percent = data.percent(wins).unwrap();
             assert!(percent <= last);
             last = percent;
             progress.add_win(0, 7);
         }
-        assert!(data.check(&p, progress.wins_today(0, 7)).is_err());
+        assert!(data.check(&p, progress.wins_today(0, 7), false).is_err());
         // Новый день — снова можно, другой этап не задет.
         assert_eq!(progress.wins_today(0, 8), 0);
         assert_eq!(progress.wins_today(1, 7), 0);
@@ -256,6 +279,8 @@ mod tests {
         let data = SupplyData::bundled();
         let mut p = profile();
         p.supplies = data.cost - 1;
-        assert!(data.check(&p, 0).is_err());
+        assert!(data.check(&p, 0, false).is_err());
+        // Новый этап — бесплатно, даже с пустым запасом.
+        assert!(data.check(&p, 0, true).is_ok());
     }
 }

@@ -144,7 +144,7 @@ fn start_voyage(
     let stage = voyage.stage.unwrap_or(progress.next_stage(stages.len()));
     let (supply, profile, mut toast) = supplies;
     let wins = progress.wins_today(stage, crate::cabins::today());
-    if let Err(why) = supply.check(&profile, wins) {
+    if let Err(why) = supply.check(&profile, wins, stage == progress.cleared) {
         toast.show_long(&why);
         return;
     }
