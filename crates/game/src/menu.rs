@@ -228,7 +228,7 @@ pub fn plugin(app: &mut App) {
         // Небо на остальных экранах едет так же, как на главной (там — в общей цепочке ниже).
         .add_systems(
             Update,
-            (drift_clouds, scroll_backdrop).run_if(not(in_state(Screen::Menu))),
+            (drift_clouds, scroll_backdrop, scroll_sky).run_if(not(in_state(Screen::Menu))),
         )
         .add_systems(
             Update,
@@ -242,6 +242,7 @@ pub fn plugin(app: &mut App) {
                     spin_and_pulse,
                     drift_clouds,
                     scroll_backdrop,
+                    scroll_sky,
                 ),
             )
                 .chain()
@@ -1174,25 +1175,31 @@ struct MillSails(f32);
 
 /// Фон едет от часов: после пересборки меню не прыгает.
 #[allow(clippy::type_complexity)]
+/// Небо едет: окно в текстуре размером с экран (логические px; высота панорамы равна высоте
+/// экрана). Размер берём у окна, а не у разметки узла: в кадр пересборки она ещё не посчитана,
+/// и небо мигнуло бы синим фоном.
+fn scroll_sky(
+    time: Res<Time>,
+    window: Single<&Window>,
+    mut skies: Query<(&SkyScroll, &mut ImageNode)>,
+) {
+    let t = time.elapsed_secs();
+    let (w, h) = (window.width(), window.height());
+    for (sky, mut image) in &mut skies {
+        let x = (t * sky.speed).rem_euclid(sky.width);
+        image.rect = Some(Rect::new(x, 0.0, x + w, h));
+    }
+}
+
 fn scroll_backdrop(
     time: Res<Time>,
     data: Res<ShipData>,
     mut skies: Query<(&Backdrop, &mut UiTransform), (Without<Bird>, Without<MillSails>)>,
     mut birds: Query<(&Bird, &mut UiTransform), (Without<Backdrop>, Without<MillSails>)>,
     mut mills: Query<(&MillSails, &mut UiTransform), (Without<Backdrop>, Without<Bird>)>,
-    mut water: Query<&mut ImageNode, (With<FallingWater>, Without<SkyScroll>)>,
-    mut sky_view: Query<(&SkyScroll, &mut ImageNode), Without<FallingWater>>,
-    window: Single<&Window>,
+    mut water: Query<&mut ImageNode, With<FallingWater>>,
 ) {
     let t = time.elapsed_secs();
-    // Окно в текстуре размером с экран (логические px; высота панорамы равна высоте экрана).
-    // Размер берём у окна, а не у разметки узла: в кадр пересборки она ещё не посчитана,
-    // и небо мигнуло бы синим фоном.
-    let (w, h) = (window.width(), window.height());
-    for (sky, mut image) in &mut sky_view {
-        let x = (t * sky.speed).rem_euclid(sky.width);
-        image.rect = Some(Rect::new(x, 0.0, x + w, h));
-    }
     for (sky, mut transform) in &mut skies {
         let x = -(t * sky.speed).rem_euclid(sky.width) + sky.copy * sky.width;
         transform.translation = Val2::px(x, 0.0);
