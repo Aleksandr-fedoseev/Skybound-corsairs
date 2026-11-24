@@ -29,6 +29,8 @@ pub struct ShipData {
     pub hull_cost_factor: f32,
     /// Цена и время перехода на уровень `level` (1 — постройка отсека).
     pub levels: Vec<LevelCost>,
+    /// Корабли Верфи по порядку: номер корабля = уровень `hull` (потолок и открытие отсеков).
+    pub ships: Vec<ShipClass>,
     pub compartments: Vec<Compartment>,
     pub view: ShipView,
 }
@@ -181,6 +183,20 @@ pub struct LevelCost {
     pub ether: u32,
 }
 
+/// Корабль Верфи: покупается целиком, отсеки и их уровни переезжают на него (решения №57–58).
+#[derive(Deserialize)]
+pub struct ShipClass {
+    pub tier: u32,
+    pub name: String,
+    pub class: String,
+    /// Открывается после этого этапа; без поля — с начала.
+    #[serde(default)]
+    pub after: Option<String>,
+    pub silver: u32,
+    pub planks: u32,
+    pub ether: u32,
+}
+
 #[derive(Deserialize)]
 pub struct Compartment {
     pub id: String,
@@ -267,6 +283,15 @@ impl ShipData {
             .expect("data/ship.json корректен")
     }
 
+    pub fn ship(&self, tier: u32) -> Option<&ShipClass> {
+        self.ships.iter().find(|s| s.tier == tier)
+    }
+
+    /// «Ласточка», «Буревестник»… — имя корабля этого уровня.
+    pub fn ship_name(&self, tier: u32) -> &str {
+        self.ship(tier).map_or("", |s| s.name.as_str())
+    }
+
     pub fn compartment(&self, id: &str) -> Option<&Compartment> {
         self.compartments.iter().find(|c| c.id == id)
     }
@@ -317,6 +342,34 @@ impl Ship {
 
     pub fn level(&self, id: &str) -> u32 {
         self.levels.get(id).copied().unwrap_or(0)
+    }
+
+    /// Следующий корабль Верфи, если его можно купить; иначе — почему нельзя.
+    /// `cleared` — сколько этапов пройдено, `stages` — их id по порядку.
+    pub fn next_ship<'a>(
+        &self,
+        data: &'a ShipData,
+        cleared: usize,
+        stages: &[String],
+    ) -> Result<&'a ShipClass, String> {
+        let Some(next) = data.ship(self.hull() + 1) else {
+            return Err("У вас лучший корабль".into());
+        };
+        if let Some(after) = &next.after {
+            let open = stages
+                .iter()
+                .position(|s| s == after)
+                .is_some_and(|i| i < cleared);
+            if !open {
+                return Err(format!("Откроется после этапа {after}"));
+            }
+        }
+        Ok(next)
+    }
+
+    /// Новый корабль с Верфи: отсеки и их уровни остаются как были.
+    pub fn set_hull(&mut self, tier: u32) {
+        self.levels.insert(HULL.into(), tier);
     }
 
     pub fn hull(&self) -> u32 {
@@ -435,20 +488,24 @@ impl Ship {
             return Err("Отсек появится в следующих обновлениях".into());
         }
         let hull = self.hull();
+        if id == HULL {
+            return Err("Корабль не улучшают — покупают новый на Верфи".into());
+        }
         if compartment.unlock_hull > hull {
-            return Err(format!("Откроется на Корпусе {}", compartment.unlock_hull));
+            return Err(format!(
+                "Откроется на корабле «{}» — Верфь",
+                data.ship_name(compartment.unlock_hull)
+            ));
         }
         let to = self.level(id) + 1;
         if to > data.max_level {
             return Err("Максимальный уровень".into());
         }
-        if id == HULL {
-            let need = to - 1;
-            if self.level("cannon_deck") < need || self.level("hold") < need {
-                return Err(format!("Нужны Пушечная палуба и Трюм ур. {need}"));
-            }
-        } else if to > hull {
-            return Err(format!("Нужен Корпус ур. {to}"));
+        if to > hull {
+            return Err(format!(
+                "Потолок корабля — ур. {hull}; дальше нужен «{}» с Верфи",
+                data.ship_name(hull + 1)
+            ));
         }
         if let Some(build) = &self.build {
             let name = data.compartment(&build.id).map_or("", |c| c.name.as_str());
@@ -890,17 +947,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hull_needs_cannon_and_hold() {
+    fn ships_open_by_progress() {
         let data = ShipData::bundled();
-        let mut ship = Ship::new(&data);
-        // На старте всё на 1-м уровне: Корпус 2 требует отсеки ур. 1 — можно.
-        assert!(ship.next_step(&data, HULL).is_ok());
-        ship.levels.insert(HULL.into(), 2);
-        // Корпус 3 требует Пушечную палубу и Трюм ур. 2.
+        let ship = Ship::new(&data);
+        let stages: Vec<String> = ["1-1", "1-2", "1-3", "1-4", "1-5"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        // Второй корабль — после 1-4: пройдено 3 этапа — рано, 4 — можно.
+        assert!(ship.next_ship(&data, 3, &stages).is_err());
+        assert_eq!(ship.next_ship(&data, 4, &stages).map(|s| s.tier), Ok(2));
+        // Корпус больше не строят.
         assert!(ship.next_step(&data, HULL).is_err());
-        ship.levels.insert("cannon_deck".into(), 2);
-        ship.levels.insert("hold".into(), 2);
-        assert!(ship.next_step(&data, HULL).is_ok());
     }
 
     #[test]

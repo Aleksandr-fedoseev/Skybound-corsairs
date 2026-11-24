@@ -291,15 +291,15 @@ mod tests {
         let mut save = fresh();
         save.profile.ether_pending = 0.0;
         save.ship.build = Some(Build {
-            id: "hull".into(),
+            id: "cannon_deck".into(),
             to: 2,
             left: 60.0,
         });
         let report = offline(&mut save, &data, &ConvoyData::bundled(), 600);
         assert!(save.ship.build.is_none());
-        assert_eq!(save.ship.hull(), 2);
+        assert_eq!(save.ship.level("cannon_deck"), 2);
         assert!(save.profile.ether_pending > 0.0);
-        assert!(report.contains("Корпус"));
+        assert!(report.contains("Пушечная палуба"));
     }
 
     #[test]

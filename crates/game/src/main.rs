@@ -21,6 +21,7 @@ mod map;
 mod menu;
 mod save;
 mod ship;
+mod shipyard;
 mod softbody;
 mod spells;
 mod story;

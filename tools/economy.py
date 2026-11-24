@@ -246,8 +246,13 @@ class Player:
         for cid in ("training_deck", "hold", "galley", "cannon_deck", "windcatchers"):
             if comp[cid]["unlock_hull"] <= hull and self.ship[cid] < hull:
                 return cid, self.ship[cid] + 1
-        if hull < ship["max_level"]:
-            return "hull", hull + 1
+        # Новый корабль с Верфи — когда открыт по прогрессу главы.
+        nxt = next((c for c in ship["ships"] if c["tier"] == hull + 1), None)
+        if nxt:
+            after = nxt.get("after")
+            ids = [st["id"] for st in stages]
+            if after is None or (after in ids and ids.index(after) < self.cleared):
+                return "hull", hull + 1
         return None
 
     def try_build(self, now):
@@ -257,6 +262,14 @@ class Player:
         if not w:
             return
         cid, to = w
+        if cid == "hull":
+            c = next(x for x in ship["ships"] if x["tier"] == to)
+            if self.silver >= c["silver"] and self.planks >= c["planks"] and self.ether >= c["ether"]:
+                self.silver -= c["silver"]
+                self.planks -= c["planks"]
+                self.ether -= c["ether"]
+                self.ship["hull"] = to  # покупка мгновенная
+            return
         c = build_cost(cid, to)
         if self.silver >= c["silver"] and self.planks >= c["planks"] and self.ether >= c["ether"]:
             self.silver -= c["silver"]

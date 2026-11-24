@@ -49,7 +49,6 @@ const PRESSED_SCALE: f32 = 0.94;
 /// Данные меню: `data/menu.json`.
 #[derive(Resource, Deserialize, Clone)]
 pub struct MenuData {
-    pub ship_name: String,
     pub start: Start,
     pub victory_reward: Reward,
     /// Дублоны за первое прохождение этапа.
@@ -290,7 +289,6 @@ pub fn plugin(app: &mut App) {
 struct MenuView<'w> {
     assets: Res<'w, AssetServer>,
     fonts: Res<'w, Fonts>,
-    data: Res<'w, MenuData>,
     profile: Res<'w, Profile>,
     progress: Res<'w, Progress>,
     screen: Res<'w, BattleScreen>,
@@ -391,10 +389,9 @@ pub(crate) fn stage_title(id: &str) -> String {
 }
 
 fn build(commands: &mut Commands, view: &MenuView) {
-    let (assets, fonts, data, profile, progress, screen) = (
+    let (assets, fonts, profile, progress, screen) = (
         &*view.assets,
         &*view.fonts,
-        &*view.data,
         &*view.profile,
         &*view.progress,
         &*view.screen,
@@ -445,7 +442,7 @@ fn build(commands: &mut Commands, view: &MenuView) {
             .with_children(|title| {
                 title.spawn(crate::style::heading(
                     fonts,
-                    format!("«{}»", data.ship_name),
+                    format!("«{}»", ship_data.ship_name(ship.hull())),
                     32.0,
                     Color::WHITE,
                 ));
@@ -478,6 +475,19 @@ fn build(commands: &mut Commands, view: &MenuView) {
             bottom_nav(root, assets, fonts, Screen::Menu);
             if view.board_open.0 {
                 crate::contracts::board(root, fonts, &view.contract_data, &view.contracts);
+            } else if view.open.0.as_deref() == Some("hull") {
+                // Тайл «Верфь» — покупка кораблей вместо улучшения корпуса.
+                let ids: Vec<String> = screen.data.stages.iter().map(|s| s.id.clone()).collect();
+                crate::shipyard::board(
+                    root,
+                    assets,
+                    fonts,
+                    ship_data,
+                    ship,
+                    profile,
+                    progress.cleared,
+                    &ids,
+                );
             } else if let Some(id) = &view.open.0 {
                 let workshop = (id == "workshop")
                     .then(|| ship.workshop_rarity(ship_data))
@@ -763,7 +773,7 @@ fn ship_rooms(
                         Pickable::IGNORE,
                     ));
                     let need = if ship.hull() < compartment.unlock_hull {
-                        format!("Корпус {}", compartment.unlock_hull)
+                        format!("«{}»", ship_data.ship_name(compartment.unlock_hull))
                     } else {
                         "Построить".to_string()
                     };
@@ -1327,7 +1337,10 @@ fn compartments(
                 let (status, color) = if building {
                     ("строится".to_string(), GOLD)
                 } else if !open {
-                    (format!("Корпус {}", compartment.unlock_hull), GOLD)
+                    (
+                        format!("«{}»", data.ship_name(compartment.unlock_hull)),
+                        GOLD,
+                    )
                 } else if level == 0 {
                     ("построить".to_string(), GOLD)
                 } else {

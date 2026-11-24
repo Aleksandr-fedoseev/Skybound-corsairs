@@ -11,9 +11,18 @@
     { "level": 6, "seconds": 7200, "silver": 2800, "planks": 560, "ether": 180 },
     { "level": 7, "seconds": 21600, "silver": 5000, "planks": 1000, "ether": 350 }
   ],
+  "ships": [
+    { "tier": 1, "name": "Ласточка", "class": "шлюп", "silver": 0, "planks": 0, "ether": 0 },
+    { "tier": 2, "name": "Буревестник", "class": "бриг", "after": "1-4", "silver": 600, "planks": 120, "ether": 0 },
+    { "tier": 3, "name": "Альбатрос", "class": "корвет", "after": "1-boss", "silver": 1200, "planks": 270, "ether": 0 },
+    { "tier": 4, "name": "Гордый орёл", "class": "фрегат", "after": "2-4", "silver": 2400, "planks": 540, "ether": 120 },
+    { "tier": 5, "name": "Небесный кит", "class": "галеон", "after": "2-boss", "silver": 4500, "planks": 960, "ether": 270 },
+    { "tier": 6, "name": "Грозовой страж", "class": "линейный корабль", "after": "3-boss", "silver": 8000, "planks": 1700, "ether": 540 },
+    { "tier": 7, "name": "Сердце бури", "class": "флагман", "after": "4-boss", "silver": 14000, "planks": 3000, "ether": 1000 }
+  ],
   "compartments": [
     {
-      "id": "hull", "name": "Корпус", "icon": "menu/ship_lvl1.png", "unlock_hull": 1, "start_level": 1,
+      "id": "hull", "name": "Верфь", "icon": "menu/ship_lvl1.png", "unlock_hull": 1, "start_level": 1,
       "effect": { "kind": "hull" }
     },
     {
