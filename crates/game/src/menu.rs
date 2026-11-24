@@ -221,6 +221,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<MenuRebuild>()
         .init_resource::<TilePage>()
         .init_resource::<ShipCam>()
+        .init_resource::<ShipTransition>()
         .add_systems(OnEnter(Screen::Menu), spawn_menu)
         .add_systems(OnEnter(Screen::Crew), spawn_sky)
         .add_systems(OnEnter(Screen::Tavern), spawn_sky)
@@ -261,7 +262,10 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, count_victory.run_if(in_state(Screen::Battle)))
         .add_systems(Update, ship_mips);
     #[cfg(feature = "dev")]
-    app.add_systems(Update, dev_hull_key.run_if(in_state(Screen::Menu)));
+    app.add_systems(
+        Update,
+        (dev_hull_key, dev_transition_key).run_if(in_state(Screen::Menu)),
+    );
 }
 
 /// Всё, из чего собирается экран корабля.
@@ -614,6 +618,34 @@ fn ship_view(
         // Ветроловы накопили эфир — пузырь над кораблём, тап собирает.
         let [x, y] = view.bubble;
         ether_bubble(deck, fonts, pct(x), pct(y));
+        // Облако перехода: пять клубов поверх корабля, видны только в момент подмены.
+        let (cx, cy, bw) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0, x1 - x0);
+        for (image, dx, dy, w) in [
+            ("menu/cloud_2.png", -0.45, 0.2, 1.3),
+            ("menu/cloud_3.png", 0.45, 0.15, 1.25),
+            ("menu/cloud_1.png", -0.22, -0.3, 1.3),
+            ("menu/cloud_1.png", 0.25, -0.28, 1.2),
+            ("menu/cloud_1.png", 0.0, 0.0, 2.0),
+        ] {
+            let (w, h) = (bw * w, bw * w * 0.63);
+            deck.spawn((
+                TransitionPuff {
+                    dir: Vec2::new(dx, dy),
+                },
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: pct(cx + dx * bw - w / 2.0),
+                    top: pct(cy + dy * bw - h / 2.0),
+                    width: pct(w),
+                    height: pct(h),
+                    ..default()
+                },
+                ImageNode::new(assets.load(image)),
+                UiTransform::default(),
+                Visibility::Hidden,
+                Pickable::IGNORE,
+            ));
+        }
     });
 }
 
@@ -635,6 +667,35 @@ fn open_ship(
 /// Упрощённый корабль главной.
 #[derive(Component)]
 struct FarShip;
+
+/// Как главная переходит к осмотру (пока выбираем: T в dev-сборке переключает).
+#[derive(Resource, Default, Clone, Copy, PartialEq)]
+pub(crate) enum ShipTransition {
+    /// На главной тот же большой корабль, уменьшенный: приближается и открывает борт.
+    #[default]
+    OneDrawing,
+    /// На главной упрощённый корабль; при приближении его закрывает облако, под ним — большой.
+    Cloud,
+}
+
+impl ShipTransition {
+    fn name(self) -> &'static str {
+        match self {
+            ShipTransition::OneDrawing => "Переход: один рисунок",
+            ShipTransition::Cloud => "Переход: облако",
+        }
+    }
+}
+
+/// Клуб облака перехода: разлетается в сторону `dir` (доли ширины корабля).
+#[derive(Component)]
+struct TransitionPuff {
+    dir: Vec2,
+}
+
+/// Облако перехода плотнее всего здесь (доля пути приближения): тут маленький корабль
+/// подменяется большим.
+const PUFF_SWAP: f32 = 0.3;
 
 /// Большой корабль (разрез, облик снаружи, винт): виден только на осмотре и по пути к нему.
 #[derive(Component)]
@@ -2007,6 +2068,23 @@ fn frame_ship(
             Without<Slide>,
         ),
     >,
+    mut puffs: Query<
+        (
+            &TransitionPuff,
+            &mut ImageNode,
+            &mut UiTransform,
+            &mut Visibility,
+        ),
+        (
+            Without<FarShip>,
+            Without<ExteriorImage>,
+            Without<ShipSprite>,
+            Without<Exterior>,
+            Without<ShipBody>,
+            Without<Slide>,
+        ),
+    >,
+    style: Res<ShipTransition>,
 ) {
     let def = ship.current(&data);
     let look = &data.scene.look;
@@ -2044,21 +2122,32 @@ fn frame_ship(
     for mut vis in &mut exterior {
         vis.set_if_neq(shown(e > 0.98));
     }
-    // Маленький корабль главной гаснет в начале приближения, за ним уже большой.
+    // Маленький корабль главной есть только в переходе «облако»: под облаком он
+    // подменяется большим. В переходе «один рисунок» большой виден всегда.
+    let cloud = *style == ShipTransition::Cloud;
+    let far_shown = cloud && e < PUFF_SWAP;
     for mut vis in &mut body {
-        vis.set_if_neq(if e > 0.01 {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        });
+        vis.set_if_neq(shown(far_shown));
     }
-    let far_alpha = 1.0 - smoothstep(0.0, 0.3, e);
     for (mut image, mut vis) in &mut far {
-        image.color = Color::WHITE.with_alpha(far_alpha);
-        vis.set_if_neq(shown(far_alpha < 0.01));
+        image.color = Color::WHITE;
+        vis.set_if_neq(shown(!far_shown));
     }
+    // Борт открывается, когда корабль уже почти приблизился.
+    let open = smoothstep(0.55, 1.0, e);
     for mut image in &mut images {
-        image.color = Color::WHITE.with_alpha(1.0 - e);
+        image.color = Color::WHITE.with_alpha(1.0 - open);
+    }
+    // Облако: сгущается к моменту подмены, потом клубы расходятся и тают.
+    let thick =
+        smoothstep(0.0, PUFF_SWAP - 0.05, e) * (1.0 - smoothstep(PUFF_SWAP + 0.05, 0.75, e));
+    let spread = smoothstep(PUFF_SWAP, 0.8, e);
+    for (puff, mut image, mut transform, mut vis) in &mut puffs {
+        let alpha = if cloud { thick } else { 0.0 };
+        image.color = Color::WHITE.with_alpha(alpha);
+        vis.set_if_neq(shown(alpha < 0.01));
+        transform.scale = Vec2::splat(0.75 + 0.25 * smoothstep(0.0, PUFF_SWAP, e) + 0.3 * spread);
+        transform.translation = Val2::px(puff.dir.x * 260.0 * spread, puff.dir.y * 260.0 * spread);
     }
     for (slide, mut transform, mut vis) in &mut slides {
         let away = if slide.inside { 1.0 - e } else { e };
@@ -2341,5 +2430,21 @@ fn dev_hull_key(
     if keys.just_pressed(KeyCode::KeyH) {
         ship.dev_next_ship(&data);
         rebuild.0 = true;
+    }
+}
+
+/// T — другой переход главная → осмотр (пока выбираем из двух).
+#[cfg(feature = "dev")]
+fn dev_transition_key(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut style: ResMut<ShipTransition>,
+    mut toast: ResMut<Toast>,
+) {
+    if keys.just_pressed(KeyCode::KeyT) {
+        *style = match *style {
+            ShipTransition::OneDrawing => ShipTransition::Cloud,
+            ShipTransition::Cloud => ShipTransition::OneDrawing,
+        };
+        toast.show(style.name());
     }
 }
