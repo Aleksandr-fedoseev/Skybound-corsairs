@@ -11,6 +11,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::abyss::Abyss;
+use crate::arena::Arena;
 use crate::cabins::Cabins;
 use crate::contracts::Contracts;
 use crate::convoys::{ConvoyData, Convoys};
@@ -19,6 +20,7 @@ use crate::events::{StormEvent, WeekEvents};
 use crate::expeditions::Expeditions;
 use crate::gear::Gear;
 use crate::menu::{Profile, Progress, Toast};
+use crate::ruins::Ruins;
 use crate::ship::{Ship, ShipData};
 use crate::tavern::TavernState;
 
@@ -52,6 +54,10 @@ pub struct SaveData {
     pub storm: StormEvent,
     #[serde(default)]
     pub week_events: WeekEvents,
+    #[serde(default)]
+    pub ruins: Ruins,
+    #[serde(default)]
+    pub arena: Arena,
 }
 
 pub fn now() -> u64 {
@@ -179,7 +185,9 @@ pub fn apply(app: &mut App, mut save: SaveData) {
         .insert_resource(save.cabins)
         .insert_resource(save.gear)
         .insert_resource(save.storm)
-        .insert_resource(save.week_events);
+        .insert_resource(save.week_events)
+        .insert_resource(save.ruins)
+        .insert_resource(save.arena);
     if !report.is_empty() {
         app.world_mut().resource_mut::<Toast>().show_long(&report);
     }
@@ -205,6 +213,8 @@ struct State<'w> {
     gear: Res<'w, Gear>,
     storm: Res<'w, StormEvent>,
     week_events: Res<'w, WeekEvents>,
+    ruins: Res<'w, Ruins>,
+    arena: Res<'w, Arena>,
 }
 
 impl State<'_> {
@@ -225,6 +235,8 @@ impl State<'_> {
             gear: self.gear.clone(),
             storm: self.storm.clone(),
             week_events: self.week_events.clone(),
+            ruins: self.ruins.clone(),
+            arena: self.arena.clone(),
         }
     }
 }
@@ -272,6 +284,8 @@ mod tests {
             gear: Gear::default(),
             storm: StormEvent::default(),
             week_events: WeekEvents::default(),
+            ruins: Ruins::default(),
+            arena: Arena::default(),
         }
     }
 

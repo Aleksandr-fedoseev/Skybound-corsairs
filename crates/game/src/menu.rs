@@ -2182,6 +2182,30 @@ impl Spoils<'_> {
     }
 }
 
+/// Здоровье героев после боя (доля от максимума, 0 — пал): Блокада и Руины несут его дальше.
+/// Герои, которые пали ещё раньше и в бой не шли, остаются павшими.
+fn survivors(screen: &BattleScreen) -> Vec<(String, f32)> {
+    let allies = screen
+        .battle
+        .units()
+        .iter()
+        .filter(|u| u.side == battle_core::Side::Ally);
+    let mut hp: Vec<(String, f32)> = screen
+        .team
+        .iter()
+        .zip(allies)
+        .map(|(m, u)| (m.id.clone(), u.hp as f32 / u.def.stats.max_hp as f32))
+        .collect();
+    if let Some(fight) = &screen.custom {
+        for (id, f) in &fight.ally_hp {
+            if *f <= 0.0 && !hp.iter().any(|(h, _)| h == id) {
+                hp.push((id.clone(), 0.0));
+            }
+        }
+    }
+    hp
+}
+
 /// Победа приносит добычу; на этапе главы — открывает следующий этап и сюжет.
 #[allow(clippy::too_many_arguments)]
 fn count_victory(
@@ -2197,8 +2221,12 @@ fn count_victory(
     abyss: (Res<AbyssData>, ResMut<Abyss>),
     events: (Res<EventData>, ResMut<StormEvent>, ResMut<WeekEvents>),
     supply: Res<crate::supplies::SupplyData>,
+    ruins: (Res<crate::ruins::RuinsData>, ResMut<crate::ruins::Ruins>),
+    arena: (Res<crate::arena::ArenaData>, ResMut<crate::arena::Arena>),
 ) {
     let (abyss_data, mut abyss) = abyss;
+    let (ruins_data, mut ruins) = ruins;
+    let (arena_data, mut arena) = arena;
     let (event_data, mut storm, mut week_events) = events;
     let Some(outcome) = screen.shown_outcome else {
         return;
@@ -2234,20 +2262,45 @@ fn count_victory(
                 unreachable!()
             };
             deeds.write(Deed("win"));
-            // Здоровье выживших — дальше, в следующую волну; павшие выбывают.
-            let allies: Vec<&battle_core::Unit> = screen
-                .battle
-                .units()
-                .iter()
-                .filter(|u| u.side == battle_core::Side::Ally)
-                .collect();
-            let hp = screen
-                .team
-                .iter()
-                .zip(allies)
-                .map(|(m, u)| (m.id.clone(), u.hp as f32 / u.def.stats.max_hp as f32))
-                .collect();
-            week_events.blockade_win(wave, hp, &event_data.blockade, &mut spoils.profile)
+            week_events.blockade_win(
+                wave,
+                survivors(&screen),
+                &event_data.blockade,
+                &mut spoils.profile,
+            )
+        }
+        (outcome, Some(fight)) if matches!(fight.kind, FightKind::Ruins(..)) => {
+            let FightKind::Ruins(floor, room) = fight.kind else {
+                unreachable!()
+            };
+            if outcome == Outcome::Victory {
+                deeds.write(Deed("win"));
+                ruins.win(
+                    floor,
+                    room,
+                    survivors(&screen),
+                    &ruins_data,
+                    &mut spoils.profile,
+                )
+            } else {
+                ruins.lose(floor)
+            }
+        }
+        (outcome, Some(fight)) if matches!(fight.kind, FightKind::Arena(_)) => {
+            let FightKind::Arena(tier) = fight.kind else {
+                unreachable!()
+            };
+            let win = outcome == Outcome::Victory;
+            if win {
+                deeds.write(Deed("win"));
+            }
+            arena.finish(
+                win,
+                tier,
+                &arena_data,
+                crate::cabins::today(),
+                &mut spoils.profile,
+            )
         }
         (Outcome::Defeat, _) => "Усильте отряд или смените тактику".to_string(),
         (Outcome::Victory, Some(fight)) if matches!(fight.kind, FightKind::Regatta(_)) => {

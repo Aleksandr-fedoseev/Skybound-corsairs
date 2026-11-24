@@ -42,6 +42,10 @@ pub enum FightKind {
     Regatta(usize),
     /// Волна «Имперской блокады».
     Blockade(usize),
+    /// Руины: этаж и выбранный зал.
+    Ruins(u32, usize),
+    /// Арена: ступень силы соперника.
+    Arena(usize),
 }
 
 /// Залп до первых данных о корабле (Пушечная палуба ур. 1).
@@ -368,10 +372,13 @@ fn new_battle(
         Some(fight) => fight
             .enemies
             .iter()
-            .map(|(id, level)| {
-                data.enemy(id)
-                    .expect("враг есть в data/enemies.json")
-                    .to_unit(*level)
+            .map(|(id, level)| match data.enemy(id) {
+                Some(enemy) => enemy.to_unit(*level),
+                // Соперник на Арене выставляет таких же героев, как у игрока.
+                None => data
+                    .hero(id)
+                    .expect("враг есть в data/enemies.json или data/heroes.json")
+                    .to_unit(*level),
             })
             .collect(),
         None => data

@@ -452,16 +452,11 @@ pub fn plugin(app: &mut App) {
     app.init_resource::<Selected>()
         .init_resource::<CrewDirty>()
         .init_resource::<Formation>()
-        .init_resource::<StarsOpen>()
         .init_resource::<CrewTab>()
         .add_systems(OnEnter(Screen::Crew), spawn_crew)
-        .add_systems(
-            OnExit(Screen::Crew),
-            |mut f: ResMut<Formation>, mut stars: ResMut<StarsOpen>| {
-                *f = Formation::default();
-                stars.0 = false;
-            },
-        )
+        .add_systems(OnExit(Screen::Crew), |mut f: ResMut<Formation>| {
+            *f = Formation::default()
+        })
         .add_systems(Update, rebuild_crew.run_if(in_state(Screen::Crew)));
 }
 
@@ -527,7 +522,6 @@ struct CabinView<'w> {
     tab: Res<'w, CrewTab>,
     formation: Res<'w, Formation>,
     exps: Res<'w, crate::expeditions::Expeditions>,
-    stars: Res<'w, StarsOpen>,
 }
 
 /// Вкладка карточки героя.
@@ -693,14 +687,6 @@ fn build(
                     ("silver", profile.silver),
                 ],
             );
-            if cabin.stars.0 {
-                style::title(root, fonts, "Звёзды героев", 56.0);
-                stars_back(root, fonts);
-                stars_view(root, assets, fonts, roster, crew, data);
-                bottom_nav(root, assets, fonts, Screen::Crew);
-                spawn_toast(root, fonts);
-                return;
-            }
             if formation.open {
                 formation_view(root, assets, fonts, data, roster, formation.slot, away);
                 bottom_nav(root, assets, fonts, Screen::Crew);
@@ -716,7 +702,6 @@ fn build(
                     56.0,
                 );
                 hero_grid(root, assets, fonts, data, roster, crew);
-                stars_button(root, fonts, roster, crew);
                 bottom_nav(root, assets, fonts, Screen::Crew);
                 spawn_toast(root, fonts);
                 return;
@@ -783,7 +768,7 @@ fn hero_grid(
         left: px(10),
         right: px(10),
         flex_wrap: FlexWrap::Wrap,
-        justify_content: JustifyContent::SpaceBetween,
+        column_gap: px(10),
         row_gap: px(12),
         ..default()
     })
@@ -809,7 +794,7 @@ fn hero_grid(
         root.spawn((
             Node {
                 position_type: PositionType::Absolute,
-                top: px(774),
+                top: px(714),
                 left: px(10),
                 right: px(10),
                 padding: UiRect::axes(px(16), px(8)),
@@ -876,192 +861,6 @@ fn hero_grid(
             row.spawn(style::medallion(assets, id, 58.0, false));
         }
     });
-}
-
-/// Открыто меню «Звёзды героев».
-#[derive(Resource, Default)]
-struct StarsOpen(bool);
-
-/// Герои команды: звёзды и сколько копий до следующей; хватает — кнопка «Слияние».
-fn stars_view(
-    root: &mut ChildSpawnerCommands,
-    assets: &AssetServer,
-    fonts: &Fonts,
-    roster: &Roster,
-    crew: &CrewData,
-    data: &GameData,
-) {
-    root.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(112),
-            left: px(10),
-            right: px(10),
-            padding: UiRect::axes(px(14), px(10)),
-            flex_direction: FlexDirection::Column,
-            row_gap: px(8),
-            ..default()
-        },
-        Skin(Look::Tile),
-    ))
-    .with_children(|list| {
-        list.spawn(style::heading(
-            fonts,
-            "Копии героев к звёздам",
-            19.0,
-            BRIGHT,
-        ));
-        for hero in data.heroes.iter().filter(|h| roster.owns(&h.id)) {
-            let id = hero.id.clone();
-            let stars = roster.stars(&id);
-            let max = stars >= crew.max_stars();
-            let need = if max {
-                1
-            } else {
-                crew.rule(stars + 1).copies.max(1)
-            };
-            let have = roster.copies(&id);
-            let ready = roster.star_copies_ready(&id, crew);
-            list.spawn(Node {
-                column_gap: px(12),
-                align_items: AlignItems::Center,
-                ..default()
-            })
-            .with_children(|row| {
-                row.spawn(style::medallion(assets, &id, 58.0, false));
-                row.spawn(Node {
-                    flex_grow: 1.0,
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(3),
-                    ..default()
-                })
-                .with_children(|info| {
-                    info.spawn(Node {
-                        column_gap: px(8),
-                        align_items: AlignItems::Center,
-                        ..default()
-                    })
-                    .with_children(|line| {
-                        line.spawn(style::heading(fonts, hero.name.clone(), 18.0, BRIGHT));
-                        for i in 1..=crew.max_stars() {
-                            line.spawn((
-                                Node {
-                                    width: px(16),
-                                    height: px(16),
-                                    ..default()
-                                },
-                                ImageNode::new(assets.load(if i <= stars {
-                                    "ui/star.png"
-                                } else {
-                                    "ui/star_empty.png"
-                                })),
-                            ));
-                        }
-                    });
-                    // Полоса копий до следующей звезды.
-                    info.spawn(Node {
-                        column_gap: px(8),
-                        align_items: AlignItems::Center,
-                        ..default()
-                    })
-                    .with_children(|line| {
-                        line.spawn((
-                            Node {
-                                width: px(170),
-                                height: px(14),
-                                border: UiRect::all(px(2)),
-                                border_radius: BorderRadius::all(px(7)),
-                                overflow: Overflow::clip(),
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgb(0.18, 0.12, 0.07)),
-                            BorderColor::all(Color::srgb(0.72, 0.55, 0.26)),
-                        ))
-                        .with_child((
-                            Node {
-                                width: percent(100.0 * have.min(need) as f32 / need as f32),
-                                height: percent(100),
-                                ..default()
-                            },
-                            BackgroundColor(GOLD),
-                        ));
-                        line.spawn(text(
-                            fonts,
-                            if max {
-                                "все звёзды".to_string()
-                            } else {
-                                format!("копий {have} из {need}")
-                            },
-                            false,
-                            13.0,
-                            PARCHMENT,
-                        ));
-                    });
-                });
-                if ready {
-                    let mut go = row.spawn((
-                        Node {
-                            padding: UiRect::axes(px(12), px(8)),
-                            ..default()
-                        },
-                        Skin(Look::Go),
-                    ));
-                    go.with_child(style::heading(fonts, "Слияние", 15.0, Color::WHITE));
-                    pressable(&mut go);
-                    go.observe(
-                        move |_: On<PointerClick>,
-                              mut selected: ResMut<Selected>,
-                              mut stars: ResMut<StarsOpen>,
-                              mut dirty: ResMut<CrewDirty>| {
-                            // Слияние — в карточке героя.
-                            selected.0 = Some(id.clone());
-                            stars.0 = false;
-                            dirty.0 = true;
-                        },
-                    );
-                }
-            });
-        }
-    });
-}
-
-/// Кнопка меню звёзд под отрядом; у кого копий хватает на звезду — золотом.
-fn stars_button(root: &mut ChildSpawnerCommands, fonts: &Fonts, roster: &Roster, crew: &CrewData) {
-    let ready = roster
-        .owned()
-        .iter()
-        .filter(|id| roster.star_copies_ready(id, crew))
-        .count();
-    let mut button = root.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(714),
-            left: px(10),
-            right: px(10),
-            height: px(52),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            ..default()
-        },
-        Skin(Look::Dark),
-    ));
-    button.with_child(style::heading(
-        fonts,
-        if ready > 0 {
-            format!("Звёзды героев · готово к слиянию: {ready} ›")
-        } else {
-            "Звёзды героев ›".to_string()
-        },
-        18.0,
-        if ready > 0 { GOLD } else { BRIGHT },
-    ));
-    pressable(&mut button);
-    button.observe(
-        |_: On<PointerClick>, mut stars: ResMut<StarsOpen>, mut dirty: ResMut<CrewDirty>| {
-            stars.0 = true;
-            dirty.0 = true;
-        },
-    );
 }
 
 /// Расстановка: четыре места отряда в ряд (порядок — где герой стоит на палубе), ниже — скамейка.
@@ -1305,8 +1104,8 @@ fn hero_tile(
     let id = hero.id.clone();
     let mut tile = grid.spawn((
         Node {
-            width: px(166),
-            height: px(240),
+            width: px(122),
+            height: px(238),
             flex_direction: FlexDirection::Column,
             overflow: Overflow::clip(),
             ..default()
@@ -1317,7 +1116,7 @@ fn hero_tile(
         // Портрет: верх фигуры на фоне цвета стихии.
         t.spawn((
             Node {
-                height: px(168),
+                height: px(164),
                 justify_content: JustifyContent::Center,
                 overflow: Overflow::clip(),
                 border_radius: BorderRadius::top(px(12)),
@@ -1363,9 +1162,9 @@ fn hero_tile(
             ..default()
         })
         .with_children(|info| {
-            info.spawn(style::heading(fonts, hero.name.clone(), 19.0, BRIGHT));
+            info.spawn(style::heading(fonts, hero.name.clone(), 17.0, BRIGHT));
             if owned {
-                stars_row(info, assets, roster.stars(&hero.id), 12.0);
+                stars_row(info, assets, roster.stars(&hero.id), 11.0);
                 info.spawn(text(
                     fonts,
                     format!("ур. {}", roster.level(&hero.id)),
@@ -1381,15 +1180,15 @@ fn hero_tile(
             t.spawn((
                 Node {
                     position_type: PositionType::Absolute,
-                    top: px(8),
-                    left: px(8),
-                    padding: UiRect::axes(px(9), px(3)),
+                    top: px(6),
+                    left: px(6),
+                    padding: UiRect::axes(px(7), px(2)),
                     ..default()
                 },
                 Skin(Look::Go),
                 Pickable::IGNORE,
             ))
-            .with_child(style::heading(fonts, "в отряде", 12.0, Color::WHITE));
+            .with_child(style::heading(fonts, "в отряде", 11.0, Color::WHITE));
         }
     });
     pressable(&mut tile);
@@ -1402,29 +1201,6 @@ fn hero_tile(
 }
 
 /// «« Экипаж»: со страницы героя — обратно к сетке.
-fn stars_back(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
-    let mut back = root.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(58),
-            left: px(10),
-            height: px(42),
-            padding: UiRect::horizontal(px(14)),
-            align_items: AlignItems::Center,
-            ..default()
-        },
-        Skin(Look::Dark),
-    ));
-    back.with_child(style::heading(fonts, "« Экипаж", 16.0, BRIGHT));
-    pressable(&mut back);
-    back.observe(
-        |_: On<PointerClick>, mut stars: ResMut<StarsOpen>, mut dirty: ResMut<CrewDirty>| {
-            stars.0 = false;
-            dirty.0 = true;
-        },
-    );
-}
-
 fn back_button(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
     let mut back = root.spawn((
         Node {

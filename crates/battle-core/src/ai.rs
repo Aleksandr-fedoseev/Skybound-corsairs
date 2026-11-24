@@ -61,7 +61,7 @@ pub fn should_use_ultimate(battle: &Battle, id: UnitId) -> bool {
         .iter()
         .any(|e| matches!(e.effect, Effect::Damage { .. }));
     if ult.heals() && !deals_damage {
-        return most_wounded(battle, Side::Ally)
+        return most_wounded(battle, battle.unit(id).side)
             .is_some_and(|w| battle.unit(w).hp_ratio() < HEAL_ULT_THRESHOLD);
     }
     true

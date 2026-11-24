@@ -4,6 +4,7 @@
 //! Игрок вмешивается ультами: кнопки героев внизу. Модели пока — силуэты-заглушки.
 
 mod abyss;
+mod arena;
 mod audio;
 mod battle_screen;
 mod battlefield;
@@ -19,6 +20,7 @@ mod gear;
 mod hire_reveal;
 mod map;
 mod menu;
+mod ruins;
 mod save;
 mod ship;
 mod softbody;
@@ -100,7 +102,7 @@ fn main() {
         gear::plugin,
         events::plugin,
     ))
-    .add_plugins(supplies::plugin)
+    .add_plugins((supplies::plugin, ruins::plugin, arena::plugin))
     .add_plugins(hire_reveal::plugin)
     .add_plugins(style::plugin)
     .add_message::<Shown>()

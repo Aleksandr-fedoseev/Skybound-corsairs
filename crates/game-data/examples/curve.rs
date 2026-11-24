@@ -6,6 +6,8 @@
 //! У боссов с замахом `recommended_level` — по ручной игре (`--example manual`): автобою нужно
 //! на 1–2 уровня больше, и здесь он это покажет.
 //! `-- [число боёв] abyss` — только Бездна, этажи 1–60 (таблица для tools/economy.py).
+//! `-- [число боёв] ruins` — спуск в Руины подряд с переносом здоровья при 10, 15 и 20 этапах.
+//! `-- [число боёв] arena` — доля побед отряда над соперниками Арены своего уровня ±.
 
 use std::path::Path;
 
@@ -69,12 +71,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .flatten()
         .filter_map(|v| v.as_str().map(String::from))
         .collect();
-    let abyss_only = std::env::args().nth(2).as_deref() == Some("abyss");
+    let mode = std::env::args().nth(2);
+    if mode.as_deref() == Some("arena") {
+        return arena(&data, &read("arena.json")?, runs);
+    }
+    if mode.as_deref() == Some("ruins") {
+        return ruins(&data, &read("ruins.json")?, runs);
+    }
+    let abyss_only = mode.as_deref() == Some("abyss");
     if abyss_only {
         fights.clear();
     }
     let floors: Vec<u32> = if abyss_only {
         (1..=60).collect()
+
     } else {
         vec![1, 3, 5, 7, 9, 10, 11, 13, 15, 19, 20, 21, 25, 29, 30, 40]
     };
@@ -126,6 +136,129 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             show(at80),
             written.map_or("—".to_string(), |w| w.to_string())
         );
+    }
+    Ok(())
+}
+
+/// Руины — весь спуск подряд, как в игре: здоровье переходит из боя в бой, павшие выбывают
+/// (без залов: ни родника, ни хранилища). Для каждого уровня отряда — средняя глубина и доля
+/// полных спусков. «Рек.» — рекомендуемый уровень следующего этапа главы.
+fn ruins(data: &GameData, ruins: &Value, runs: u64) -> Result<(), Box<dyn std::error::Error>> {
+    let base = ruins["base_level"].as_f64().unwrap_or(0.0);
+    let per = ruins["level_per_stage"].as_f64().unwrap_or(0.0);
+    let floors: Vec<&Value> = ruins["floors"].as_array().into_iter().flatten().collect();
+    for cleared in [10usize, 15, 20] {
+        let rec = data
+            .stages
+            .get(cleared)
+            .or(data.stages.last())
+            .map_or(1, |s| s.recommended_level);
+        let foes: Vec<Vec<UnitDef>> = floors
+            .iter()
+            .map(|f| {
+                let add = f["add"].as_i64().unwrap_or(0);
+                let level = ((base + per * cleared as f64).round() as i64 + add).max(1) as u32;
+                f["enemies"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|e| Some(data.enemy(e.as_str()?)?.to_unit(level)))
+                    .collect()
+            })
+            .collect();
+        println!("Руины при {cleared} пройденных этапах (рек. ур. {rec}):");
+        for level in rec.saturating_sub(4).max(1)..=rec + 6 {
+            let mut depth_sum = 0;
+            let mut cleared_all = 0;
+            let mut reached = vec![0u32; foes.len()];
+            for seed in 0..runs {
+                let mut team: Vec<(UnitDef, f32)> = TEAM
+                    .iter()
+                    .map(|id| (data.hero(id).expect("герой").to_unit(level), 1.0))
+                    .collect();
+                let mut depth = 0;
+                for (i, enemies) in foes.iter().enumerate() {
+                    let alive: Vec<(UnitDef, f32)> =
+                        team.iter().filter(|(_, f)| *f > 0.0).cloned().collect();
+                    let mut battle = Battle::new(
+                        alive.iter().map(|(u, _)| u.clone()).collect(),
+                        enemies.clone(),
+                        Ship {
+                            broadside_power: 120,
+                        },
+                        seed * 31 + i as u64,
+                    );
+                    for (k, (u, f)) in alive.iter().enumerate() {
+                        battle.set_hp(
+                            battle_core::UnitId(k),
+                            (u.stats.max_hp as f32 * f).round() as u32,
+                        );
+                    }
+                    let mut steps = 0;
+                    while battle.outcome().is_none() && steps < 2000 {
+                        battle.auto_step();
+                        steps += 1;
+                    }
+                    if battle.outcome() != Some(Outcome::Victory) {
+                        break;
+                    }
+                    reached[i] += 1;
+                    depth = i + 1;
+                    team = alive
+                        .iter()
+                        .enumerate()
+                        .map(|(k, (u, _))| {
+                            let hp = battle.unit(battle_core::UnitId(k)).hp;
+                            (u.clone(), hp as f32 / u.stats.max_hp as f32)
+                        })
+                        .collect();
+                }
+                depth_sum += depth;
+                if depth == foes.len() {
+                    cleared_all += 1;
+                }
+            }
+            let floors_line: Vec<String> = reached
+                .iter()
+                .map(|r| format!("{:>3}", r * 100 / runs as u32))
+                .collect();
+            println!(
+                "  ур. {level:>2}: глубина {:.1}, до конца {:>3}% · по этажам % {}",
+                depth_sum as f64 / runs as f64,
+                cleared_all * 100 / runs,
+                floors_line.join("")
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Арена: отряд уровня L против случайных четвёрок героев уровня L + поправка ступени.
+fn arena(data: &GameData, arena: &Value, runs: u64) -> Result<(), Box<dyn std::error::Error>> {
+    let heroes: Vec<&str> = data.heroes.iter().map(|h| h.id.as_str()).collect();
+    println!("Арена: доля побед стартового отряда (автобой, без звёзд и снаряжения)\n");
+    for level in [12u32, 20, 30] {
+        for tier in arena["rivals"].as_array().into_iter().flatten() {
+            let shift = tier["level"].as_i64().unwrap_or(0);
+            let foe_level = (level as i64 + shift).max(1) as u32;
+            let mut wins = 0.0;
+            let teams = 12;
+            for t in 0..teams {
+                // Четыре разных героя по кругу — без генератора случайных чисел.
+                let foes: Vec<UnitDef> = (0..4)
+                    .map(|k| {
+                        let id = heroes[(t * 3 + k * 2) % heroes.len()];
+                        data.hero(id).expect("герой").to_unit(foe_level)
+                    })
+                    .collect();
+                wins += win_rate(data, level, &foes, None, runs / teams as u64 + 1);
+            }
+            println!(
+                "ур. {level:>2} против «{}» (ур. {foe_level}): {:.0}% побед",
+                tier["name"].as_str().unwrap_or("?"),
+                wins / teams as f64 * 100.0
+            );
+        }
     }
     Ok(())
 }

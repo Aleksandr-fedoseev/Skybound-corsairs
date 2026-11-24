@@ -65,12 +65,13 @@ pub struct Bundle {
     pub charts: u32,
     pub storm_cores: u32,
     pub supplies: u32,
+    pub figureheads: u32,
     /// Копия героя на выбор.
     pub copies: u32,
 }
 
 impl Bundle {
-    fn fields(&self) -> [(u32, &'static str); 10] {
+    fn fields(&self) -> [(u32, &'static str); 11] {
         [
             (self.silver, "серебра"),
             (self.planks, "досок"),
@@ -81,12 +82,18 @@ impl Bundle {
             (self.charts, "лоции"),
             (self.storm_cores, "буревых ядер"),
             (self.supplies, "припасов"),
+            (self.figureheads, "носовые фигуры"),
             (self.copies, "копия героя"),
         ]
     }
 
     /// Первый ненулевой ресурс: имя иконки (`ui/icon_<имя>.png`) и сколько.
     pub fn main(&self) -> Option<(&'static str, u32)> {
+        self.items().into_iter().next()
+    }
+
+    /// Все ненулевые ресурсы иконками: для строки наград.
+    pub fn items(&self) -> Vec<(&'static str, u32)> {
         [
             (self.silver, "silver"),
             (self.planks, "planks"),
@@ -97,10 +104,29 @@ impl Bundle {
             (self.charts, "charts"),
             (self.storm_cores, "storm_cores"),
             (self.supplies, "supplies"),
+            (self.figureheads, "figureheads"),
         ]
         .into_iter()
-        .find(|(n, _)| *n > 0)
+        .filter(|(n, _)| *n > 0)
         .map(|(n, kind)| (kind, n))
+        .collect()
+    }
+
+    /// Та же награда, умноженная на `k` (двойная добыча).
+    pub fn times(&self, k: u32) -> Self {
+        Self {
+            silver: self.silver * k,
+            planks: self.planks * k,
+            ether: self.ether * k,
+            journals: self.journals * k,
+            details: self.details * k,
+            doubloons: self.doubloons * k,
+            charts: self.charts * k,
+            storm_cores: self.storm_cores * k,
+            supplies: self.supplies * k,
+            figureheads: self.figureheads * k,
+            copies: self.copies * k,
+        }
     }
 
     pub fn line(&self) -> String {
@@ -122,6 +148,7 @@ impl Bundle {
             && p.charts >= self.charts
             && p.storm_cores >= self.storm_cores
             && p.supplies >= self.supplies
+            && p.figureheads >= self.figureheads
     }
 
     fn take(&self, p: &mut Profile) {
@@ -134,6 +161,7 @@ impl Bundle {
         p.charts -= self.charts;
         p.storm_cores -= self.storm_cores;
         p.supplies -= self.supplies;
+        p.figureheads -= self.figureheads;
     }
 
     pub(crate) fn put(&self, p: &mut Profile) {
@@ -146,6 +174,7 @@ impl Bundle {
         p.charts += self.charts;
         p.storm_cores += self.storm_cores;
         p.supplies += self.supplies;
+        p.figureheads += self.figureheads;
     }
 }
 

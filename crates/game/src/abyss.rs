@@ -11,9 +11,7 @@ use crate::Screen;
 use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
 use crate::contracts::{BoardOpen, ContractData, Contracts};
 use crate::expeditions::{ExpeditionData, Expeditions};
-use crate::menu::{
-    GOLD, MUTED, PARCHMENT, Voyage, bottom_nav, later, pressable, spawn_toast, text,
-};
+use crate::menu::{GOLD, MUTED, PARCHMENT, Voyage, bottom_nav, pressable, spawn_toast, text};
 use crate::save::now;
 use crate::ship::{Ship, ShipData};
 use crate::story::VoyageRequest;
@@ -30,6 +28,8 @@ pub struct ActivitiesPage(pub Option<Page>);
 pub enum Page {
     Event,
     Abyss,
+    Ruins,
+    Arena,
     Expeditions,
 }
 
@@ -218,6 +218,15 @@ struct View<'w> {
     page: Res<'w, ActivitiesPage>,
     contract_data: Res<'w, ContractData>,
     contracts: Res<'w, Contracts>,
+    ruins: (
+        Res<'w, crate::ruins::RuinsData>,
+        Res<'w, crate::ruins::Ruins>,
+    ),
+    arena: (
+        Res<'w, crate::arena::ArenaData>,
+        Res<'w, crate::arena::Arena>,
+    ),
+    progress: Res<'w, crate::menu::Progress>,
 }
 
 fn spawn_activities(mut commands: Commands, view: View) {
@@ -312,6 +321,8 @@ fn build(commands: &mut Commands, view: &View) {
                 None => "Активности".to_string(),
                 Some(Page::Event) => view.event_data.current_name().to_string(),
                 Some(Page::Abyss) => "Бездна облаков".to_string(),
+                Some(Page::Ruins) => view.ruins.0.name.clone(),
+                Some(Page::Arena) => view.arena.0.name.clone(),
                 Some(Page::Expeditions) => "Экспедиции".to_string(),
             };
             style::title(root, fonts, &title, 56.0);
@@ -357,6 +368,20 @@ fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
             Go::Page(Page::Abyss),
         ),
         (
+            "ruins",
+            view.ruins.0.name.clone(),
+            "10 залов, здоровье не восстанавливается".to_string(),
+            ruins_status(view),
+            Go::Page(Page::Ruins),
+        ),
+        (
+            "arena",
+            view.arena.0.name.clone(),
+            "Отряды других капитанов, лига недели".to_string(),
+            arena_status(view),
+            Go::Page(Page::Arena),
+        ),
+        (
             "expeditions",
             format!("Экспедиции · {} из {boats}", view.exps.running.len()),
             "Свободные герои уходят на шлюпках за добычей".to_string(),
@@ -394,8 +419,8 @@ fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
         for (art, title, sub, status, go) in cards {
             col.spawn((
                 Node {
-                    height: px(136),
-                    padding: UiRect::all(px(10)),
+                    height: px(108),
+                    padding: UiRect::axes(px(10), px(6)),
                     column_gap: px(12),
                     align_items: AlignItems::Center,
                     border_radius: BorderRadius::all(px(12)),
@@ -407,8 +432,8 @@ fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
             .with_children(|card| {
                 card.spawn((
                     Node {
-                        width: px(120),
-                        height: px(114),
+                        width: px(100),
+                        height: px(95),
                         flex_shrink: 0.0,
                         border_radius: BorderRadius::all(px(8)),
                         ..default()
@@ -424,8 +449,8 @@ fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
                     ..default()
                 })
                 .with_children(|c| {
-                    c.spawn(style::ink(fonts, title, 19.0, INK));
-                    c.spawn(text(fonts, sub, false, 13.0, INK_SOFT));
+                    c.spawn(style::ink(fonts, title, 18.0, INK));
+                    c.spawn(text(fonts, sub, false, 12.0, INK_SOFT));
                     c.spawn(Node {
                         justify_content: JustifyContent::SpaceBetween,
                         align_items: AlignItems::Center,
@@ -448,26 +473,40 @@ fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
                 });
             });
         }
-        let mut soon = col.spawn((
-            Node {
-                padding: UiRect::axes(px(16), px(8)),
-                flex_direction: FlexDirection::Column,
-                border_radius: BorderRadius::all(px(10)),
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.06, 0.04, 0.03, 0.72)),
-        ));
-        soon.with_children(|c| {
-            c.spawn(text(
-                fonts,
-                "Скоро: Руины старого мира и Арена капитанов",
-                true,
-                13.0,
-                PARCHMENT,
-            ));
-        });
-        later(&mut soon, "Руины и Арена откроются после запуска игры");
     });
+}
+
+fn ruins_status(view: &View) -> String {
+    let (data, ruins) = (&*view.ruins.0, &*view.ruins.1);
+    if view.progress.cleared < data.unlock_cleared {
+        return "откроются после главы 1".to_string();
+    }
+    let this_week = ruins.week == crate::events::week();
+    match ruins.run.as_ref().filter(|_| this_week) {
+        Some(r) => format!("спуск идёт: этаж {}", r.floor),
+        None => format!(
+            "глубина недели: {} из {}",
+            if this_week { ruins.best } else { 0 },
+            data.depth()
+        ),
+    }
+}
+
+fn arena_status(view: &View) -> String {
+    let (data, arena) = (&*view.arena.0, &*view.arena.1);
+    if view.progress.cleared < data.unlock_cleared {
+        return "откроется после главы 1".to_string();
+    }
+    let mut a = arena.clone();
+    a.roll(data, crate::cabins::today());
+    if a.pending > 0 {
+        return format!("награда лиги: {} дублонов!", a.pending);
+    }
+    format!(
+        "лига {} · {} очков",
+        data.leagues[data.league(a.rating)].name,
+        a.rating
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -584,6 +623,29 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
             );
         }
         Page::Abyss => abyss_card(col, fonts, data, screen, floor, view.abyss.best),
+        Page::Ruins => crate::ruins::section(
+            col,
+            &view.assets,
+            fonts,
+            &view.ruins.0,
+            &view.ruins.1,
+            screen,
+            view.progress.cleared,
+            &view.roster.team,
+        ),
+        Page::Arena => {
+            let heroes: Vec<String> = screen.data.heroes.iter().map(|h| h.id.clone()).collect();
+            crate::arena::section(
+                col,
+                &view.assets,
+                fonts,
+                &view.arena.0,
+                &view.arena.1,
+                &heroes,
+                crate::arena::team_level(&view.roster),
+                view.progress.cleared,
+            );
+        }
         Page::Expeditions => crate::expeditions::section(
             col,
             fonts,

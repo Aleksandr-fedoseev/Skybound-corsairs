@@ -218,6 +218,14 @@ fn spawn_hud(
     fonts: &Fonts,
     back: Screen,
 ) {
+    let replayable = !screen.custom.as_ref().is_some_and(|f| {
+        matches!(
+            f.kind,
+            crate::battle_screen::FightKind::Blockade(_)
+                | crate::battle_screen::FightKind::Ruins(..)
+                | crate::battle_screen::FightKind::Arena(_)
+        )
+    });
     let heroes: Vec<UnitId> = screen
         .battle
         .units()
@@ -350,35 +358,38 @@ fn spawn_hud(
                                 Skin(look),
                             )
                         };
-                        row.spawn(button(Look::Dark))
-                            .with_child(crate::style::heading(fonts, "Ещё раз", 21.0, BRIGHT))
-                            .observe(
-                                |_: On<PointerClick>,
-                                 mut screen: ResMut<BattleScreen>,
-                                 gate: (
-                                    Res<crate::supplies::SupplyData>,
-                                    Res<crate::menu::Profile>,
-                                    Res<crate::menu::Progress>,
-                                ),
-                                 mut notes: Query<&mut Text, With<ResultNote>>| {
-                                    if screen.shown_outcome.is_none() {
-                                        return;
-                                    }
-                                    // Этап главы: повтор — за припасы и в пределах дневного лимита.
-                                    if screen.custom.is_none() {
-                                        let (supply, profile, progress) = gate;
-                                        let today = crate::cabins::today();
-                                        let wins = progress.wins_today(screen.stage, today);
-                                        if let Err(why) = supply.check(&profile, wins, screen.stage == progress.cleared) {
-                                            for mut text in &mut notes {
-                                                text.0 = why.clone();
-                                            }
+                        // Блокада, Руины и Арена — бои с продолжением: итог засчитан, переиграть нельзя.
+                        if replayable {
+                            row.spawn(button(Look::Dark))
+                                .with_child(crate::style::heading(fonts, "Ещё раз", 21.0, BRIGHT))
+                                .observe(
+                                    |_: On<PointerClick>,
+                                     mut screen: ResMut<BattleScreen>,
+                                     gate: (
+                                        Res<crate::supplies::SupplyData>,
+                                        Res<crate::menu::Profile>,
+                                        Res<crate::menu::Progress>,
+                                    ),
+                                     mut notes: Query<&mut Text, With<ResultNote>>| {
+                                        if screen.shown_outcome.is_none() {
                                             return;
                                         }
-                                    }
-                                    screen.restart_with_new_seed();
-                                },
-                            );
+                                        // Этап главы: повтор — за припасы и в пределах дневного лимита.
+                                        if screen.custom.is_none() {
+                                            let (supply, profile, progress) = gate;
+                                            let today = crate::cabins::today();
+                                            let wins = progress.wins_today(screen.stage, today);
+                                            if let Err(why) = supply.check(&profile, wins, screen.stage == progress.cleared) {
+                                                for mut text in &mut notes {
+                                                    text.0 = why.clone();
+                                                }
+                                                return;
+                                            }
+                                        }
+                                        screen.restart_with_new_seed();
+                                    },
+                                );
+                        }
                         row.spawn(button(Look::Go))
                             .with_child(crate::style::heading(
                                 fonts,
@@ -845,6 +856,10 @@ pub fn refresh_controls(
         };
         let path = match unit.side {
             Side::Ally => format!("ui/hero_{}.png", unit.def.id),
+            // Герои соперника на Арене — со своими портретами.
+            Side::Enemy if screen.data.hero(&unit.def.id).is_some() => {
+                format!("ui/hero_{}.png", unit.def.id)
+            }
             Side::Enemy => format!("ui/unit_{}.png", unit.def.id),
         };
         let handle = assets.load(path);

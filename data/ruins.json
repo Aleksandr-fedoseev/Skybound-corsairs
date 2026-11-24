@@ -1,0 +1,35 @@
+{
+  "name": "Руины старого мира",
+  "about": "10 залов вглубь. Здоровье отряда не восстанавливается, павшие выбывают. На каждом этаже выбери один из двух залов. Награда за этаж — раз в неделю.",
+  "unlock_cleared": 10,
+  "base_level": 3,
+  "level_per_stage": 0.9,
+  "floors": [
+    { "enemies": ["imperial_marine", "imperial_gunner", "imperial_marine"], "add": 5 },
+    { "enemies": ["storm_ray", "storm_ray", "imperial_gunner", "storm_ray"], "add": 3 },
+    { "enemies": ["mist_hound", "imperial_marine", "mist_hound", "imperial_gunner"], "add": -5 },
+    { "enemies": ["aeromancer", "imperial_marine", "aeromancer", "imperial_marine"], "add": 1 },
+    { "enemies": ["storm_ray", "storm_leviathan", "storm_ray"], "add": -8, "boss": "Страж затопленного зала" },
+    { "enemies": ["imperial_marine", "imperial_gunner", "imperial_gunner", "imperial_marine"], "add": 4 },
+    { "enemies": ["mist_hound", "storm_ray", "mist_hound", "storm_ray"], "add": 3 },
+    { "enemies": ["aeromancer", "mist_hound", "imperial_gunner", "mist_hound"], "add": -1 },
+    { "enemies": ["imperial_marine", "aeromancer", "imperial_gunner", "aeromancer", "imperial_marine"], "add": 2 },
+    { "enemies": ["mist_hound", "archive_guardian", "mist_hound"], "add": -2, "boss": "Хранитель сердца руин" }
+  ],
+  "rooms": [
+    { "id": "spring", "name": "Родник", "about": "перед боем выжившие лечатся на 35%", "heal": 0.35 },
+    { "id": "vault", "name": "Хранилище", "about": "стражи на 3 ур. сильнее, добыча ×2", "level_add": 3, "reward_times": 2 },
+    { "id": "powder", "name": "Пороховой склад", "about": "залп корабля заряжен с первого хода", "charged": true }
+  ],
+  "boss_room": { "id": "boss", "name": "Зал стража", "about": "страж этажа, обойти нельзя" },
+  "reward": {
+    "silver": 100,
+    "silver_per_floor": 20,
+    "details": 10,
+    "details_per_floor": 2,
+    "charts_every": 3,
+    "charts": 1,
+    "boss_figureheads": 1,
+    "last_doubloons": 60
+  }
+}

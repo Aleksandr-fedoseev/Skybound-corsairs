@@ -744,7 +744,7 @@ fn refresh_card(
                 22.0,
                 TITLE,
             ));
-            enemies_row(b, &assets, &fonts, &ids_of(&tier.enemies), None);
+            enemies_row(b, &assets, &fonts, &ids_of(&tier.enemies), None, PARCHMENT);
             chips(b, |row| {
                 level_chip(row, &fonts, tier.recommended_level, team);
                 chip(
@@ -780,7 +780,7 @@ fn refresh_card(
             };
             b.spawn(crate::style::heading(&fonts, title, 22.0, TITLE));
             let ids: Vec<String> = def.enemies.iter().map(|e| e.enemy.clone()).collect();
-            enemies_row(b, &assets, &fonts, &ids, def.wind);
+            enemies_row(b, &assets, &fonts, &ids, def.wind, PARCHMENT);
             chips(b, |row| {
                 level_chip(row, &fonts, def.recommended_level, team);
                 let first = stage == progress.cleared;
@@ -865,12 +865,13 @@ const WEAK_BG: Color = Color::srgb(0.55, 0.16, 0.12);
 const PLAIN_BG: Color = Color::srgba(1.0, 1.0, 1.0, 0.10);
 
 /// Враги медальонами с числом, рядом — плашка ветра боя.
-fn enemies_row(
+pub(crate) fn enemies_row(
     parent: &mut ChildSpawnerCommands,
     assets: &AssetServer,
     fonts: &Fonts,
     ids: &[String],
     wind: Option<battle_core::Element>,
+    color: Color,
 ) {
     let mut groups: Vec<(&str, usize)> = Vec::new();
     for id in ids {
@@ -903,12 +904,7 @@ fn enemies_row(
                         },
                         ImageNode::new(assets.load(format!("ui/unit_{id}.png"))),
                     ));
-                    g.spawn(crate::style::heading(
-                        fonts,
-                        format!("×{n}"),
-                        17.0,
-                        PARCHMENT,
-                    ));
+                    g.spawn(crate::style::heading(fonts, format!("×{n}"), 17.0, color));
                 });
             }
             if let Some(w) = wind {

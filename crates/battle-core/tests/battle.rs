@@ -497,3 +497,20 @@ fn hp_and_broadside_can_be_preset() {
     battle.charge_broadside();
     assert_eq!(battle.broadside_charge(), BROADSIDE_MAX);
 }
+
+#[test]
+fn enemy_heroes_fire_their_ultimates() {
+    // Соперник на Арене — такой же герой: ульту жмёт ИИ, как только накопит энергию.
+    let mut foe = unit("foe", Element::Wind, 1_000_000, 10, 200);
+    foe.ultimate = Some(hit(3.0));
+    let ally = unit("ally", Element::Wind, 1_000_000, 1, 100);
+    let mut battle = Battle::new(vec![ally], vec![foe], SHIP, 7);
+    let mut fired = false;
+    for _ in 0..60 {
+        let events = battle.auto_step();
+        fired |= events.iter().any(|e| {
+            matches!(e, Event::AbilityUsed { unit, kind: AbilityKind::Ultimate, .. } if *unit == UnitId(1))
+        });
+    }
+    assert!(fired, "враг с ультой ни разу её не применил");
+}

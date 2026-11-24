@@ -362,14 +362,13 @@ impl Battle {
                 _ => unit.skill_cooldown.saturating_sub(1),
             };
         }
-        if side == Side::Ally {
-            let energy = if kind == AbilityKind::Skill {
-                ENERGY_SKILL
-            } else {
-                ENERGY_BASIC
-            };
-            self.gain_energy(actor, energy);
-        }
+        // Энергию копят все, у кого есть ульта: и герои соперника на Арене.
+        let energy = if kind == AbilityKind::Skill {
+            ENERGY_SKILL
+        } else {
+            ENERGY_BASIC
+        };
+        self.gain_energy(actor, energy);
 
         // Сбрасываем шкалу до эффектов, чтобы «ускорить себя» работало.
         {
@@ -415,11 +414,22 @@ impl Battle {
         if !u.is_alive() {
             return Err(BattleError::UnitDefeated);
         }
-        let ultimate = u.def.ultimate.clone().ok_or(BattleError::NoUltimate)?;
+        if u.def.ultimate.is_none() {
+            return Err(BattleError::NoUltimate);
+        }
         if u.energy < ENERGY_MAX {
             return Err(BattleError::UltimateNotReady);
         }
+        Ok(self.fire_ultimate(unit, target))
+    }
 
+    /// Ульта без проверок стороны: игрок жмёт её союзникам, ИИ — врагам-героям (Арена).
+    fn fire_ultimate(&mut self, unit: UnitId, target: Option<UnitId>) -> Vec<Event> {
+        let ultimate = self.units[unit.0]
+            .def
+            .ultimate
+            .clone()
+            .expect("ульта проверена вызывающим");
         self.units[unit.0].energy = 0;
         let mut events = vec![Event::AbilityUsed {
             unit,
@@ -436,7 +446,7 @@ impl Battle {
                 self.advance_to_next_turn(&mut events);
             }
         }
-        Ok(events)
+        events
     }
 
     /// Один шаг автобоя: готовые ульты, затем ход текущего бойца.
@@ -472,6 +482,14 @@ impl Battle {
         let Some(actor) = self.current else {
             return events;
         };
+        // Враги с ультой (герои соперника на Арене) жмут её сами, как только накопят.
+        let foe = &self.units[actor.0];
+        if foe.side == Side::Enemy && foe.ultimate_ready() && ai::should_use_ultimate(self, actor) {
+            events.extend(self.fire_ultimate(actor, None));
+            if self.outcome.is_some() || self.current != Some(actor) {
+                return events;
+            }
+        }
         let action = ai::choose_action(self, actor);
         match self.act(action) {
             Ok(ev) => events.extend(ev),
