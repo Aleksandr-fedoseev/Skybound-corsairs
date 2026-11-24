@@ -1181,14 +1181,17 @@ fn scroll_backdrop(
     mut birds: Query<(&Bird, &mut UiTransform), (Without<Backdrop>, Without<MillSails>)>,
     mut mills: Query<(&MillSails, &mut UiTransform), (Without<Backdrop>, Without<Bird>)>,
     mut water: Query<&mut ImageNode, (With<FallingWater>, Without<SkyScroll>)>,
-    mut sky_view: Query<(&SkyScroll, &ComputedNode, &mut ImageNode), Without<FallingWater>>,
+    mut sky_view: Query<(&SkyScroll, &mut ImageNode), Without<FallingWater>>,
+    window: Single<&Window>,
 ) {
     let t = time.elapsed_secs();
-    for (sky, node, mut image) in &mut sky_view {
-        // Окно размером с узел в логических px; высота панорамы равна высоте экрана.
-        let size = node.size() * node.inverse_scale_factor();
+    // Окно в текстуре размером с экран (логические px; высота панорамы равна высоте экрана).
+    // Размер берём у окна, а не у разметки узла: в кадр пересборки она ещё не посчитана,
+    // и небо мигнуло бы синим фоном.
+    let (w, h) = (window.width(), window.height());
+    for (sky, mut image) in &mut sky_view {
         let x = (t * sky.speed).rem_euclid(sky.width);
-        image.rect = Some(Rect::new(x, 0.0, x + size.x, size.y));
+        image.rect = Some(Rect::new(x, 0.0, x + w, h));
     }
     for (sky, mut transform) in &mut skies {
         let x = -(t * sky.speed).rem_euclid(sky.width) + sky.copy * sky.width;
