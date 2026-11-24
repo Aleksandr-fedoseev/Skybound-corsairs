@@ -77,12 +77,9 @@ pub struct ShipDef {
     /// Паруса снаружи: раскатываются, когда корабль идёт в полёт.
     #[serde(default)]
     pub sails: Option<Sails>,
-    /// Пропеллер на корме: крутится всегда.
+    /// Винты за кормой: на рисунках стёрты, в игре крутятся отдельными спрайтами.
     #[serde(default)]
-    pub propeller: Option<Propeller>,
-    /// Винты маленького корабля главной (в px рисунка `far.png`, он 512 в ширину).
-    #[serde(default)]
-    pub far_propellers: Vec<FarPropeller>,
+    pub propellers: Vec<Propeller>,
     /// Комнаты: отсеки и просто жилые (без отсека — для красоты, не нажимаются).
     pub rooms: Vec<Room>,
 }
@@ -100,10 +97,6 @@ pub const SHIP_ART: f32 = 1024.0;
 impl ShipDef {
     pub fn exterior(&self) -> String {
         format!("{}/exterior.png", self.art)
-    }
-    /// Упрощённый корабль для главной: там он маленький. Вписан в рамку `bounds`.
-    pub fn far(&self) -> String {
-        format!("{}/far.png", self.art)
     }
     pub fn hull(&self) -> String {
         format!("{}/hull.png", self.art)
@@ -244,20 +237,11 @@ pub struct Birds {
     pub top: f32,
 }
 
-/// Винт за кормой маленького корабля: на рисунке анфас, в игре сплющен (вид сбоку) и крутится.
-#[derive(Deserialize)]
-pub struct FarPropeller {
-    pub at: [f32; 2],
-    pub size: f32,
-}
-
+/// Винт за кормой: центр втулки и размах лопастей — в пикселях рисунка корпуса.
 #[derive(Deserialize)]
 pub struct Propeller {
-    pub image: String,
-    /// Центр втулки и размах — в пикселях рисунка корпуса.
     pub at: [f32; 2],
     pub size: f32,
-    pub turns_per_second: f32,
 }
 
 /// Комната отсека: рамка на рисунке корпуса и облики по уровням.

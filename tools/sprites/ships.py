@@ -7,8 +7,6 @@
 art/2d/ships/<id>/: cutaway.png — разрез с обставленными комнатами; exterior.png — тот же корабль
 снаружи (борт закрыт); locked.png — тот же разрез, комнаты заколочены. Все три — одна поза на чистом
 зелёном фоне, 1024×1024: зелёный вырезается ключом. Рамки комнат — в data/ship.json (ships[].rooms).
-far.png — тот же корабль упрощённым и компактным, для главной (там он маленький): обрезается по кораблю
-и дополняется полями до пропорций рамки корабля (ships[].bounds) — в игре он встаёт ровно в неё.
 art/2d/ship/scaffold.png — леса стройки на белом (общие для всех кораблей) → assets/ship/scaffold.png.
 Нужны Pillow и numpy.
 """
@@ -50,6 +48,58 @@ def key_green(img):
 FLIP = {"lastochka", "petrel", "falcon"}
 
 
+# Нарисованные винты за кормой стираются (в px готового рисунка, уже по зеркалу): вместо них в игре
+# крутятся винты из data/ship.json (ships[].propellers). Многоугольники обходят корпус — втулка с
+# валом на корме остаются, на них и садится вращающийся винт.
+ERASE = {
+    "lastochka": [[(40, 588), (135, 588), (140, 640), (144, 700), (144, 815), (40, 815)]],
+    "petrel": [
+        [(80, 640), (114, 640), (116, 700), (110, 742), (80, 742)],
+        [(110, 720), (134, 720), (136, 800), (130, 816), (110, 816)],
+    ],
+    "leviathan": [
+        [(28, 474), (80, 474), (80, 590), (28, 590)],
+        [(74, 604), (108, 604), (112, 640), (108, 690), (104, 720), (74, 720)],
+        [(144, 724), (178, 724), (180, 770), (185, 800), (178, 838), (144, 838)],
+    ],
+    "falcon": [[(52, 452), (92, 452), (92, 708), (52, 708)]],
+}
+
+
+def erase_propellers(ship, img):
+    if ship not in ERASE:
+        return img
+    mask = Image.new("L", img.size, 0)
+    for poly in ERASE[ship]:
+        ImageDraw.Draw(mask).polygon(poly, fill=255)
+    a = np.asarray(img).copy()
+    a[..., 3][np.asarray(mask) > 0] = 0
+    # Крошки лопастей у края многоугольника: мелкие обрывки рядом со стёртым — прочь.
+    near = np.asarray(mask.filter(ImageFilter.MaxFilter(31))) > 0
+    for x, y in zip(*np.nonzero((a[..., 3] > 10) & near)[::-1]):
+        if a[y, x, 3] > 10:
+            piece = component(a[..., 3] > 10, x, y, limit=400)
+            if piece is not None:
+                for px, py in piece:
+                    a[py, px, 3] = 0
+    return Image.fromarray(a, "RGBA")
+
+
+def component(solid, x, y, limit):
+    """Связный кусок с точкой (x, y), если он меньше `limit` px; иначе None."""
+    seen, stack = {(x, y)}, [(x, y)]
+    h, w = solid.shape
+    while stack:
+        cx, cy = stack.pop()
+        for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
+            if 0 <= nx < w and 0 <= ny < h and solid[ny, nx] and (nx, ny) not in seen:
+                seen.add((nx, ny))
+                if len(seen) >= limit:
+                    return None
+                stack.append((nx, ny))
+    return seen
+
+
 def cut(ship):
     src = ART / ship
     dst = OUT / ship
@@ -62,38 +112,12 @@ def cut(ship):
         if ship in FLIP:
             img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         img = img.resize((1024, 1024), Image.Resampling.LANCZOS) if img.size != (1024, 1024) else img
+        img = erase_propellers(ship, img)
         rgb = img.convert("RGB").filter(ImageFilter.UnsharpMask(1.2, 50, 2))
         rgb.putalpha(img.getchannel("A"))
         rgb.save(dst / f"{out}.png", optimize=True)
         box = img.getchannel("A").point(lambda v: 255 if v > 40 else 0).getbbox()
         print(f"{ship}/{out}.png рамка корабля {box}")
-
-
-FAR_WIDTH = 512   # на главной корабль ~180 px — запас на плотные экраны
-# far.png уже носом вправо (корабль на главной летит вправо) и без винтов: их место занимают
-# вращающиеся винты из data/ship.json (ships[].far_propellers, в px готового far.png).
-
-
-def far(ship):
-    src = ART / ship / "far.png"
-    if not src.exists():
-        print(f"{ship}: нет far.png — пропускаю")
-        return
-    ships = json.loads((ROOT / "data" / "ship.json").read_text())["ships"]
-    x0, y0, x1, y1 = next(s["bounds"] for s in ships if s["id"] == ship)
-    img = key_green(Image.open(src))
-    img = img.crop(img.getchannel("A").point(lambda v: 255 if v > 20 else 0).getbbox())
-    # Вписать в пропорции рамки корабля, по центру.
-    bw, bh = x1 - x0, y1 - y0
-    k = min(bw / img.width, bh / img.height)
-    w, h = round(bw / k), round(bh / k)
-    canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    canvas.alpha_composite(img, ((w - img.width) // 2, (h - img.height) // 2))
-    canvas = canvas.resize((FAR_WIDTH, round(FAR_WIDTH * h / w)), Image.Resampling.LANCZOS)
-    rgb = canvas.convert("RGB").filter(ImageFilter.UnsharpMask(1.0, 40, 2))
-    rgb.putalpha(canvas.getchannel("A"))
-    rgb.save(OUT / ship / "far.png", optimize=True)
-    print(f"{ship}/far.png {rgb.size}")
 
 
 def propeller(size=128):
@@ -132,7 +156,6 @@ def main():
     ships = sys.argv[1:] or sorted(p.name for p in ART.iterdir() if (p / "cutaway.png").exists())
     for ship in ships:
         cut(ship)
-        far(ship)
 
 
 if __name__ == "__main__":

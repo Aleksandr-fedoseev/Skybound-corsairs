@@ -143,7 +143,7 @@
       "art": "ships/lastochka",
       "bounds": [70, 69, 947, 904],
       "bubble": [249, -161],
-      "far_propellers": [{ "at": [34, 340], "size": 120 }],
+      "propellers": [{ "at": [104, 695], "size": 200 }],
       "rooms": [
         { "id": "navigation", "rect": [734, 462, 130, 116] },
         { "id": "lookout", "rect": [564, 462, 165, 116] },
@@ -168,7 +168,7 @@
       "art": "ships/petrel",
       "bounds": [14, 109, 1013, 823],
       "bubble": [253, -121],
-      "far_propellers": [{ "at": [80, 298], "size": 78 }],
+      "propellers": [{ "at": [100, 692], "size": 92 }, { "at": [126, 770], "size": 92 }],
       "rooms": [
         { "id": "navigation", "rect": [602, 505, 144, 92] },
         { "id": "tavern", "rect": [464, 505, 132, 92] },
@@ -196,7 +196,7 @@
       "art": "ships/leviathan",
       "bounds": [36, 102, 1007, 885],
       "bubble": [262, -128],
-      "far_propellers": [{ "at": [34, 262], "size": 88 }, { "at": [76, 345], "size": 76 }],
+      "propellers": [{ "at": [60, 530], "size": 108 }, { "at": [97, 662], "size": 108 }, { "at": [168, 782], "size": 108 }],
       "rooms": [
         { "id": "navigation", "rect": [100, 448, 122, 62] },
         { "id": "lookout", "rect": [226, 448, 136, 62] },
@@ -230,7 +230,7 @@
       "art": "ships/falcon",
       "bounds": [57, 62, 1002, 872],
       "bubble": [269, -168],
-      "far_propellers": [{ "at": [18, 322], "size": 112 }],
+      "propellers": [{ "at": [78, 580], "size": 240 }],
       "rooms": [
         { "id": "navigation", "rect": [619, 495, 130, 85] },
         { "id": "throne", "rect": [469, 495, 145, 85] },

@@ -44,10 +44,9 @@ const BOB_TILT_DEG: f32 = 1.2;
 /// Ширина экрана в логических px.
 const SCREEN_W: f32 = 540.0;
 const PRESSED_SCALE: f32 = 0.94;
-/// Ширина рисунка маленького корабля главной (`far.png`), винты сплющены до вида сбоку.
-const FAR_ART: f32 = 512.0;
-const FAR_PROP_SQUASH: f32 = 0.55;
-const FAR_PROP_TURNS: f32 = 1.6;
+/// Винты за кормой: на рисунке анфас, в игре сплющены по ширине (вид сбоку) и крутятся.
+const PROP_SQUASH: f32 = 0.45;
+const PROP_TURNS: f32 = 1.6;
 
 /// Данные меню: `data/menu.json`.
 #[derive(Resource, Deserialize, Clone)]
@@ -221,7 +220,6 @@ pub fn plugin(app: &mut App) {
         .init_resource::<MenuRebuild>()
         .init_resource::<TilePage>()
         .init_resource::<ShipCam>()
-        .init_resource::<ShipTransition>()
         .add_systems(OnEnter(Screen::Menu), spawn_menu)
         .add_systems(OnEnter(Screen::Crew), spawn_sky)
         .add_systems(OnEnter(Screen::Tavern), spawn_sky)
@@ -262,10 +260,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, count_victory.run_if(in_state(Screen::Battle)))
         .add_systems(Update, ship_mips);
     #[cfg(feature = "dev")]
-    app.add_systems(
-        Update,
-        (dev_hull_key, dev_transition_key).run_if(in_state(Screen::Menu)),
-    );
+    app.add_systems(Update, dev_hull_key.run_if(in_state(Screen::Menu)));
 }
 
 /// Всё, из чего собирается экран корабля.
@@ -508,146 +503,67 @@ fn ship_view(
         UiTransform::default(),
     ));
     sprite.with_children(|deck| {
-        // Главная: маленький упрощённый корабль. На осмотре он гаснет, за ним — большой.
-        let [x0, y0, x1, y1] = view.bounds;
+        // Один и тот же корабль на главной и на осмотре: снаружи борт закрыт, на осмотре
+        // корабль приближается и борт растворяется — видны комнаты.
+        ship_rooms(deck, assets, fonts, ship_data, ship, selected);
         deck.spawn((
-            FarShip,
-            Node {
-                position_type: PositionType::Absolute,
-                left: pct(x0),
-                top: pct(y0),
-                width: pct(x1 - x0),
-                height: pct(y1 - y0),
-                ..default()
-            },
-            ImageNode::new(assets.load(view.far())),
-        ))
-        .observe(open_ship);
-        // Винты на корме — поверх корпуса: сплющены по ширине (вид сбоку) и крутятся.
-        let k = (x1 - x0) / FAR_ART;
-        for prop in &view.far_propellers {
-            let (cx, cy, side) = (x0 + prop.at[0] * k, y0 + prop.at[1] * k, prop.size * k);
-            deck.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: pct(cx - side / 2.0),
-                    top: pct(cy - side / 2.0),
-                    width: pct(side),
-                    height: pct(side),
-                    ..default()
-                },
-                UiTransform::from_scale(Vec2::new(FAR_PROP_SQUASH, 1.0)),
-                Pickable::IGNORE,
-            ))
-            .with_child((
-                FarShip,
-                Spinner(FAR_PROP_TURNS),
-                Node {
-                    width: percent(100),
-                    height: percent(100),
-                    ..default()
-                },
-                ImageNode::new(assets.load("fx/propeller.png")),
-                UiTransform::default(),
-                Pickable::IGNORE,
-            ));
-        }
-        deck.spawn((
-            ShipBody,
+            Exterior,
             Node {
                 position_type: PositionType::Absolute,
                 width: percent(100),
                 height: percent(100),
                 ..default()
             },
-            Visibility::Hidden,
-            Pickable::IGNORE,
         ))
-        .with_children(|deck| {
-            ship_rooms(deck, assets, fonts, ship_data, ship, selected);
-            deck.spawn((
-                Exterior,
+        .with_children(|outside| {
+            outside.spawn((
+                ExteriorImage,
                 Node {
                     position_type: PositionType::Absolute,
                     width: percent(100),
                     height: percent(100),
                     ..default()
                 },
-            ))
-            .with_children(|outside| {
+                ImageNode::new(assets.load(view.exterior())),
+                Pickable::IGNORE,
+            ));
+            // Улучшения над палубой (ветроловы) видны и снаружи.
+            for room in view.rooms.iter().filter(|r| r.outside) {
+                let Some(image) = room.image(ship.level(&room.id)) else {
+                    continue;
+                };
+                let [x, y, w, h] = room.rect;
                 outside.spawn((
                     ExteriorImage,
                     Node {
                         position_type: PositionType::Absolute,
-                        width: percent(100),
-                        height: percent(100),
+                        left: pct(x),
+                        top: pct(y),
+                        width: pct(w),
+                        height: pct(h),
                         ..default()
                     },
-                    ImageNode::new(assets.load(view.exterior())),
+                    ImageNode::new(assets.load(image.to_string())),
                     Pickable::IGNORE,
                 ));
-                // Улучшения над палубой (ветроловы) видны и снаружи.
-                for room in view.rooms.iter().filter(|r| r.outside) {
-                    let Some(image) = room.image(ship.level(&room.id)) else {
-                        continue;
-                    };
-                    let [x, y, w, h] = room.rect;
-                    outside.spawn((
-                        ExteriorImage,
-                        Node {
-                            position_type: PositionType::Absolute,
-                            left: pct(x),
-                            top: pct(y),
-                            width: pct(w),
-                            height: pct(h),
-                            ..default()
-                        },
-                        ImageNode::new(assets.load(image.to_string())),
-                        Pickable::IGNORE,
-                    ));
+            }
+            if let Some(sails) = &view.sails {
+                for (index, sail) in sails.layers.iter().enumerate() {
+                    spawn_sail(outside, assets, SHIP_ART, sails.slices, index, sail);
                 }
-                if let Some(sails) = &view.sails {
-                    for (index, sail) in sails.layers.iter().enumerate() {
-                        spawn_sail(outside, assets, SHIP_ART, sails.slices, index, sail);
-                    }
-                }
-            })
-            .observe(open_ship);
-            propeller(deck, assets, view);
-        });
+            }
+        })
+        .observe(open_ship);
+        propellers(deck, assets, view);
         // Ветроловы накопили эфир — пузырь над кораблём, тап собирает.
         let [x, y] = view.bubble;
         ether_bubble(deck, fonts, pct(x), pct(y));
-        // Облако перехода: пять клубов поверх корабля, видны только в момент подмены.
-        let (cx, cy, bw) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0, x1 - x0);
-        for (image, dx, dy, w) in [
-            ("menu/cloud_2.png", -0.45, 0.2, 1.3),
-            ("menu/cloud_3.png", 0.45, 0.15, 1.25),
-            ("menu/cloud_1.png", -0.22, -0.3, 1.3),
-            ("menu/cloud_1.png", 0.25, -0.28, 1.2),
-            ("menu/cloud_1.png", 0.0, 0.0, 2.0),
-        ] {
-            let (w, h) = (bw * w, bw * w * 0.63);
-            deck.spawn((
-                TransitionPuff {
-                    dir: Vec2::new(dx, dy),
-                },
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: pct(cx + dx * bw - w / 2.0),
-                    top: pct(cy + dy * bw - h / 2.0),
-                    width: pct(w),
-                    height: pct(h),
-                    ..default()
-                },
-                ImageNode::new(assets.load(image)),
-                UiTransform::default(),
-                Visibility::Hidden,
-                Pickable::IGNORE,
-            ));
-        }
     });
 }
+
+/// Ячейки комнат поверх разреза: на главной скрыты.
+#[derive(Component)]
+struct ShipRooms;
 
 /// Тап по кораблю на главной — к осмотру.
 fn open_ship(
@@ -663,43 +579,6 @@ fn open_ship(
     sfx.write(Sfx("click"));
     rebuild.0 = true;
 }
-
-/// Упрощённый корабль главной.
-#[derive(Component)]
-struct FarShip;
-
-/// Как главная переходит к осмотру (пока выбираем: T в dev-сборке переключает).
-#[derive(Resource, Default, Clone, Copy, PartialEq)]
-pub(crate) enum ShipTransition {
-    /// На главной тот же большой корабль, уменьшенный: приближается и открывает борт.
-    #[default]
-    OneDrawing,
-    /// На главной упрощённый корабль; при приближении его закрывает облако, под ним — большой.
-    Cloud,
-}
-
-impl ShipTransition {
-    fn name(self) -> &'static str {
-        match self {
-            ShipTransition::OneDrawing => "Переход: один рисунок",
-            ShipTransition::Cloud => "Переход: облако",
-        }
-    }
-}
-
-/// Клуб облака перехода: разлетается в сторону `dir` (доли ширины корабля).
-#[derive(Component)]
-struct TransitionPuff {
-    dir: Vec2,
-}
-
-/// Облако перехода плотнее всего здесь (доля пути приближения): тут маленький корабль
-/// подменяется большим.
-const PUFF_SWAP: f32 = 0.3;
-
-/// Большой корабль (разрез, облик снаружи, винт): виден только на осмотре и по пути к нему.
-#[derive(Component)]
-struct ShipBody;
 
 /// Парус: скатка на рее и полотно, нарезанное на полосы (каждая колышется сама).
 fn spawn_sail(
@@ -761,26 +640,35 @@ fn spawn_sail(
         });
 }
 
-/// Пропеллер на корме, поверх руля: крутится всегда.
-fn propeller(ship: &mut ChildSpawnerCommands, assets: &AssetServer, view: &crate::ship::ShipDef) {
-    let Some(prop) = &view.propeller else {
-        return;
-    };
+/// Винты за кормой — поверх корпуса: сплющены по ширине (вид сбоку) и крутятся всегда.
+fn propellers(ship: &mut ChildSpawnerCommands, assets: &AssetServer, view: &crate::ship::ShipDef) {
     let pct = |v: f32| percent(v / SHIP_ART * 100.0);
-    ship.spawn((
-        Spinner(prop.turns_per_second),
-        Node {
-            position_type: PositionType::Absolute,
-            left: pct(prop.at[0] - prop.size / 2.0),
-            top: pct(prop.at[1] - prop.size / 2.0),
-            width: pct(prop.size),
-            height: pct(prop.size),
-            ..default()
-        },
-        ImageNode::new(assets.load(prop.image.clone())),
-        UiTransform::default(),
-        Pickable::IGNORE,
-    ));
+    for prop in &view.propellers {
+        let [x, y] = prop.at;
+        ship.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: pct(x - prop.size / 2.0),
+                top: pct(y - prop.size / 2.0),
+                width: pct(prop.size),
+                height: pct(prop.size),
+                ..default()
+            },
+            UiTransform::from_scale(Vec2::new(PROP_SQUASH, 1.0)),
+            Pickable::IGNORE,
+        ))
+        .with_child((
+            Spinner(PROP_TURNS),
+            Node {
+                width: percent(100),
+                height: percent(100),
+                ..default()
+            },
+            ImageNode::new(assets.load("fx/propeller.png")),
+            UiTransform::default(),
+            Pickable::IGNORE,
+        ));
+    }
 }
 
 /// Назад из осмотра корабля.
@@ -886,96 +774,106 @@ fn ship_rooms(
         ImageNode::new(assets.load(view.hull())),
     ));
     let locked = assets.load(view.locked());
-    for room in &view.rooms {
-        // Жилые комнаты без отсека — просто часть рисунка.
-        let Some(compartment) = ship_data.compartment(&room.id) else {
-            continue;
-        };
-        let [x, y, w, h] = room.rect;
-        let cramped = compartment.rank > view.rank;
-        let level = ship.level(&room.id);
-        let building = ship.build.as_ref().is_some_and(|b| b.id == room.id);
-        let mut cell = deck.spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                left: pct(x),
-                top: pct(y),
-                width: pct(w),
-                height: pct(h),
-                ..default()
-            },
-            UiTransform::default(),
-        ));
-        // Открытый в панели отсек — в пульсирующей золотой рамке.
-        if selected == Some(room.id.as_str()) {
-            cell.insert((SelectedRoom, Outline::new(px(3), px(1), GOLD)));
-        }
-        cell.with_children(|c| {
-            let fill = || Node {
-                position_type: PositionType::Absolute,
-                width: percent(100),
-                height: percent(100),
-                ..default()
+    // Ячейки комнат (подписи, рамки) — только когда борт открыт: снаружи подпись у края
+    // комнаты вылезла бы за обшивку.
+    deck.spawn((
+        ShipRooms,
+        Node {
+            position_type: PositionType::Absolute,
+            width: percent(100),
+            height: percent(100),
+            ..default()
+        },
+        Pickable::IGNORE,
+    ))
+    .with_children(|deck| {
+        for room in &view.rooms {
+            // Жилые комнаты без отсека — просто часть рисунка.
+            let Some(compartment) = ship_data.compartment(&room.id) else {
+                continue;
             };
-            if let Some(image) = room.image(level) {
-                c.spawn((
-                    fill(),
-                    ImageNode::new(assets.load(image.to_string())),
-                    Pickable::IGNORE,
-                ));
+            let [x, y, w, h] = room.rect;
+            let cramped = compartment.rank > view.rank;
+            let level = ship.level(&room.id);
+            let building = ship.build.as_ref().is_some_and(|b| b.id == room.id);
+            let mut cell = deck.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: pct(x),
+                    top: pct(y),
+                    width: pct(w),
+                    height: pct(h),
+                    ..default()
+                },
+                UiTransform::default(),
+            ));
+            // Открытый в панели отсек — в пульсирующей золотой рамке.
+            if selected == Some(room.id.as_str()) {
+                cell.insert((SelectedRoom, Outline::new(px(3), px(1), GOLD)));
             }
-            if building {
-                c.spawn((
-                    fill(),
-                    ImageNode::new(assets.load(ship_data.scene.scaffold.clone())),
-                    Pickable::IGNORE,
-                ));
-                c.spawn((room_tag(room.tag), Pickable::IGNORE))
-                    .with_child((RoomTimer, text(fonts, "", true, 12.0, GOLD)));
-            } else if level == 0 || cramped {
-                // Не построен или тесно на этом корабле: та же комната с досками и замком.
-                c.spawn((
-                    fill(),
-                    ImageNode {
-                        rect: Some(Rect::new(x, y, x + w, y + h)),
-                        ..ImageNode::new(locked.clone())
-                    },
-                    Pickable::IGNORE,
-                ));
-                let need = if cramped {
-                    "Нет места".to_string()
-                } else {
-                    "Построить".to_string()
+            cell.with_children(|c| {
+                let fill = || Node {
+                    position_type: PositionType::Absolute,
+                    width: percent(100),
+                    height: percent(100),
+                    ..default()
                 };
-                c.spawn((room_tag(room.tag), Pickable::IGNORE))
-                    .with_child(crate::style::heading(fonts, need, 13.0, GOLD));
-            } else {
-                c.spawn((room_tag(room.tag), Pickable::IGNORE))
-                    .with_child(crate::style::heading(
-                        fonts,
-                        format!("ур. {level}"),
-                        12.0,
-                        PARCHMENT,
+                if let Some(image) = room.image(level) {
+                    c.spawn((
+                        fill(),
+                        ImageNode::new(assets.load(image.to_string())),
+                        Pickable::IGNORE,
                     ));
-            }
-        });
-        let id = room.id.clone();
-        pressable(&mut cell);
-        cell.observe(
-            move |_: On<PointerClick>,
-                  cam: Res<ShipCam>,
-                  mut opened: ResMut<OpenCompartment>,
-                  mut board: ResMut<BoardOpen>,
-                  mut rebuild: ResMut<MenuRebuild>| {
-                if !cam.open {
-                    return;
                 }
-                board.0 = false;
-                opened.0 = Some(id.clone());
-                rebuild.0 = true;
-            },
-        );
-    }
+                if building {
+                    c.spawn((
+                        fill(),
+                        ImageNode::new(assets.load(ship_data.scene.scaffold.clone())),
+                        Pickable::IGNORE,
+                    ));
+                    c.spawn((room_tag(room.tag), Pickable::IGNORE))
+                        .with_child((RoomTimer, text(fonts, "", true, 12.0, GOLD)));
+                } else if level == 0 || cramped {
+                    // Не построен или тесно на этом корабле: та же комната с досками и замком.
+                    c.spawn((
+                        fill(),
+                        ImageNode {
+                            rect: Some(Rect::new(x, y, x + w, y + h)),
+                            ..ImageNode::new(locked.clone())
+                        },
+                        Pickable::IGNORE,
+                    ));
+                    let need = if cramped {
+                        "Нет места".to_string()
+                    } else {
+                        "Построить".to_string()
+                    };
+                    c.spawn((room_tag(room.tag), Pickable::IGNORE))
+                        .with_child(crate::style::heading(fonts, need, 13.0, GOLD));
+                } else {
+                    c.spawn((room_tag(room.tag), Pickable::IGNORE)).with_child(
+                        crate::style::heading(fonts, format!("ур. {level}"), 12.0, PARCHMENT),
+                    );
+                }
+            });
+            let id = room.id.clone();
+            pressable(&mut cell);
+            cell.observe(
+                move |_: On<PointerClick>,
+                      cam: Res<ShipCam>,
+                      mut opened: ResMut<OpenCompartment>,
+                      mut board: ResMut<BoardOpen>,
+                      mut rebuild: ResMut<MenuRebuild>| {
+                    if !cam.open {
+                        return;
+                    }
+                    board.0 = false;
+                    opened.0 = Some(id.clone());
+                    rebuild.0 = true;
+                },
+            );
+        }
+    });
 }
 
 /// Пузырь накопленного эфира: тап собирает в запас (с потолком Трюма).
@@ -2057,34 +1955,7 @@ fn frame_ship(
     mut exterior: Query<&mut Visibility, (With<Exterior>, Without<Slide>)>,
     mut images: Query<&mut ImageNode, With<ExteriorImage>>,
     mut slides: Query<(&Slide, &mut UiTransform, &mut Visibility), Without<ShipSprite>>,
-    mut body: Query<&mut Visibility, (With<ShipBody>, Without<Exterior>, Without<Slide>)>,
-    mut far: Query<
-        (&mut ImageNode, &mut Visibility),
-        (
-            With<FarShip>,
-            Without<ExteriorImage>,
-            Without<ShipBody>,
-            Without<Exterior>,
-            Without<Slide>,
-        ),
-    >,
-    mut puffs: Query<
-        (
-            &TransitionPuff,
-            &mut ImageNode,
-            &mut UiTransform,
-            &mut Visibility,
-        ),
-        (
-            Without<FarShip>,
-            Without<ExteriorImage>,
-            Without<ShipSprite>,
-            Without<Exterior>,
-            Without<ShipBody>,
-            Without<Slide>,
-        ),
-    >,
-    style: Res<ShipTransition>,
+    mut rooms: Query<&mut Visibility, (With<ShipRooms>, Without<Exterior>, Without<Slide>)>,
 ) {
     let def = ship.current(&data);
     let look = &data.scene.look;
@@ -2122,32 +1993,13 @@ fn frame_ship(
     for mut vis in &mut exterior {
         vis.set_if_neq(shown(e > 0.98));
     }
-    // Маленький корабль главной есть только в переходе «облако»: под облаком он
-    // подменяется большим. В переходе «один рисунок» большой виден всегда.
-    let cloud = *style == ShipTransition::Cloud;
-    let far_shown = cloud && e < PUFF_SWAP;
-    for mut vis in &mut body {
-        vis.set_if_neq(shown(far_shown));
-    }
-    for (mut image, mut vis) in &mut far {
-        image.color = Color::WHITE;
-        vis.set_if_neq(shown(!far_shown));
-    }
     // Борт открывается, когда корабль уже почти приблизился.
     let open = smoothstep(0.55, 1.0, e);
+    for mut vis in &mut rooms {
+        vis.set_if_neq(shown(open < 0.01));
+    }
     for mut image in &mut images {
         image.color = Color::WHITE.with_alpha(1.0 - open);
-    }
-    // Облако: сгущается к моменту подмены, потом клубы расходятся и тают.
-    let thick =
-        smoothstep(0.0, PUFF_SWAP - 0.05, e) * (1.0 - smoothstep(PUFF_SWAP + 0.05, 0.75, e));
-    let spread = smoothstep(PUFF_SWAP, 0.8, e);
-    for (puff, mut image, mut transform, mut vis) in &mut puffs {
-        let alpha = if cloud { thick } else { 0.0 };
-        image.color = Color::WHITE.with_alpha(alpha);
-        vis.set_if_neq(shown(alpha < 0.01));
-        transform.scale = Vec2::splat(0.75 + 0.25 * smoothstep(0.0, PUFF_SWAP, e) + 0.3 * spread);
-        transform.translation = Val2::px(puff.dir.x * 260.0 * spread, puff.dir.y * 260.0 * spread);
     }
     for (slide, mut transform, mut vis) in &mut slides {
         let away = if slide.inside { 1.0 - e } else { e };
@@ -2430,21 +2282,5 @@ fn dev_hull_key(
     if keys.just_pressed(KeyCode::KeyH) {
         ship.dev_next_ship(&data);
         rebuild.0 = true;
-    }
-}
-
-/// T — другой переход главная → осмотр (пока выбираем из двух).
-#[cfg(feature = "dev")]
-fn dev_transition_key(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut style: ResMut<ShipTransition>,
-    mut toast: ResMut<Toast>,
-) {
-    if keys.just_pressed(KeyCode::KeyT) {
-        *style = match *style {
-            ShipTransition::OneDrawing => ShipTransition::Cloud,
-            ShipTransition::Cloud => ShipTransition::OneDrawing,
-        };
-        toast.show(style.name());
     }
 }
