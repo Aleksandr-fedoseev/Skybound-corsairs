@@ -1174,7 +1174,6 @@ struct FallingWater;
 struct MillSails(f32);
 
 /// Фон едет от часов: после пересборки меню не прыгает.
-#[allow(clippy::type_complexity)]
 /// Небо едет: окно в текстуре размером с экран (логические px; высота панорамы равна высоте
 /// экрана). Размер берём у окна, а не у разметки узла: в кадр пересборки она ещё не посчитана,
 /// и небо мигнуло бы синим фоном.
@@ -1191,6 +1190,7 @@ fn scroll_sky(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn scroll_backdrop(
     time: Res<Time>,
     data: Res<ShipData>,
