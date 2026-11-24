@@ -307,6 +307,7 @@ struct MenuView<'w> {
     page: Res<'w, TilePage>,
     cam: Res<'w, ShipCam>,
     event_data: Res<'w, EventData>,
+    power: crate::power::Power<'w>,
 }
 
 fn spawn_menu(mut commands: Commands, view: MenuView) {
@@ -434,7 +435,7 @@ fn build(commands: &mut Commands, view: &MenuView) {
                 );
             });
             slide(root, Vec2::new(0.0, 200.0), false, |r| {
-                voyage(r, assets, fonts, next, done)
+                voyage(r, assets, fonts, next, done, &view.power)
             });
             // Улучшения отсеков — только на осмотре: выезжают снизу на место «В поход».
             slide(root, Vec2::new(0.0, 200.0), true, |r| {
@@ -1692,6 +1693,7 @@ fn voyage(
     fonts: &Fonts,
     next: &game_data::StageDef,
     done: bool,
+    power: &crate::power::Power,
 ) {
     root.spawn((
         Node {
@@ -1728,11 +1730,11 @@ fn voyage(
                         stage_title(&next.id)
                     };
                     crate::style::pill(row, fonts, stage, Color::srgb(0.24, 0.2, 0.3));
-                    crate::style::pill(
+                    crate::power::need_chip(
                         row,
                         fonts,
-                        format!("ур. {}", next.recommended_level),
-                        Color::srgb(0.45, 0.18, 0.14),
+                        power.recommended(next.recommended_level),
+                        power.team(),
                     );
                 });
                 info.spawn(crate::style::heading(

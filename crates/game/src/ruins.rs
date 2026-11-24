@@ -321,6 +321,7 @@ pub fn section(
     screen: &BattleScreen,
     cleared: usize,
     team: &[String],
+    power: (u32, u32),
 ) {
     let w = week();
     let best = if ruins.week == w { ruins.best } else { 0 };
@@ -349,6 +350,15 @@ pub fn section(
             best as usize,
             Some(current),
         );
+        card.spawn(Node {
+            column_gap: px(8),
+            align_items: AlignItems::Center,
+            ..default()
+        })
+        .with_children(|row| {
+            row.spawn(style::heading(fonts, "до конца:", 13.0, MUTED));
+            crate::power::need_chip(row, fonts, power.0, power.1);
+        });
         card.spawn(text(fonts, data.about.clone(), false, 12.0, MUTED));
     });
     if cleared < data.unlock_cleared {

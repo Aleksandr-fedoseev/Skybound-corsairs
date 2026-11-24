@@ -11,10 +11,12 @@
 
 pub mod ai;
 mod battle;
+pub mod power;
 mod rng;
 mod unit;
 
 pub use battle::{AbilityKind, Action, ActionKind, Battle, BattleError, Event, Outcome, Ship};
+pub use power::{ship_power, team_power, unit_power};
 pub use rng::Rng;
 pub use unit::{
     Ability, Effect, Element, Role, Side, Stats, Target, TargetedEffect, Unit, UnitDef, UnitId,

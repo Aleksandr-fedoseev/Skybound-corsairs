@@ -334,13 +334,6 @@ impl Roster {
         }
     }
 
-    pub fn team_levels(&self) -> Vec<(String, u32)> {
-        self.team
-            .iter()
-            .map(|id| (id.clone(), self.level(id)))
-            .collect()
-    }
-
     pub fn team_members(&self) -> Vec<Member> {
         self.team
             .iter()
@@ -492,6 +485,7 @@ fn spawn_crew(
     screen: Res<BattleScreen>,
     mut selected: ResMut<Selected>,
     cabin: CabinView,
+    power: crate::power::Power,
 ) {
     // Экипаж открывается сеткой героев; страница героя — по тапу.
     selected.0 = None;
@@ -507,7 +501,36 @@ fn spawn_crew(
         &cabin,
         &cabin.formation,
         &|id: &str| cabin.exps.is_away(id),
+        &PowerInfo::new(&power, &roster),
     );
+}
+
+/// Мощь для экрана Экипажа: отряд с кораблём, корабль и каждый нанятый герой.
+struct PowerInfo {
+    team: u32,
+    ship: u32,
+    heroes: HashMap<String, u32>,
+}
+
+impl PowerInfo {
+    fn new(power: &crate::power::Power, roster: &Roster) -> Self {
+        Self {
+            team: power.team(),
+            ship: power.ship(),
+            heroes: roster
+                .owned()
+                .into_iter()
+                .map(|id| {
+                    let p = power.hero(&id);
+                    (id, p)
+                })
+                .collect(),
+        }
+    }
+
+    fn hero(&self, id: &str) -> u32 {
+        self.heroes.get(id).copied().unwrap_or(0)
+    }
 }
 
 /// Всё про каюты для карточки героя.
@@ -629,6 +652,7 @@ fn rebuild_crew(
     screen: Res<BattleScreen>,
     selected: Res<Selected>,
     cabin: CabinView,
+    power: crate::power::Power,
 ) {
     if !dirty.0 {
         return;
@@ -649,6 +673,7 @@ fn rebuild_crew(
         &cabin,
         &cabin.formation,
         &|id: &str| cabin.exps.is_away(id),
+        &PowerInfo::new(&power, &roster),
     );
 }
 
@@ -665,6 +690,7 @@ fn build(
     cabin: &CabinView,
     formation: &Formation,
     away: &dyn Fn(&str) -> bool,
+    power: &PowerInfo,
 ) {
     commands
         .spawn((
@@ -701,7 +727,7 @@ fn build(
                     &format!("Экипаж · отряд {}/{}", roster.team.len(), crew.team_size),
                     56.0,
                 );
-                hero_grid(root, assets, fonts, data, roster, crew);
+                hero_grid(root, assets, fonts, data, roster, crew, power);
                 bottom_nav(root, assets, fonts, Screen::Crew);
                 spawn_toast(root, fonts);
                 return;
@@ -719,7 +745,17 @@ fn build(
                 let gear = gear_info(cabin, profile, &hero.id);
                 let cabin = cabin_info(cabin, roster, data, &hero.id);
                 details(
-                    root, assets, fonts, crew, roster, profile, hero, merge, cabin, gear,
+                    root,
+                    assets,
+                    fonts,
+                    crew,
+                    roster,
+                    profile,
+                    hero,
+                    merge,
+                    cabin,
+                    gear,
+                    power.hero(&hero.id),
                 );
             }
             // Лента героев над нижней панелью: тап — выбрать.
@@ -754,6 +790,7 @@ fn build(
 }
 
 /// Сетка героев: крупные карточки как плитки отсеков, под ней — отряд в бой.
+#[allow(clippy::too_many_arguments)]
 fn hero_grid(
     root: &mut ChildSpawnerCommands,
     assets: &AssetServer,
@@ -761,6 +798,7 @@ fn hero_grid(
     data: &GameData,
     roster: &Roster,
     crew: &CrewData,
+    power: &PowerInfo,
 ) {
     root.spawn(Node {
         position_type: PositionType::Absolute,
@@ -775,7 +813,7 @@ fn hero_grid(
     .with_children(|grid| {
         // В сетке — только команда; кто придёт позже, сказано строкой ниже.
         for hero in data.heroes.iter().filter(|h| roster.owns(&h.id)) {
-            hero_tile(grid, assets, fonts, hero, roster);
+            hero_tile(grid, assets, fonts, hero, roster, power.hero(&hero.id));
         }
     });
     let mut coming: Vec<(u32, &str)> = data
@@ -833,10 +871,25 @@ fn hero_grid(
             ..default()
         })
         .with_children(|c| {
-            c.spawn(style::heading(fonts, "Отряд в бой", 19.0, BRIGHT));
+            c.spawn(Node {
+                column_gap: px(10),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|line| {
+                line.spawn(style::heading(fonts, "Отряд", 19.0, BRIGHT));
+                crate::power::badge(line, assets, fonts, power.team, 20.0, GOLD);
+            });
+            c.spawn(text(
+                fonts,
+                format!("с кораблём: залп +{}", crate::power::format(power.ship)),
+                false,
+                11.0,
+                MUTED,
+            ));
             let mut open = c.spawn((
                 Node {
-                    margin: UiRect::top(px(6)),
+                    margin: UiRect::top(px(4)),
                     padding: UiRect::axes(px(12), px(6)),
                     align_self: AlignSelf::FlexStart,
                     ..default()
@@ -1097,6 +1150,7 @@ fn hero_tile(
     fonts: &Fonts,
     hero: &HeroDef,
     roster: &Roster,
+    power: u32,
 ) {
     let owned = roster.owns(&hero.id);
     let in_team = roster.team.contains(&hero.id);
@@ -1165,13 +1219,21 @@ fn hero_tile(
             info.spawn(style::heading(fonts, hero.name.clone(), 17.0, BRIGHT));
             if owned {
                 stars_row(info, assets, roster.stars(&hero.id), 11.0);
-                info.spawn(text(
-                    fonts,
-                    format!("ур. {}", roster.level(&hero.id)),
-                    true,
-                    12.0,
-                    MUTED,
-                ));
+                info.spawn(Node {
+                    column_gap: px(6),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    row.spawn(text(
+                        fonts,
+                        format!("ур. {}", roster.level(&hero.id)),
+                        true,
+                        12.0,
+                        MUTED,
+                    ));
+                    crate::power::badge(row, assets, fonts, power, 13.0, GOLD);
+                });
             } else {
                 info.spawn(text(fonts, "придёт за главу", false, 12.0, MUTED));
             }
@@ -1299,6 +1361,7 @@ fn details(
     merge: (Option<u32>, Result<String, String>),
     cabin: CabinInfo,
     gear: GearInfo,
+    hero_power: u32,
 ) {
     let (merge_to, merge_info) = merge;
     let level = roster.level(&hero.id);
@@ -1403,6 +1466,7 @@ fn details(
             ));
             stars_row(card, assets, if owned { stars } else { 0 }, 16.0);
             if owned {
+                crate::power::badge(card, assets, fonts, hero_power, 20.0, INK);
                 card.spawn(style::ink(
                     fonts,
                     format!("Уровень {level} / {cap}"),

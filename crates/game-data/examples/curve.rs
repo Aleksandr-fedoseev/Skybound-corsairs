@@ -84,7 +84,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let floors: Vec<u32> = if abyss_only {
         (1..=60).collect()
-
     } else {
         vec![1, 3, 5, 7, 9, 10, 11, 13, 15, 19, 20, 21, 25, 29, 30, 40]
     };
@@ -107,7 +106,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("Отряд: {} · боёв на точку: {runs}\n", TEAM.join(", "));
-    println!("{:<42} {:>6} {:>6} {:>6}", "Бой", "50%", "80%", "в данных");
+    println!(
+        "{:<42} {:>6} {:>6} {:>6} {:>7}",
+        "Бой", "50%", "80%", "в данных", "мощь"
+    );
     for (name, enemies, written, wind) in fights {
         let foes: Vec<UnitDef> = enemies
             .iter()
@@ -130,11 +132,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         let show = |v: Option<u32>| v.map_or(format!(">{MAX_LEVEL}"), |l| l.to_string());
+        // Рекомендуемая мощь — стартовый отряд на уровне 80% побед и начальный залп (как в игре).
+        let power = at80.map_or("—".to_string(), |l| {
+            let team: Vec<UnitDef> = TEAM
+                .iter()
+                .map(|id| data.hero(id).expect("герой").to_unit(l))
+                .collect();
+            (battle_core::team_power(&team) + battle_core::ship_power(120)).to_string()
+        });
         println!(
-            "{name:<42} {:>6} {:>6} {:>6}",
+            "{name:<42} {:>6} {:>6} {:>6} {:>7}",
             show(at50),
             show(at80),
-            written.map_or("—".to_string(), |w| w.to_string())
+            written.map_or("—".to_string(), |w| w.to_string()),
+            power
         );
     }
     Ok(())

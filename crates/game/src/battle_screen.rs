@@ -343,6 +343,23 @@ pub fn random_seed() -> u64 {
         .unwrap_or(0)
 }
 
+/// Герой отряда таким, каким он выходит в бой: уровень, звёзды, умения, снаряжение, Каюты.
+pub fn member_unit(
+    data: &GameData,
+    crew: &crate::crew::CrewData,
+    m: &crate::crew::Member,
+    bonus: u32,
+) -> battle_core::UnitDef {
+    let hero = data.hero(&m.id).expect("герой есть в data/heroes.json");
+    let mut unit = crew.hero_unit(hero, m.level + bonus, m.stars, m.skills);
+    unit.stats.max_hp += m.gear.max_hp;
+    unit.stats.atk += m.gear.atk;
+    unit.stats.def += m.gear.def;
+    unit.stats.spd += m.gear.spd;
+    unit.stats.atk = (unit.stats.atk as f32 * (1.0 + m.atk_bonus)).round() as u32;
+    unit
+}
+
 #[allow(clippy::too_many_arguments)]
 fn new_battle(
     data: &GameData,
@@ -357,16 +374,7 @@ fn new_battle(
     let team_ids: Vec<String> = team.iter().map(|m| m.id.clone()).collect();
     let team = team
         .iter()
-        .map(|m| {
-            let hero = data.hero(&m.id).expect("герой есть в data/heroes.json");
-            let mut unit = crew.hero_unit(hero, m.level + bonus, m.stars, m.skills);
-            unit.stats.max_hp += m.gear.max_hp;
-            unit.stats.atk += m.gear.atk;
-            unit.stats.def += m.gear.def;
-            unit.stats.spd += m.gear.spd;
-            unit.stats.atk = (unit.stats.atk as f32 * (1.0 + m.atk_bonus)).round() as u32;
-            unit
-        })
+        .map(|m| member_unit(data, crew, m, bonus))
         .collect();
     let enemies = match custom {
         Some(fight) => fight

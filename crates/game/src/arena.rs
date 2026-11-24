@@ -219,7 +219,9 @@ pub fn section(
     heroes: &[String],
     level: u32,
     cleared: usize,
+    power: (&game_data::GameData, u32),
 ) {
+    let (game, mine) = power;
     // Показываем так, будто неделя и день уже перевёрнуты: сохраняемое меняют только кнопки.
     let mut view = arena.clone();
     view.roll(data, crate::cabins::today());
@@ -354,13 +356,35 @@ pub fn section(
                 })
                 .with_children(|c| {
                     c.spawn(style::ink(fonts, rival.captain.clone(), 18.0, style::INK));
-                    c.spawn(text(
-                        fonts,
-                        rival.ship.clone(),
-                        false,
-                        13.0,
-                        style::INK_SOFT,
-                    ));
+                    c.spawn(Node {
+                        column_gap: px(8),
+                        align_items: AlignItems::Center,
+                        ..default()
+                    })
+                    .with_children(|line| {
+                        line.spawn(text(
+                            fonts,
+                            rival.ship.clone(),
+                            false,
+                            13.0,
+                            style::INK_SOFT,
+                        ));
+                        // Мощь соперника: красная — сильнее нашего отряда.
+                        let theirs: u32 = rival
+                            .team
+                            .iter()
+                            .filter_map(|(id, lvl)| {
+                                game.hero(id)
+                                    .map(|h| battle_core::unit_power(&h.to_unit(*lvl)))
+                            })
+                            .sum();
+                        let color = if theirs > mine {
+                            crate::power::SHORT
+                        } else {
+                            crate::power::ENOUGH
+                        };
+                        crate::power::badge(line, assets, fonts, theirs, 15.0, color);
+                    });
                 });
                 let bg = [
                     Color::srgb(0.25, 0.5, 0.28),

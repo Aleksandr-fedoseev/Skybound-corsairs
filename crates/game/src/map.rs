@@ -9,7 +9,6 @@ use serde::Deserialize;
 use crate::Screen;
 use crate::battle_screen::BattleScreen;
 use crate::convoys::{ConvoyData, Convoys};
-use crate::crew::Roster;
 use crate::menu::{
     BRASS, DARK_WOOD, GO, GO_EDGE, GOLD, MUTED, MenuData, PARCHMENT, Progress, Toast, Voyage,
     bottom_nav, pressable, spawn_toast, text,
@@ -679,7 +678,7 @@ fn refresh_card(
     screen: Res<BattleScreen>,
     progress: Res<Progress>,
     menu: Res<MenuData>,
-    roster: Res<Roster>,
+    power: crate::power::Power,
     supply: (Res<crate::supplies::SupplyData>, Res<crate::menu::Profile>),
     mut cards: Query<&mut Visibility, With<Card>>,
     bodies: Query<(Entity, Option<&Children>), With<CardBody>>,
@@ -698,9 +697,8 @@ fn refresh_card(
     let (assets, fonts, events) = look;
     let (data, convoys) = convoy;
     let (supply, profile) = supply;
-    // Средний уровень отряда против рекомендуемого: ниже — бой, скорее всего, не выиграть.
-    let team = roster.team_levels();
-    let team_level = team.iter().map(|(_, l)| l).sum::<u32>() / team.len().max(1) as u32;
+    // Мощь отряда против рекомендуемой: ниже — бой, скорее всего, не выиграть.
+    let team_level = power.team();
     let key = if pick.0 {
         CardKey::Convoy {
             ready: convoys.ready,
@@ -746,7 +744,12 @@ fn refresh_card(
             ));
             enemies_row(b, &assets, &fonts, &ids_of(&tier.enemies), None, PARCHMENT);
             chips(b, |row| {
-                level_chip(row, &fonts, tier.recommended_level, team);
+                crate::power::need_chip(
+                    row,
+                    &fonts,
+                    power.recommended(tier.recommended_level),
+                    team,
+                );
                 chip(
                     row,
                     &fonts,
@@ -782,7 +785,12 @@ fn refresh_card(
             let ids: Vec<String> = def.enemies.iter().map(|e| e.enemy.clone()).collect();
             enemies_row(b, &assets, &fonts, &ids, def.wind, PARCHMENT);
             chips(b, |row| {
-                level_chip(row, &fonts, def.recommended_level, team);
+                crate::power::need_chip(
+                    row,
+                    &fonts,
+                    power.recommended(def.recommended_level),
+                    team,
+                );
                 let first = stage == progress.cleared;
                 let enough = supply.check(&profile, wins, first).is_ok();
                 let cost = supply.cost_for(first);
@@ -973,17 +981,6 @@ fn chip(
                 Color::WHITE,
             ));
         });
-}
-
-/// Рекомендуемый уровень и уровень отряда: зелёная плашка — можно идти, красная — рано.
-fn level_chip(parent: &mut ChildSpawnerCommands, fonts: &Fonts, need: u32, team: u32) {
-    chip(
-        parent,
-        fonts,
-        &format!("ур. {need} · у вас {team}"),
-        if team >= need { READY_BG } else { WEAK_BG },
-        None,
-    );
 }
 
 /// Награда иконками: «серебро 120 · доски 40 · журналы 100».

@@ -20,6 +20,7 @@ mod gear;
 mod hire_reveal;
 mod map;
 mod menu;
+mod power;
 mod ruins;
 mod save;
 mod ship;

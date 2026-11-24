@@ -514,3 +514,31 @@ fn enemy_heroes_fire_their_ultimates() {
     }
     assert!(fired, "враг с ультой ни разу её не применил");
 }
+
+#[test]
+fn power_grows_with_stats_and_area_skills() {
+    let weak = unit("a", Element::Wind, 1000, 100, 100);
+    let mut strong = weak.clone();
+    strong.stats.max_hp = 2000;
+    assert!(unit_power(&strong) > unit_power(&weak));
+    // Умение по всем ценится выше удара по одному.
+    let mut single = weak.clone();
+    single.skill = Some(Ability {
+        cooldown: 2,
+        ..hit(2.0)
+    });
+    let mut area = weak.clone();
+    area.skill = Some(Ability {
+        cooldown: 2,
+        ..ability(
+            "Залп",
+            vec![(Target::AllEnemies, Effect::Damage { multiplier: 2.0 })],
+        )
+    });
+    assert!(unit_power(&area) > unit_power(&single));
+    assert!(ship_power(380) > ship_power(120));
+    assert_eq!(
+        team_power(&[weak.clone(), weak.clone()]),
+        unit_power(&weak) * 2
+    );
+}

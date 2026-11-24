@@ -205,6 +205,7 @@ struct View<'w> {
         Res<'w, crate::arena::Arena>,
     ),
     progress: Res<'w, crate::menu::Progress>,
+    power: crate::power::Power<'w>,
 }
 
 fn spawn_activities(mut commands: Commands, view: View) {
@@ -454,6 +455,17 @@ fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
     });
 }
 
+/// Мощь для полного спуска в Руины: по `curve -- ruins` до конца доходят на 3 уровня выше
+/// рекомендуемого для следующего этапа.
+fn ruins_need(view: &View) -> u32 {
+    let stages = &view.screen.data.stages;
+    let rec = stages
+        .get(view.progress.cleared)
+        .or(stages.last())
+        .map_or(1, |s| s.recommended_level);
+    view.power.recommended(rec + 3)
+}
+
 fn ruins_status(view: &View) -> String {
     let (data, ruins) = (&*view.ruins.0, &*view.ruins.1);
     if view.progress.cleared < data.unlock_cleared {
@@ -611,6 +623,7 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
             screen,
             view.progress.cleared,
             &view.roster.team,
+            (ruins_need(view), view.power.team()),
         ),
         Page::Arena => {
             let heroes: Vec<String> = screen.data.heroes.iter().map(|h| h.id.clone()).collect();
@@ -623,6 +636,7 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
                 &heroes,
                 crate::arena::team_level(&view.roster),
                 view.progress.cleared,
+                (&screen.data, view.power.team()),
             );
         }
         Page::Expeditions => crate::expeditions::section(
