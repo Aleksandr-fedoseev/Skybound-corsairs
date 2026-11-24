@@ -35,7 +35,7 @@ const BETTER: Color = Color::srgb(0.55, 0.88, 0.55);
 #[derive(Resource, Deserialize, Clone)]
 pub struct CrewData {
     pub start_team: Vec<String>,
-    /// Кто за какую главу приходит в команду (решение №69); вступает он сценой после босса.
+    /// Кто за какую главу приходит в команду (решение №76); вступает он сценой после босса.
     #[serde(default)]
     pub arrivals: HashMap<String, u32>,
     pub team_size: usize,

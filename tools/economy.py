@@ -72,10 +72,6 @@ def effect_at(cid, level):
 
 def build_cost(cid, to):
     c = dict(next(l for l in ship["levels"] if l["level"] == to))
-    if cid == "hull":
-        k = ship["hull_cost_factor"]
-        for key in ("seconds", "silver", "planks", "ether"):
-            c[key] = round(c[key] * k)
     return c
 
 
@@ -91,6 +87,7 @@ class Player:
         self.convoys = convoys["start_ready"]
         self.convoy_clock = 0.0
         self.ship = {c["id"]: c["start_level"] for c in ship["compartments"]}
+        self.vessel = ship["ships"][0]          # корабль: ранг открывает отсеки, max_level — их потолок
         self.build = None               # (id, to, ends_at_hours)
         self.deeds = {}
         self.claimed = set()
@@ -240,19 +237,25 @@ class Player:
             self.heroes[i] += 1
             self.deed("levelup")
 
+    def chapters_done(self):
+        done = 0
+        for n in range(1, 20):
+            idx = [i for i, st in enumerate(stages) if st["id"].startswith(f"{n}-")]
+            if not idx or idx[-1] >= self.cleared:
+                break
+            done = n
+        return done
+
     def wish(self):
-        """Что строить следующим: Тренировка, Трюм, Пушки до уровня Корпуса, потом Корпус."""
-        hull = self.ship["hull"]
+        """Что строить: Тренировка, Трюм, Камбуз, Пушки, Ветроловы до потолка корабля; потом новый корабль."""
+        cap, rank = self.vessel["max_level"], self.vessel["rank"]
         for cid in ("training_deck", "hold", "galley", "cannon_deck", "windcatchers"):
-            if comp[cid]["unlock_hull"] <= hull and self.ship[cid] < hull:
+            if comp[cid]["rank"] <= rank and self.ship[cid] < cap:
                 return cid, self.ship[cid] + 1
-        # Новый корабль с Верфи — когда открыт по прогрессу главы.
-        nxt = next((c for c in ship["ships"] if c["tier"] == hull + 1), None)
-        if nxt:
-            after = nxt.get("after")
-            ids = [st["id"] for st in stages]
-            if after is None or (after in ids and ids.index(after) < self.cleared):
-                return "hull", hull + 1
+        # Новый корабль с Верфи (за дублоны не берём) — когда открыт по главам.
+        nxt = next((c for c in ship["ships"] if not c.get("doubloons") and c["rank"] > rank), None)
+        if nxt and nxt.get("after_chapter", 0) <= self.chapters_done():
+            return "ship", nxt
         return None
 
     def try_build(self, now):
@@ -262,13 +265,13 @@ class Player:
         if not w:
             return
         cid, to = w
-        if cid == "hull":
-            c = next(x for x in ship["ships"] if x["tier"] == to)
-            if self.silver >= c["silver"] and self.planks >= c["planks"] and self.ether >= c["ether"]:
-                self.silver -= c["silver"]
-                self.planks -= c["planks"]
-                self.ether -= c["ether"]
-                self.ship["hull"] = to  # покупка мгновенная
+        if cid == "ship":
+            price = {"silver": 0, "planks": 0, "ether": 0, **to.get("price", {})}
+            if self.silver >= price["silver"] and self.planks >= price["planks"] and self.ether >= price["ether"]:
+                self.silver -= price["silver"]
+                self.planks -= price["planks"]
+                self.ether -= price["ether"]
+                self.vessel = to  # покупка мгновенная, отсеки переезжают
             return
         c = build_cost(cid, to)
         if self.silver >= c["silver"] and self.planks >= c["planks"] and self.ether >= c["ether"]:
@@ -285,7 +288,7 @@ def main():
     now = SESSIONS[0]
     print(f"Заходы: {SESSIONS} ч · этапов {len(stages)} · потолок уровня {LEVEL_CAP} (1★)\n")
     print(f"{'день':>4} {'отряд':>5} {'этапы':>5} {'Бездна':>6} {'побед':>5} {'журн. бои/трен/контр/Бездна':>28}"
-          f" {'припасы трат/потер':>18} {'Корпус':>6} {'Трен.':>5}")
+          f" {'припасы трат/потер':>18} {'Ранг':>6} {'Трен.':>5}")
     for day in range(days):
         p.log, p.wins_today, p.deeds, p.claimed = {}, {}, {}, set()
         for h in SESSIONS:
@@ -300,7 +303,7 @@ def main():
         jr = "/".join(str(int(L.get("журналы: " + k, 0))) for k in ("бои", "Тренировочная палуба", "контракты", "Бездна"))
         print(f"{day + 1:>4} {p.squad():>5} {p.cleared:>5} {p.best_floor:>6} {int(L.get('побед на этапах', 0)):>5}"
               f" {jr:>28} {int(L.get('припасы: потрачено', 0)):>8}/{int(L.get('припасы: потеряно на потолке', 0)):<9}"
-              f" {p.ship['hull']:>6} {p.ship['training_deck']:>5}")
+              f" {p.vessel['rank']:>6} {p.ship['training_deck']:>5}")
     print("\nПервое прохождение:")
     for sid, when in p.cleared_at.items():
         rec = next(s["recommended_level"] for s in stages if s["id"] == sid)
