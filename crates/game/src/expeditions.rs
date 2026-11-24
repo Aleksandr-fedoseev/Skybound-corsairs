@@ -11,14 +11,11 @@ use crate::abyss::ActivitiesDirty;
 use crate::audio::Sfx;
 use crate::battle_screen::BattleScreen;
 use crate::crew::Roster;
-use crate::menu::{GO, GOLD, MUTED, PARCHMENT, Spoils, Toast, pressable, text};
+use crate::menu::{MUTED, PARCHMENT, Spoils, Toast, pressable, text};
 use crate::save::now;
 use crate::ship::{Ship, ShipData, clock};
-use crate::style::{Look, Skin};
+use crate::style::{self, Look, Skin};
 use crate::view::Fonts;
-
-const DONE: Color = Color::srgb(0.30, 0.62, 0.38);
-const DISABLED: Color = Color::srgb(0.36, 0.38, 0.43);
 
 #[derive(Resource, Deserialize)]
 pub struct ExpeditionData {
@@ -47,6 +44,20 @@ pub struct Loot {
 }
 
 impl Loot {
+    pub fn items(&self) -> Vec<(&'static str, u32)> {
+        [
+            ("planks", self.planks),
+            ("silver", self.silver),
+            ("ether", self.ether),
+            ("charts", self.charts),
+            ("details", self.details),
+            ("figureheads", self.figureheads),
+        ]
+        .into_iter()
+        .filter(|(_, n)| *n > 0)
+        .collect()
+    }
+
     fn line(&self) -> String {
         let mut parts = Vec::new();
         for (n, name) in [
@@ -145,6 +156,7 @@ pub fn plugin(app: &mut App) {
 #[allow(clippy::too_many_arguments)]
 pub fn section(
     col: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     data: &ExpeditionData,
     exps: &Expeditions,
@@ -152,28 +164,45 @@ pub fn section(
     screen: &BattleScreen,
     now: u64,
 ) {
+    let _ = screen;
     col.spawn((
         Node {
-            padding: UiRect::axes(px(18), px(16)),
+            padding: UiRect::axes(px(16), px(14)),
             flex_direction: FlexDirection::Column,
-            row_gap: px(8),
-            border: UiRect::all(px(1)),
+            row_gap: px(10),
+            border: UiRect::all(px(2)),
             border_radius: BorderRadius::all(px(14)),
             ..default()
         },
         Skin(Look::Tile),
     ))
     .with_children(|card| {
-        card.spawn(text(
-            fonts,
-            format!(
-                "Экспедиции на шлюпках · шлюпок в пути {} из {boats}",
-                exps.running.len()
-            ),
-            true,
-            17.0,
-            PARCHMENT,
-        ));
+        card.spawn(Node {
+            column_gap: px(10),
+            align_items: AlignItems::Center,
+            ..default()
+        })
+        .with_children(|row| {
+            row.spawn(style::heading(fonts, "Шлюпки", 20.0, PARCHMENT));
+            // Шлюпка на каждый слот: занятая — тёмная.
+            for i in 0..boats {
+                let busy = (i as usize) < exps.running.len();
+                style::pill(
+                    row,
+                    fonts,
+                    if busy {
+                        "в пути"
+                    } else {
+                        "свободна"
+                    },
+                    if busy {
+                        Color::srgb(0.3, 0.28, 0.27)
+                    } else {
+                        Color::srgb(0.22, 0.5, 0.26)
+                    },
+                );
+            }
+        });
         card.spawn(text(
             fonts,
             "Идут герои не из боевого отряда. Пока они в пути, в отряд их не взять.",
@@ -183,62 +212,79 @@ pub fn section(
         ));
         for m in &data.missions {
             let running = exps.running.iter().find(|r| r.mission == m.id);
-            let (status, label, fill) = match running {
-                Some(r) if now >= r.ends_at => ("вернулись с добычей!".to_string(), "Забрать", GO),
-                Some(r) => {
-                    let names: Vec<String> = r
-                        .heroes
-                        .iter()
-                        .map(|h| screen.data.hero(h).map_or(h.clone(), |d| d.name.clone()))
-                        .collect();
-                    (
-                        format!(
-                            "{} · вернутся через {}",
-                            names.join(", "),
-                            clock((r.ends_at - now) as f32)
-                        ),
-                        "В пути",
-                        DISABLED,
-                    )
-                }
-                None => (
-                    format!("{} ч · героев: {} · {}", m.hours, m.heroes, m.reward.line()),
-                    "Отправить",
-                    DONE,
-                ),
-            };
+            let back = running.is_some_and(|r| now >= r.ends_at);
             card.spawn((
                 Node {
-                    padding: UiRect::axes(px(10), px(6)),
+                    padding: UiRect::axes(px(10), px(8)),
                     column_gap: px(10),
                     align_items: AlignItems::Center,
                     border_radius: BorderRadius::all(px(10)),
                     ..default()
                 },
-                BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.04)),
+                BackgroundColor(Color::srgba(1.0, 1.0, 1.0, if back { 0.12 } else { 0.05 })),
             ))
             .with_children(|row| {
                 row.spawn(Node {
                     flex_grow: 1.0,
                     flex_shrink: 1.0,
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(2),
+                    row_gap: px(5),
                     ..default()
                 })
                 .with_children(|c| {
                     c.spawn(text(fonts, m.name.clone(), true, 14.0, PARCHMENT));
-                    c.spawn(text(
-                        fonts,
-                        status,
-                        false,
-                        12.0,
-                        if running.is_some() { GOLD } else { MUTED },
-                    ));
+                    c.spawn(Node {
+                        column_gap: px(6),
+                        align_items: AlignItems::Center,
+                        ..default()
+                    })
+                    .with_children(|info| match running {
+                        Some(r) => {
+                            for h in &r.heroes {
+                                info.spawn(style::medallion(assets, h, 32.0, false));
+                            }
+                            if back {
+                                style::pill(
+                                    info,
+                                    fonts,
+                                    "вернулись с добычей!",
+                                    Color::srgb(0.7, 0.5, 0.12),
+                                );
+                            } else {
+                                style::pill(
+                                    info,
+                                    fonts,
+                                    format!("вернутся через {}", clock((r.ends_at - now) as f32)),
+                                    Color::srgb(0.24, 0.2, 0.3),
+                                );
+                            }
+                        }
+                        None => {
+                            style::pill(
+                                info,
+                                fonts,
+                                format!("{} ч", m.hours),
+                                Color::srgb(0.24, 0.2, 0.3),
+                            );
+                            style::pill(
+                                info,
+                                fonts,
+                                format!("героев: {}", m.heroes),
+                                Color::srgb(0.24, 0.2, 0.3),
+                            );
+                        }
+                    });
+                    style::costs(c, assets, fonts, &m.reward.items(), 14.0, PARCHMENT);
                 });
+                let (label, active) = match running {
+                    Some(_) if back => ("Забрать", true),
+                    Some(_) => ("В пути", false),
+                    None => ("Отправить", true),
+                };
                 let mut button = row.spawn((
                     Node {
                         width: px(108),
-                        height: px(42),
+                        height: px(44),
                         flex_shrink: 0.0,
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
@@ -246,14 +292,10 @@ pub fn section(
                         border_radius: BorderRadius::all(px(10)),
                         ..default()
                     },
-                    Skin(if fill == DISABLED {
-                        Look::Off
-                    } else {
-                        Look::Go
-                    }),
+                    Skin(if active { Look::Go } else { Look::Off }),
                 ));
-                button.with_child(text(fonts, label, true, 14.0, Color::WHITE));
-                if fill != DISABLED {
+                button.with_child(text(fonts, label, true, 15.0, Color::WHITE));
+                if active {
                     let id = m.id.clone();
                     pressable(&mut button);
                     button.observe(move |_: On<PointerClick>, mut commands: Commands| {

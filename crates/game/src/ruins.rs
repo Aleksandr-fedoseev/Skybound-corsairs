@@ -14,6 +14,7 @@ use crate::events::{Bundle, days_left, week, week_left};
 use crate::menu::{GOLD, MUTED, PARCHMENT, Voyage, pressable, text};
 use crate::story::VoyageRequest;
 use crate::style::{self, Look, Skin};
+use crate::summary::{Summary, Tone};
 use crate::view::Fonts;
 
 #[derive(Resource, Deserialize)]
@@ -213,21 +214,21 @@ impl Ruins {
         hp: Vec<(String, f32)>,
         data: &RuinsData,
         profile: &mut crate::menu::Profile,
-    ) -> String {
+    ) -> Summary {
         self.roll_week();
         let room = data.rooms(self.week, floor)[choice];
-        let mut note = format!("Этаж {floor} взят!");
+        let mut sum = Summary::new(format!("Этаж {floor} взят!")).team(&hp);
         if floor > self.best {
             self.best = floor;
             let reward = data.room_reward(floor, room);
             reward.put(profile);
-            note.push_str(&format!(" +{}", reward.line()));
+            sum = sum.bundle(&reward);
         } else {
-            note.push_str(" Награда за него на этой неделе уже получена");
+            sum = sum.chip("награда уже получена на этой неделе", Tone::Info);
         }
         if floor >= data.depth() {
             self.run = None;
-            note.push_str("\nРуины пройдены до самого сердца! Новые залы — в понедельник");
+            sum = sum.chip("Руины пройдены до самого сердца!", Tone::Gold);
         } else if hp.iter().all(|(_, f)| *f <= 0.0) {
             self.run = None;
         } else {
@@ -235,21 +236,17 @@ impl Ruins {
                 floor: floor + 1,
                 hp,
             });
-            note.push_str(&format!(
-                "\nДальше — этаж {}: здоровье не восстановится",
-                floor + 1
-            ));
+            sum = sum.chip(format!("дальше: этаж {}", floor + 1), Tone::Info);
         }
-        note
+        sum
     }
 
-    pub fn lose(&mut self, floor: u32) -> String {
+    pub fn lose(&mut self, floor: u32) -> Summary {
         self.roll_week();
         self.run = None;
-        format!(
-            "Отряд пал на этаже {floor}. Лучшая глубина недели: {} — спуститься снова можно в любой момент",
-            self.best
-        )
+        Summary::new(format!("Отряд пал на этаже {floor}"))
+            .chip(format!("глубина недели: {}", self.best), Tone::Info)
+            .chip("спуститься снова можно сразу", Tone::Info)
     }
 }
 
@@ -329,18 +326,30 @@ pub fn section(
     let best = if ruins.week == w { ruins.best } else { 0 };
     let run = ruins.run.as_ref().filter(|_| ruins.week == w);
     tile(col).with_children(|card| {
-        card.spawn(text(fonts, data.about.clone(), false, 13.0, MUTED));
-        card.spawn(text(
+        card.spawn(Node {
+            justify_content: JustifyContent::SpaceBetween,
+            align_items: AlignItems::Center,
+            ..default()
+        })
+        .with_children(|row| {
+            row.spawn(style::heading(fonts, "Глубина недели", 17.0, GOLD));
+            style::pill(
+                row,
+                fonts,
+                format!("новые залы через {}", days_left(week_left())),
+                Color::srgb(0.45, 0.18, 0.14),
+            );
+        });
+        // Этажи кружками: взятые — золотые, текущий — светлый ободок.
+        let current = run.map_or(best, |r| r.floor - 1) as usize;
+        style::pips(
+            card,
             fonts,
-            format!(
-                "Глубина недели: {best} из {} · новые залы через {}",
-                data.depth(),
-                days_left(week_left())
-            ),
-            true,
-            15.0,
-            GOLD,
-        ));
+            data.depth() as usize,
+            best as usize,
+            Some(current),
+        );
+        card.spawn(text(fonts, data.about.clone(), false, 12.0, MUTED));
     });
     if cleared < data.unlock_cleared {
         tile(col).with_children(|card| {

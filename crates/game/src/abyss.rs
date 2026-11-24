@@ -135,28 +135,6 @@ impl AbyssData {
     }
 }
 
-impl FloorReward {
-    pub fn line(&self) -> String {
-        let mut parts = vec![
-            format!("+{} серебра", self.silver),
-            format!("+{} журналов", self.journals),
-        ];
-        if self.details > 0 {
-            parts.push(format!("+{} деталей", self.details));
-        }
-        if self.charts > 0 {
-            parts.push(format!("+{} лоции", self.charts));
-        }
-        if self.doubloons > 0 {
-            parts.push(format!("+{} дублонов", self.doubloons));
-        }
-        if self.figureheads > 0 {
-            parts.push(format!("+{} носовая фигура", self.figureheads));
-        }
-        parts.join(" · ")
-    }
-}
-
 /// Глубина, до которой игрок дошёл (сохраняется).
 #[derive(Resource, Clone, Default, Serialize, Deserialize)]
 pub struct Abyss {
@@ -614,6 +592,7 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
                 .collect();
             crate::events::event_card(
                 col,
+                &view.assets,
                 fonts,
                 &view.event_data,
                 &view.storm,
@@ -622,7 +601,7 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
                 &owned,
             );
         }
-        Page::Abyss => abyss_card(col, fonts, data, screen, floor, view.abyss.best),
+        Page::Abyss => abyss_card(col, &view.assets, fonts, data, floor, view.abyss.best),
         Page::Ruins => crate::ruins::section(
             col,
             &view.assets,
@@ -648,6 +627,7 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
         }
         Page::Expeditions => crate::expeditions::section(
             col,
+            &view.assets,
             fonts,
             &view.exp_data,
             &view.exps,
@@ -660,22 +640,18 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
 
 fn abyss_card(
     col: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     data: &AbyssData,
-    screen: &BattleScreen,
     floor: u32,
     best: u32,
 ) {
-    let enemies = data.enemies(floor);
-    let names: Vec<String> = enemies
-        .iter()
-        .map(|(id, _)| screen.data.enemy(id).map_or(id.clone(), |e| e.name.clone()))
-        .collect();
+    let ids: Vec<String> = data.enemies(floor).into_iter().map(|(id, _)| id).collect();
     col.spawn((
         Node {
-            padding: UiRect::axes(px(18), px(16)),
+            padding: UiRect::axes(px(16), px(14)),
             flex_direction: FlexDirection::Column,
-            row_gap: px(6),
+            row_gap: px(10),
             border: UiRect::all(px(2)),
             border_radius: BorderRadius::all(px(14)),
             ..default()
@@ -683,37 +659,60 @@ fn abyss_card(
         Skin(Look::Tile),
     ))
     .with_children(|card| {
-        card.spawn(text(fonts, "Бездна облаков", true, 22.0, PARCHMENT));
         card.spawn(text(
             fonts,
             "Каждый этаж сложнее, каждый 10-й — босс. Награда за этаж — один раз.",
             false,
-            13.0,
+            12.0,
             MUTED,
         ));
-        card.spawn(text(
-            fonts,
+        card.spawn(Node {
+            column_gap: px(8),
+            align_items: AlignItems::Center,
+            ..default()
+        })
+        .with_children(|row| {
+            row.spawn(style::heading(fonts, format!("Этаж {floor}"), 30.0, GOLD));
             if data.is_boss(floor) {
-                format!("Этаж {floor} — БОСС · лучший: {best}")
-            } else {
-                format!("Этаж {floor} · лучший: {best}")
-            },
-            true,
-            17.0,
-            GOLD,
-        ));
-        card.spawn(text(fonts, names.join(" · "), false, 13.0, PARCHMENT));
-        card.spawn(text(
-            fonts,
-            format!("Награда: {}", data.reward(floor).line()),
-            false,
-            13.0,
-            PARCHMENT,
-        ));
+                style::pill(row, fonts, "БОСС", Color::srgb(0.62, 0.2, 0.16));
+            }
+            row.spawn(Node {
+                flex_grow: 1.0,
+                ..default()
+            });
+            style::pill(
+                row,
+                fonts,
+                format!("лучший: {best}"),
+                Color::srgb(0.24, 0.2, 0.3),
+            );
+            let to_boss = data.boss_every - (floor - 1) % data.boss_every - 1;
+            if to_boss > 0 {
+                style::pill(
+                    row,
+                    fonts,
+                    format!("до босса {to_boss}"),
+                    Color::srgb(0.45, 0.18, 0.14),
+                );
+            }
+        });
+        crate::map::enemies_row(card, assets, fonts, &ids, None, PARCHMENT);
+        let r = data.reward(floor);
+        let items: Vec<(&str, u32)> = [
+            ("silver", r.silver),
+            ("journals", r.journals),
+            ("details", r.details),
+            ("charts", r.charts),
+            ("doubloons", r.doubloons),
+            ("figureheads", r.figureheads),
+        ]
+        .into_iter()
+        .filter(|(_, n)| *n > 0)
+        .collect();
+        style::reward_row(card, assets, fonts, "за этаж", &items);
         let mut go = card.spawn((
             Node {
-                margin: UiRect::top(px(6)),
-                height: px(56),
+                height: px(54),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 border: UiRect::all(px(2)),

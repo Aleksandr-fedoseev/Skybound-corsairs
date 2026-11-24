@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::audio::Sfx;
 use crate::menu::{GOLD, MUTED, MenuRebuild, PARCHMENT, Spoils, Toast, pressable, text};
 use crate::save::now;
-use crate::style::{Look, Skin};
+use crate::style::{self, Look, Skin};
 use crate::view::Fonts;
 
 const SECONDS_PER_DAY: u64 = 86_400;
@@ -44,6 +44,20 @@ pub struct Reward {
 }
 
 impl Reward {
+    fn items(&self) -> Vec<(&'static str, u32)> {
+        [
+            ("doubloons", self.doubloons),
+            ("silver", self.silver),
+            ("planks", self.planks),
+            ("journals", self.journals),
+            ("charts", self.charts),
+            ("supplies", self.supplies),
+        ]
+        .into_iter()
+        .filter(|(_, n)| *n > 0)
+        .collect()
+    }
+
     fn line(&self) -> String {
         let mut parts = Vec::new();
         for (n, name) in [
@@ -157,6 +171,7 @@ fn count_deeds(
 /// Доска поверх корабля: поручения, прогресс и «Забрать».
 pub fn board(
     root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     data: &ContractData,
     contracts: &Contracts,
@@ -242,9 +257,11 @@ pub fn board(
             };
             row(
                 p,
+                assets,
                 fonts,
                 &c.text,
-                &format!("{have}/{} · {}", c.need, c.reward.line()),
+                Some((have, c.need)),
+                &c.reward.items(),
                 state,
                 Claim::One(c.id.clone()),
             );
@@ -257,11 +274,14 @@ pub fn board(
         } else {
             Row::Progress
         };
+        let done = data.daily.iter().filter(|c| claimed(&c.id)).count() as u32;
         row(
             p,
+            assets,
             fonts,
             "Все поручения дня",
-            &data.all_done.line(),
+            Some((done, data.daily.len() as u32)),
+            &data.all_done.items(),
             bonus_state,
             Claim::Bonus,
         );
@@ -281,11 +301,14 @@ enum Claim {
     Bonus,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn row(
     parent: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     title: &str,
-    sub: &str,
+    progress: Option<(u32, u32)>,
+    reward: &[(&str, u32)],
     state: Row,
     claim: Claim,
 ) {
@@ -310,12 +333,40 @@ fn row(
             r.spawn(Node {
                 flex_grow: 1.0,
                 flex_direction: FlexDirection::Column,
-                row_gap: px(2),
+                row_gap: px(5),
                 ..default()
             })
             .with_children(|col| {
                 col.spawn(text(fonts, title, true, 15.0, PARCHMENT));
-                col.spawn(text(fonts, sub, false, 12.0, MUTED));
+                col.spawn(Node {
+                    column_gap: px(10),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|line| {
+                    if let Some((have, need)) = progress {
+                        line.spawn(Node {
+                            width: px(92),
+                            flex_shrink: 0.0,
+                            flex_direction: FlexDirection::Column,
+                            ..default()
+                        })
+                        .with_children(|m| {
+                            style::meter(
+                                m,
+                                fonts,
+                                have as f32 / need.max(1) as f32,
+                                format!("{have}/{need}"),
+                                if have >= need {
+                                    Color::srgb(0.3, 0.62, 0.32)
+                                } else {
+                                    Color::srgb(0.55, 0.42, 0.18)
+                                },
+                            );
+                        });
+                    }
+                    style::costs(line, assets, fonts, reward, 14.0, PARCHMENT);
+                });
             });
             let label = match state {
                 Row::Progress => "в работе",

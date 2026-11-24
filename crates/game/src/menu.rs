@@ -19,7 +19,8 @@ use crate::convoys::Convoys;
 use crate::events::{EventData, StormEvent, WeekEvents};
 use crate::ship::{Compartment, OpenCompartment, RoomTimer, SHIP_ART, SHIPYARD, Ship, ShipData};
 use crate::story::{StoryQueue, VoyageRequest};
-use crate::view::{Fonts, ResultNote};
+use crate::summary::{Summary, Tone};
+use crate::view::Fonts;
 
 pub(crate) const DARK_WOOD: Color = Color::srgb(0.09, 0.06, 0.04);
 pub(crate) const BRASS: Color = Color::srgb(0.79, 0.59, 0.25);
@@ -433,7 +434,7 @@ fn build(commands: &mut Commands, view: &MenuView) {
                 );
             });
             slide(root, Vec2::new(0.0, 200.0), false, |r| {
-                voyage(r, fonts, next, done)
+                voyage(r, assets, fonts, next, done)
             });
             // Улучшения отсеков — только на осмотре: выезжают снизу на место «В поход».
             slide(root, Vec2::new(0.0, 200.0), true, |r| {
@@ -479,7 +480,7 @@ fn build(commands: &mut Commands, view: &MenuView) {
             });
             bottom_nav(root, assets, fonts, Screen::Menu);
             if view.board_open.0 {
-                crate::contracts::board(root, fonts, &view.contract_data, &view.contracts);
+                crate::contracts::board(root, assets, fonts, &view.contract_data, &view.contracts);
             } else if view.open.0.as_deref() == Some(SHIPYARD) {
                 crate::ship::shipyard(
                     root,
@@ -1685,15 +1686,21 @@ fn shipyard_tile(
 #[derive(Resource, Default)]
 pub(crate) struct TilePage(pub usize);
 
-fn voyage(root: &mut ChildSpawnerCommands, fonts: &Fonts, next: &game_data::StageDef, done: bool) {
+fn voyage(
+    root: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    next: &game_data::StageDef,
+    done: bool,
+) {
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
-            top: px(796),
+            top: px(788),
             left: px(10),
             width: px(520),
-            height: px(76),
-            padding: UiRect::new(px(18), px(10), px(8), px(8)),
+            height: px(86),
+            padding: UiRect::new(px(16), px(10), px(7), px(7)),
             align_items: AlignItems::Center,
             column_gap: px(12),
             ..default()
@@ -1705,26 +1712,44 @@ fn voyage(root: &mut ChildSpawnerCommands, fonts: &Fonts, next: &game_data::Stag
             .spawn(Node {
                 flex_grow: 1.0,
                 flex_direction: FlexDirection::Column,
+                row_gap: px(3),
                 ..default()
             })
             .with_children(|info| {
-                let caption = if done {
-                    "Глава 1 пройдена · перепройти босса".to_string()
-                } else {
-                    format!(
-                        "{} · рекомендуемый уровень {}",
-                        stage_title(&next.id),
-                        next.recommended_level
-                    )
-                };
-                info.spawn(text(fonts, caption, false, 12.0, MUTED));
+                info.spawn(Node {
+                    column_gap: px(6),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    let stage = if done {
+                        "всё пройдено · босс".to_string()
+                    } else {
+                        stage_title(&next.id)
+                    };
+                    crate::style::pill(row, fonts, stage, Color::srgb(0.24, 0.2, 0.3));
+                    crate::style::pill(
+                        row,
+                        fonts,
+                        format!("ур. {}", next.recommended_level),
+                        Color::srgb(0.45, 0.18, 0.14),
+                    );
+                });
                 info.spawn(crate::style::heading(
                     fonts,
                     next.name.clone(),
-                    22.0,
+                    21.0,
                     Color::srgb(1.0, 0.93, 0.78),
                 ));
-                info.spawn(crate::supplies::label(fonts, 12.0, PARCHMENT));
+                info.spawn(Node {
+                    column_gap: px(5),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    row.spawn(crate::style::icon(assets, "supplies", 18.0));
+                    row.spawn(crate::supplies::label(fonts, 12.0, PARCHMENT));
+                });
             });
         let mut go = panel.spawn((
             Node {
@@ -2216,7 +2241,7 @@ fn count_victory(
     mut convoys: ResMut<Convoys>,
     mut counted: Local<Option<(usize, u64)>>,
     mut story: ResMut<StoryQueue>,
-    mut notes: Query<&mut Text, With<ResultNote>>,
+    mut result: ResMut<crate::summary::ResultSummary>,
     mut deeds: MessageWriter<Deed>,
     abyss: (Res<AbyssData>, ResMut<Abyss>),
     events: (Res<EventData>, ResMut<StormEvent>, ResMut<WeekEvents>),
@@ -2236,7 +2261,7 @@ fn count_victory(
         return;
     }
     *counted = Some(battle);
-    let note = match (outcome, &screen.custom) {
+    let summary = match (outcome, &screen.custom) {
         // Буря: считается урон в любом исходе.
         (_, Some(fight)) if fight.kind == FightKind::Storm => {
             let damage: u32 = screen
@@ -2302,7 +2327,7 @@ fn count_victory(
                 &mut spoils.profile,
             )
         }
-        (Outcome::Defeat, _) => "Усильте отряд или смените тактику".to_string(),
+        (Outcome::Defeat, _) => Summary::new("Усильте отряд или смените тактику"),
         (Outcome::Victory, Some(fight)) if matches!(fight.kind, FightKind::Regatta(_)) => {
             let FightKind::Regatta(leg) = fight.kind else {
                 unreachable!()
@@ -2324,15 +2349,22 @@ fn count_victory(
                 p.doubloons += r.doubloons;
                 p.figureheads += r.figureheads;
                 p.details += r.details;
-                format!("Этаж {floor} пройден! {}", r.line())
+                Summary::new(format!("Этаж {floor} пройден!"))
+                    .gain("silver", r.silver as i64)
+                    .gain("journals", r.journals as i64)
+                    .gain("details", r.details as i64)
+                    .gain("charts", r.charts as i64)
+                    .gain("doubloons", r.doubloons as i64)
+                    .gain("figureheads", r.figureheads as i64)
             } else {
-                "Этаж уже пройден — награда выдаётся один раз".to_string()
+                Summary::new("Этаж уже пройден").chip("награда выдаётся один раз", Tone::Info)
             }
         }
         (Outcome::Victory, Some(fight))
             if fight.kind == FightKind::Convoy && convoys.ready == 0 =>
         {
-            "Конвоев в очереди нет — добычи нет. Новое судно скоро появится".to_string()
+            Summary::new("Конвоев в очереди нет — добычи нет")
+                .chip("новое судно скоро появится", Tone::Info)
         }
         (Outcome::Victory, Some(fight)) => {
             // Попутный ветер по выходным: добыча с конвоя больше.
@@ -2348,17 +2380,14 @@ fn count_victory(
                 convoys.ready -= 1;
                 deeds.write(Deed("convoy"));
             }
-            let mut parts = vec![format!("+{silver} серебра")];
-            if planks > 0 {
-                parts.push(format!("+{planks} досок"));
-            }
+            let mut sum = Summary::new("Добыча взята!")
+                .gain("silver", silver as i64)
+                .gain("planks", planks as i64)
+                .gain("journals", fight.journals as i64);
             if k > 1 {
-                parts.push(format!("попутный ветер ×{k}"));
+                sum = sum.chip(format!("попутный ветер ×{k}"), Tone::Gold);
             }
-            if fight.journals > 0 {
-                parts.push(format!("+{} журналов", fight.journals));
-            }
-            parts.join(" · ")
+            sum
         }
         (Outcome::Victory, None) => {
             // Повторные победы за день приносят меньше (supplies.rs); первая — всегда целиком.
@@ -2384,36 +2413,34 @@ fn count_victory(
                 spoils.profile.doubloons += data.first_clear_doubloons;
             }
             let stages = &screen.data.stages;
-            let opened = match stages.get(progress.cleared) {
-                Some(stage) if first => format!("\nОткрыт этап «{}»", stage.name),
-                None if first => "\nГлава 1 пройдена!".to_string(),
+            let line = match stages.get(progress.cleared) {
+                Some(stage) if first => format!("Открыт этап «{}»", stage.name),
+                None if first => "Все главы пройдены!".to_string(),
                 _ => String::new(),
             };
-            let doubloons = if first {
-                format!(" · +{} дублонов", data.first_clear_doubloons)
-            } else {
-                String::new()
-            };
-            let replay = if percent < 100 {
-                format!(" · повтор: {percent}%")
-            } else {
-                String::new()
-            };
-            format!(
-                "+{} серебра · +{} досок · +{} журналов{doubloons}{replay}\n−{} припасов (осталось {}) · побед сегодня {}/{}{opened}",
-                reward.silver,
-                reward.planks,
-                reward.journals,
-                cost,
-                spoils.profile.supplies,
-                wins + 1,
-                supply.daily_limit()
+            let mut sum = Summary::new(line)
+                .gain("silver", reward.silver as i64)
+                .gain("planks", reward.planks as i64)
+                .gain("journals", reward.journals as i64)
+                .gain(
+                    "doubloons",
+                    if first {
+                        data.first_clear_doubloons as i64
+                    } else {
+                        0
+                    },
+                )
+                .gain("supplies", -(cost as i64));
+            if percent < 100 {
+                sum = sum.chip(format!("повтор: {percent}% добычи"), Tone::Info);
+            }
+            sum.chip(
+                format!("побед сегодня {}/{}", wins + 1, supply.daily_limit()),
+                Tone::Info,
             )
         }
     };
-    for mut text in &mut notes {
-        text.0 = note.clone();
-    }
+    result.set(summary);
 }
 
 /// H — следующий корабль верфи без покупки (по кругу).

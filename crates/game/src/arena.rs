@@ -15,6 +15,7 @@ use crate::events::{Bundle, days_left, week, week_left};
 use crate::menu::{GOLD, MUTED, PARCHMENT, Profile, Toast, Voyage, pressable, text};
 use crate::story::VoyageRequest;
 use crate::style::{self, Look, Skin};
+use crate::summary::{Summary, Tone};
 use crate::view::Fonts;
 
 #[derive(Resource, Deserialize)]
@@ -153,34 +154,43 @@ impl Arena {
         data: &ArenaData,
         today: u64,
         profile: &mut Profile,
-    ) -> String {
+    ) -> Summary {
         self.roll(data, today);
         self.refresh += 1;
         let before = data.league(self.rating);
-        let mut note = if win {
+        let mut sum = if win {
             let points = data.rivals[tier].points;
             self.rating += points;
-            let mut note = format!("Победа на Арене! +{points} очков · рейтинг {}", self.rating);
+            let mut sum =
+                Summary::new("Победа на Арене!").chip(format!("+{points} очков"), Tone::Good);
             if self.wins_today < data.daily_rewarded_wins {
                 self.wins_today += 1;
                 data.win_reward.put(profile);
-                note.push_str(&format!("\n+{}", data.win_reward.line()));
-            } else {
-                note.push_str("\nДневная награда за победы уже собрана — очки всё равно идут");
+                sum = sum.bundle(&data.win_reward);
             }
-            note
+            sum
         } else {
             self.rating = self.rating.saturating_sub(data.loss_points);
-            format!(
-                "Поражение: −{} очков · рейтинг {}",
-                data.loss_points, self.rating
-            )
+            Summary::new("Поражение на Арене")
+                .chip(format!("−{} очков", data.loss_points), Tone::Bad)
         };
         let after = data.league(self.rating);
+        sum = sum.chip(format!("рейтинг {}", self.rating), Tone::Info);
         if after > before {
-            note.push_str(&format!("\nНовая лига: {}!", data.leagues[after].name));
+            sum = sum.chip(
+                format!("Новая лига: {}!", data.leagues[after].name),
+                Tone::Gold,
+            );
+        } else {
+            sum = sum.chip(format!("лига {}", data.leagues[after].name), Tone::Info);
         }
-        note
+        if win && self.wins_today >= data.daily_rewarded_wins {
+            sum = sum.chip(
+                format!("побед с наградой: {0}/{0}", data.daily_rewarded_wins),
+                Tone::Info,
+            );
+        }
+        sum
     }
 }
 
@@ -215,59 +225,83 @@ pub fn section(
     view.roll(data, crate::cabins::today());
     let league = data.league(view.rating);
     tile(col).with_children(|card| {
-        card.spawn(text(fonts, data.about.clone(), false, 13.0, MUTED));
-        card.spawn(text(
-            fonts,
-            format!(
-                "Лига: {} · {} очков",
-                data.leagues[league].name, view.rating
-            ),
-            true,
-            18.0,
-            GOLD,
-        ));
-        let next = data
-            .leagues
-            .get(league + 1)
-            .map_or("высшая лига".to_string(), |l| {
-                format!("до лиги {} — {} очков", l.name, l.from - view.rating)
-            });
-        card.spawn(text(
-            fonts,
-            format!(
-                "{next} · награда лиги ({} дублонов) через {}",
-                data.leagues[league].doubloons,
-                days_left(week_left())
-            ),
-            false,
-            13.0,
-            PARCHMENT,
-        ));
         card.spawn(Node {
-            column_gap: px(8),
+            column_gap: px(10),
             align_items: AlignItems::Center,
             ..default()
         })
         .with_children(|row| {
-            row.spawn(text(
+            let colors = [
+                Color::srgb(0.55, 0.36, 0.2),
+                Color::srgb(0.5, 0.52, 0.56),
+                Color::srgb(0.78, 0.58, 0.18),
+                Color::srgb(0.42, 0.3, 0.75),
+            ];
+            row.spawn((
+                Node {
+                    padding: UiRect::axes(px(14), px(6)),
+                    border: UiRect::all(px(2)),
+                    border_radius: BorderRadius::all(px(16)),
+                    ..default()
+                },
+                BackgroundColor(colors[league.min(colors.len() - 1)]),
+                BorderColor::all(Color::srgb(1.0, 0.9, 0.6)),
+            ))
+            .with_child(style::heading(
                 fonts,
-                format!(
-                    "за победу ({} из {} сегодня)",
-                    view.wins_today, data.daily_rewarded_wins
-                ),
-                false,
-                13.0,
-                MUTED,
+                data.leagues[league].name.clone(),
+                20.0,
+                Color::WHITE,
             ));
-            style::costs(
+            row.spawn(style::heading(
+                fonts,
+                format!("{} очков", view.rating),
+                20.0,
+                GOLD,
+            ));
+            row.spawn(Node {
+                flex_grow: 1.0,
+                ..default()
+            });
+            style::pill(
+                row,
+                fonts,
+                format!("итоги через {}", days_left(week_left())),
+                Color::srgb(0.45, 0.18, 0.14),
+            );
+        });
+        // Полоса до следующей лиги.
+        match data.leagues.get(league + 1) {
+            Some(next) => {
+                let from = data.leagues[league].from;
+                style::meter(
+                    card,
+                    fonts,
+                    (view.rating - from) as f32 / (next.from - from).max(1) as f32,
+                    format!("до лиги {}: {} / {}", next.name, view.rating, next.from),
+                    Color::srgb(0.55, 0.42, 0.18),
+                );
+            }
+            None => style::pill(card, fonts, "высшая лига!", Color::srgb(0.7, 0.5, 0.12)),
+        }
+        card.spawn(Node {
+            column_gap: px(8),
+            row_gap: px(6),
+            flex_wrap: FlexWrap::Wrap,
+            ..default()
+        })
+        .with_children(|row| {
+            let league_prize = [("doubloons", data.leagues[league].doubloons)];
+            style::reward_row(row, assets, fonts, "лига недели", &league_prize);
+            style::reward_row(
                 row,
                 assets,
                 fonts,
+                &format!("победа {}/{}", view.wins_today, data.daily_rewarded_wins),
                 &data.win_reward.items(),
-                15.0,
-                PARCHMENT,
             );
         });
+        card.spawn(text(fonts, data.about.clone(), false, 12.0, MUTED));
         if view.pending > 0 {
             claim_button(
                 card,

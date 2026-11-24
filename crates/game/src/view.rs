@@ -146,6 +146,10 @@ pub struct ResultText;
 #[derive(Component)]
 pub struct ResultNote;
 
+/// Контейнер итога боя: добыча, плашки, отряд.
+#[derive(Component)]
+pub struct ResultGains;
+
 /// Заголовок боя: этап и ветер (ветер меняется посреди боя).
 #[derive(Component)]
 pub struct BattleTitle;
@@ -336,9 +340,19 @@ fn spawn_hud(
                     o.spawn((
                         ResultNote,
                         Text::new(""),
-                        fonts.text(false, 16.0),
+                        fonts.text(true, 18.0),
                         TextColor(BRIGHT),
                         TextLayout::justify(Justify::Center),
+                    ));
+                    // Добыча иконками, плашки и отряд — рисует draw_summary.
+                    o.spawn((
+                        ResultGains,
+                        Node {
+                            flex_direction: FlexDirection::Column,
+                            align_items: AlignItems::Center,
+                            row_gap: px(10),
+                            ..default()
+                        },
                     ));
                     o.spawn(Node {
                         margin: UiRect::top(px(12)),
@@ -928,5 +942,105 @@ pub fn refresh_skill_badges(
                 unit.skill_cooldown.to_string()
             };
         }
+    }
+}
+
+/// Итог боя: фраза, добыча иконками («+150» под серебром), цветные плашки и отряд со здоровьем.
+pub fn draw_summary(
+    mut commands: Commands,
+    mut result: ResMut<crate::summary::ResultSummary>,
+    assets: Res<AssetServer>,
+    fonts: Res<Fonts>,
+    fresh: Query<(), Added<ResultGains>>,
+    boxes: Query<Entity, With<ResultGains>>,
+    mut notes: Query<&mut Text, With<ResultNote>>,
+) {
+    if !result.dirty && fresh.is_empty() {
+        return;
+    }
+    result.dirty = false;
+    let Some(sum) = result.summary.clone() else {
+        return;
+    };
+    for mut text in &mut notes {
+        text.0 = sum.line.clone();
+    }
+    for entity in &boxes {
+        commands.entity(entity).despawn_children();
+        commands.entity(entity).with_children(|col| {
+            if !sum.gains.is_empty() {
+                col.spawn(Node {
+                    column_gap: px(10),
+                    row_gap: px(8),
+                    flex_wrap: FlexWrap::Wrap,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    for (kind, n) in &sum.gains {
+                        row.spawn((
+                            Node {
+                                width: px(84),
+                                padding: UiRect::vertical(px(6)),
+                                flex_direction: FlexDirection::Column,
+                                align_items: AlignItems::Center,
+                                row_gap: px(2),
+                                border: UiRect::all(px(2)),
+                                border_radius: BorderRadius::all(px(12)),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.07)),
+                            BorderColor::all(if *n > 0 {
+                                Color::srgb(0.75, 0.6, 0.3)
+                            } else {
+                                Color::srgb(0.6, 0.25, 0.2)
+                            }),
+                        ))
+                        .with_children(|c| {
+                            c.spawn(crate::style::icon(&assets, kind, 44.0));
+                            let (label, color) = if *n > 0 {
+                                (format!("+{}", crate::style::compact(*n as u32)), BRIGHT)
+                            } else {
+                                (
+                                    format!("−{}", n.unsigned_abs()),
+                                    Color::srgb(1.0, 0.55, 0.45),
+                                )
+                            };
+                            c.spawn(crate::style::heading(&fonts, label, 20.0, color));
+                        });
+                    }
+                });
+            }
+            if !sum.chips.is_empty() {
+                col.spawn(Node {
+                    column_gap: px(8),
+                    row_gap: px(6),
+                    flex_wrap: FlexWrap::Wrap,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    for (label, tone) in &sum.chips {
+                        row.spawn((
+                            Node {
+                                padding: UiRect::axes(px(12), px(5)),
+                                border_radius: BorderRadius::all(px(14)),
+                                ..default()
+                            },
+                            BackgroundColor(tone.color()),
+                        ))
+                        .with_child(crate::style::heading(
+                            &fonts,
+                            label.clone(),
+                            15.0,
+                            Color::WHITE,
+                        ));
+                    }
+                });
+            }
+            if !sum.team.is_empty() {
+                crate::ruins::team_hp(col, &assets, &fonts, &sum.team);
+            }
+        });
     }
 }

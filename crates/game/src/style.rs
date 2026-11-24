@@ -328,3 +328,137 @@ pub fn ink(fonts: &Fonts, value: impl Into<String>, size: f32, color: Color) -> 
         Pickable::IGNORE,
     )
 }
+
+/// Награда иконками на тёмной плашке: подпись слева, дальше «[иконка] 120 [иконка] 40».
+pub fn reward_row(
+    parent: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    label: &str,
+    items: &[(&str, u32)],
+) {
+    parent
+        .spawn((
+            Node {
+                padding: UiRect::axes(px(10), px(5)),
+                column_gap: px(8),
+                align_items: AlignItems::Center,
+                align_self: AlignSelf::FlexStart,
+                border_radius: BorderRadius::all(px(12)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.35)),
+        ))
+        .with_children(|row| {
+            if !label.is_empty() {
+                row.spawn(heading(fonts, label, 13.0, Color::srgb(0.8, 0.72, 0.58)));
+            }
+            costs(row, assets, fonts, items, 16.0, Color::WHITE);
+        });
+}
+
+/// Кружки этапов с номерами: пройденные — золотые, текущий — светлый ободок, дальше — тёмные.
+pub fn pips(
+    parent: &mut ChildSpawnerCommands,
+    fonts: &Fonts,
+    total: usize,
+    done: usize,
+    current: Option<usize>,
+) {
+    parent
+        .spawn(Node {
+            column_gap: px(6),
+            align_items: AlignItems::Center,
+            ..default()
+        })
+        .with_children(|row| {
+            for i in 0..total {
+                let (bg, border, color) = if i < done {
+                    (
+                        Color::srgb(0.78, 0.58, 0.18),
+                        Color::srgb(1.0, 0.86, 0.5),
+                        Color::WHITE,
+                    )
+                } else if Some(i) == current {
+                    (
+                        Color::srgb(0.25, 0.2, 0.16),
+                        Color::srgb(1.0, 0.93, 0.78),
+                        Color::WHITE,
+                    )
+                } else {
+                    (
+                        Color::srgb(0.14, 0.11, 0.1),
+                        Color::srgb(0.35, 0.3, 0.26),
+                        Color::srgb(0.55, 0.5, 0.45),
+                    )
+                };
+                row.spawn((
+                    Node {
+                        width: px(34),
+                        height: px(34),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(px(if Some(i) == current { 3 } else { 2 })),
+                        border_radius: BorderRadius::all(px(17)),
+                        ..default()
+                    },
+                    BackgroundColor(bg),
+                    BorderColor::all(border),
+                ))
+                .with_child(heading(fonts, (i + 1).to_string(), 15.0, color));
+            }
+        });
+}
+
+/// Небольшая плашка с текстом: время, статус, условие.
+pub fn pill(parent: &mut ChildSpawnerCommands, fonts: &Fonts, label: impl Into<String>, bg: Color) {
+    parent
+        .spawn((
+            Node {
+                padding: UiRect::axes(px(10), px(4)),
+                flex_shrink: 0.0,
+                border_radius: BorderRadius::all(px(12)),
+                ..default()
+            },
+            BackgroundColor(bg),
+        ))
+        .with_child(heading(fonts, label, 13.0, Color::WHITE));
+}
+
+/// Полоса прогресса с подписью поверх: «12 400 / 20 000».
+pub fn meter(
+    parent: &mut ChildSpawnerCommands,
+    fonts: &Fonts,
+    frac: f32,
+    label: impl Into<String>,
+    fill: Color,
+) {
+    parent
+        .spawn((
+            Node {
+                height: px(26),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(px(2)),
+                border_radius: BorderRadius::all(px(13)),
+                overflow: Overflow::clip(),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
+            BorderColor::all(Color::srgb(0.45, 0.36, 0.25)),
+        ))
+        .with_children(|bar| {
+            bar.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(0),
+                    top: px(0),
+                    bottom: px(0),
+                    width: percent(frac.clamp(0.0, 1.0) * 100.0),
+                    ..default()
+                },
+                BackgroundColor(fill),
+            ));
+            bar.spawn(heading(fonts, label, 14.0, Color::WHITE));
+        });
+}

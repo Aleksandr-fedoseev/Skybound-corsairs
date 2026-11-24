@@ -13,7 +13,8 @@ use crate::menu::{GOLD, MUTED, PARCHMENT, Profile, Voyage, pressable, text};
 use crate::save::now;
 use crate::ship::clock;
 use crate::story::VoyageRequest;
-use crate::style::{Look, Skin};
+use crate::style::{self, Look, Skin};
+use crate::summary::{Summary, Tone};
 use crate::view::Fonts;
 
 const SECONDS_PER_DAY: u64 = 86_400;
@@ -223,19 +224,16 @@ pub struct Prize {
 }
 
 impl Prize {
-    fn line(&self) -> String {
-        let mut parts = Vec::new();
-        for (n, name) in [
-            (self.charts, "лоции"),
-            (self.doubloons, "дублонов"),
-            (self.storm_cores, "буревых ядер"),
-            (self.supplies, "припасов"),
-        ] {
-            if n > 0 {
-                parts.push(format!("+{n} {name}"));
-            }
-        }
-        parts.join(" · ")
+    pub fn items(&self) -> Vec<(&'static str, u32)> {
+        [
+            ("charts", self.charts),
+            ("doubloons", self.doubloons),
+            ("storm_cores", self.storm_cores),
+            ("supplies", self.supplies),
+        ]
+        .into_iter()
+        .filter(|(_, n)| *n > 0)
+        .collect()
     }
 }
 
@@ -387,10 +385,11 @@ impl StormEvent {
     }
 
     /// Записать урон боя; выдать награды за новые пороги. Возвращает строку итога.
-    pub fn record(&mut self, damage: u32, data: &StormData, profile: &mut Profile) -> String {
+    pub fn record(&mut self, damage: u32, data: &StormData, profile: &mut Profile) -> Summary {
         self.roll_week();
         self.best = self.best.max(damage);
-        let mut got = Vec::new();
+        let mut sum = Summary::new(format!("Урон по буре: {damage}"))
+            .chip(format!("лучший за неделю: {}", self.best), Tone::Info);
         while let Some(m) = data.milestones.get(self.reached) {
             if self.best < m.damage {
                 break;
@@ -399,14 +398,14 @@ impl StormEvent {
             profile.doubloons += m.reward.doubloons;
             profile.storm_cores += m.reward.storm_cores;
             profile.supplies += m.reward.supplies;
-            got.push(m.reward.line());
+            sum = sum
+                .gain("charts", m.reward.charts as i64)
+                .gain("doubloons", m.reward.doubloons as i64)
+                .gain("storm_cores", m.reward.storm_cores as i64)
+                .gain("supplies", m.reward.supplies as i64);
             self.reached += 1;
         }
-        let mut note = format!("Урон по буре: {damage} · лучший за неделю: {}", self.best);
-        if !got.is_empty() {
-            note.push_str(&format!("\nНаграды: {}", got.join(" · ")));
-        }
-        note
+        sum
     }
 }
 
@@ -470,52 +469,48 @@ impl WeekEvents {
         hp: Vec<(String, f32)>,
         data: &BlockadeData,
         profile: &mut Profile,
-    ) -> String {
+    ) -> Summary {
         self.roll_week();
-        let mut note = format!("Волна {} отбита!", wave + 1);
+        let mut sum = Summary::new(format!("Волна {} отбита!", wave + 1)).team(&hp);
         if wave + 1 > self.blockade_best {
             self.blockade_best = wave + 1;
             let reward = data.waves[wave].reward;
             reward.put(profile);
-            note.push_str(&format!(" +{}", reward.line()));
+            sum = sum.bundle(&reward);
         }
         if wave + 1 >= data.waves.len() {
             self.blockade_run = None;
-            note.push_str("\nБлокада снята — все волны отбиты!");
+            sum = sum.chip("Блокада снята!", Tone::Gold);
         } else {
             self.blockade_run = Some(BlockadeRun { wave: wave + 1, hp });
-            note.push_str(&format!(
-                "\nДальше — волна {}: здоровье не восстановится",
-                wave + 2
-            ));
+            sum = sum.chip(format!("дальше: волна {}", wave + 2), Tone::Info);
         }
-        note
+        sum
     }
 
     /// Блокада: отряд пал — оборона окончена.
-    pub fn blockade_lose(&mut self, wave: usize) -> String {
+    pub fn blockade_lose(&mut self, wave: usize) -> Summary {
         self.roll_week();
         self.blockade_run = None;
-        format!(
-            "Блокада прорвана на волне {} · лучший результат недели: {} волн",
-            wave + 1,
-            self.blockade_best
+        Summary::new(format!("Блокада прорвана на волне {}", wave + 1)).chip(
+            format!("лучший за неделю: {} волн", self.blockade_best),
+            Tone::Info,
         )
     }
 
     /// Регата: победа на текущем этапе — дальше по трассе и награда.
-    pub fn finish_leg(&mut self, leg: usize, data: &RegattaData, profile: &mut Profile) -> String {
+    pub fn finish_leg(&mut self, leg: usize, data: &RegattaData, profile: &mut Profile) -> Summary {
         self.roll_week();
         if leg != self.leg {
-            return "Этот этап уже пройден".into();
+            return Summary::new("Этот этап уже пройден");
         }
         self.leg += 1;
         let reward = data.legs[leg].reward;
         reward.put(profile);
         if self.leg >= data.legs.len() {
-            format!("Финиш регаты! +{}", reward.line())
+            Summary::new("Финиш регаты!").bundle(&reward)
         } else {
-            format!("Этап {} пройден: +{}", leg + 1, reward.line())
+            Summary::new(format!("Этап {} пройден", leg + 1)).bundle(&reward)
         }
     }
 }
@@ -543,8 +538,10 @@ fn dev_event_key(
 }
 
 /// Карточка ивента недели: «Буря», «Ярмарка» или «Регата».
+#[allow(clippy::too_many_arguments)]
 pub fn event_card(
     col: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     data: &EventData,
     storm: &StormEvent,
@@ -553,25 +550,26 @@ pub fn event_card(
     owned: &[(String, String)],
 ) {
     match data.current() {
-        "storm" => storm_card(col, fonts, data, storm),
-        "fair" => fair_card(col, fonts, data, week_events, profile, owned),
-        "regatta" => regatta_card(col, fonts, data, week_events),
-        "blockade" => blockade_card(col, fonts, data, week_events, owned),
+        "storm" => storm_card(col, assets, fonts, data, storm),
+        "fair" => fair_card(col, assets, fonts, data, week_events, profile, owned),
+        "regatta" => regatta_card(col, assets, fonts, data, week_events),
+        "blockade" => blockade_card(col, assets, fonts, data, week_events, owned),
         _ => {}
     }
 }
 
+/// Рамка ивента: имя, плашка «осталось 5д 0ч», короткое описание.
 fn event_frame<'a>(
     col: &'a mut ChildSpawnerCommands,
     fonts: &Fonts,
-    title: String,
+    name: &str,
     about: &str,
 ) -> EntityCommands<'a> {
     let mut card = col.spawn((
         Node {
-            padding: UiRect::axes(px(18), px(16)),
+            padding: UiRect::axes(px(16), px(14)),
             flex_direction: FlexDirection::Column,
-            row_gap: px(5),
+            row_gap: px(9),
             border: UiRect::all(px(2)),
             border_radius: BorderRadius::all(px(14)),
             ..default()
@@ -579,14 +577,56 @@ fn event_frame<'a>(
         Skin(Look::Tile),
     ));
     card.with_children(|c| {
-        c.spawn(text(fonts, title, true, 18.0, PARCHMENT));
+        c.spawn(Node {
+            justify_content: JustifyContent::SpaceBetween,
+            align_items: AlignItems::Center,
+            column_gap: px(8),
+            ..default()
+        })
+        .with_children(|row| {
+            row.spawn(style::heading(fonts, name, 21.0, PARCHMENT));
+            style::pill(
+                row,
+                fonts,
+                format!("осталось {}", days_left(week_left())),
+                Color::srgb(0.45, 0.18, 0.14),
+            );
+        });
         c.spawn(text(fonts, about.to_string(), false, 12.0, MUTED));
     });
     card
 }
 
+/// Широкая кнопка ивента.
+fn event_go<'a>(
+    card: &'a mut ChildSpawnerCommands,
+    fonts: &Fonts,
+    label: &str,
+) -> EntityCommands<'a> {
+    let mut go = card.spawn((
+        Node {
+            margin: UiRect::top(px(2)),
+            height: px(50),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: UiRect::all(px(2)),
+            border_radius: BorderRadius::all(px(12)),
+            ..default()
+        },
+        Skin(Look::Go),
+    ));
+    go.with_child(text(fonts, label, true, 18.0, Color::WHITE));
+    pressable(&mut go);
+    go
+}
+
+fn ids(enemies: &[(String, u32)]) -> Vec<String> {
+    enemies.iter().map(|(id, _)| id.clone()).collect()
+}
+
 fn fair_card(
     col: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     data: &EventData,
     week_events: &WeekEvents,
@@ -594,55 +634,73 @@ fn fair_card(
     owned: &[(String, String)],
 ) {
     let fair = &data.fair;
-    let title = format!(
-        "Ивент недели: {} · осталось {}",
-        fair.name,
-        days_left(week_left())
-    );
-    event_frame(col, fonts, title, &fair.about).with_children(|card| {
+    event_frame(col, fonts, &fair.name, &fair.about).with_children(|card| {
         for offer in &fair.offers {
             let left = offer.limit.saturating_sub(week_events.bought(&offer.id));
             let can = left > 0 && offer.give.affordable(profile);
             card.spawn((
                 Node {
-                    padding: UiRect::axes(px(10), px(5)),
-                    column_gap: px(8),
-                    row_gap: px(4),
-                    flex_wrap: FlexWrap::Wrap,
-                    align_items: AlignItems::Center,
-                    border_radius: BorderRadius::all(px(8)),
+                    padding: UiRect::axes(px(10), px(8)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(6),
+                    border_radius: BorderRadius::all(px(10)),
                     ..default()
                 },
                 BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.06)),
             ))
-            .with_children(|row| {
-                row.spawn(Node {
-                    flex_grow: 1.0,
-                    flex_direction: FlexDirection::Column,
+            .with_children(|c| {
+                c.spawn(Node {
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
                     ..default()
                 })
-                .with_children(|c| {
-                    c.spawn(text(fonts, offer.text.clone(), true, 13.0, PARCHMENT));
-                    c.spawn(text(
+                .with_children(|row| {
+                    row.spawn(text(fonts, offer.text.clone(), true, 14.0, PARCHMENT));
+                    style::pill(
+                        row,
                         fonts,
-                        format!(
-                            "{} » {} · осталось {left}",
-                            offer.give.line(),
-                            offer.get.line()
-                        ),
-                        false,
-                        11.0,
-                        MUTED,
-                    ));
+                        format!("осталось {left}"),
+                        if left > 0 {
+                            Color::srgb(0.24, 0.2, 0.3)
+                        } else {
+                            Color::srgb(0.3, 0.28, 0.27)
+                        },
+                    );
                 });
-                if offer.get.copies > 0 {
-                    // Копия на выбор: по кнопке на каждого героя команды.
-                    for (id, name) in owned {
-                        trade_button(row, fonts, name, can, (offer.id.clone(), Some(id.clone())));
+                c.spawn(Node {
+                    column_gap: px(8),
+                    row_gap: px(6),
+                    flex_wrap: FlexWrap::Wrap,
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    style::costs(row, assets, fonts, &offer.give.items(), 15.0, PARCHMENT);
+                    row.spawn(style::heading(fonts, "»", 20.0, GOLD));
+                    if offer.get.copies > 0 {
+                        row.spawn(style::heading(fonts, "копия героя", 15.0, GOLD));
+                    } else {
+                        style::costs(row, assets, fonts, &offer.get.items(), 15.0, GOLD);
                     }
-                } else {
-                    trade_button(row, fonts, "Обменять", can, (offer.id.clone(), None));
-                }
+                    row.spawn(Node {
+                        flex_grow: 1.0,
+                        ..default()
+                    });
+                    if offer.get.copies > 0 {
+                        // Копия на выбор: по кнопке на каждого героя команды.
+                        for (id, name) in owned {
+                            trade_button(
+                                row,
+                                fonts,
+                                name,
+                                can,
+                                (offer.id.clone(), Some(id.clone())),
+                            );
+                        }
+                    } else {
+                        trade_button(row, fonts, "Обменять", can, (offer.id.clone(), None));
+                    }
+                });
             });
         }
     });
@@ -704,51 +762,61 @@ fn trade_act(
 
 fn blockade_card(
     col: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     data: &EventData,
     week_events: &WeekEvents,
     owned: &[(String, String)],
 ) {
     let b = &data.blockade;
-    let title = format!(
-        "Ивент недели: {} · осталось {}",
-        b.name,
-        days_left(week_left())
-    );
     let best = if week_events.week == week() {
         week_events.blockade_best
     } else {
         0
     };
     let run = week_events.run().cloned();
-    let name = |id: &str| {
-        owned
-            .iter()
-            .find(|(i, _)| i == id)
-            .map_or(id.to_string(), |(_, n)| n.clone())
-    };
-    event_frame(col, fonts, title, &b.about).with_children(|card| {
-        card.spawn(text(
-            fonts,
-            format!("Лучший результат недели: {best} из {} волн", b.waves.len()),
-            true,
-            13.0,
-            GOLD,
-        ));
+    let _ = owned;
+    event_frame(col, fonts, &b.name, &b.about).with_children(|card| {
+        let wave = run.as_ref().map_or(best, |r| r.wave);
+        style::pips(card, fonts, b.waves.len(), best, Some(wave));
+        if let Some(r) = &run {
+            crate::ruins::team_hp(card, assets, fonts, &r.hp);
+        }
+        if let Some(w) = b.waves.get(wave) {
+            card.spawn(Node {
+                column_gap: px(10),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|row| {
+                row.spawn(style::heading(
+                    fonts,
+                    format!("Волна {}", wave + 1),
+                    16.0,
+                    GOLD,
+                ));
+                crate::map::enemies_row(row, assets, fonts, &ids(&w.enemies), None, PARCHMENT);
+            });
+            if wave >= best {
+                style::reward_row(card, assets, fonts, "за волну", &w.reward.items());
+            } else {
+                style::pill(
+                    card,
+                    fonts,
+                    "награда за эту волну уже получена",
+                    Color::srgb(0.24, 0.2, 0.3),
+                );
+            }
+        } else {
+            style::pill(
+                card,
+                fonts,
+                "Блокада снята — все волны отбиты!",
+                Color::srgb(0.7, 0.5, 0.12),
+            );
+        }
         match &run {
             Some(r) => {
-                let alive: Vec<String> =
-                    r.hp.iter()
-                        .filter(|(_, f)| *f > 0.0)
-                        .map(|(id, f)| format!("{} {}%", name(id), (f * 100.0).round()))
-                        .collect();
-                card.spawn(text(
-                    fonts,
-                    format!("Волна {} · в строю: {}", r.wave + 1, alive.join(", ")),
-                    false,
-                    12.0,
-                    PARCHMENT,
-                ));
                 card.spawn(Node {
                     column_gap: px(8),
                     ..default()
@@ -764,16 +832,6 @@ fn blockade_card(
                 });
             }
             None => {
-                card.spawn(text(
-                    fonts,
-                    format!(
-                        "Награда за новую волну: {}",
-                        b.waves.get(best).map_or("—".into(), |w| w.reward.line())
-                    ),
-                    false,
-                    12.0,
-                    PARCHMENT,
-                ));
                 card.spawn(Node::default()).with_children(|row| {
                     blockade_button(
                         row,
@@ -852,56 +910,41 @@ fn blockade_button(
 
 fn regatta_card(
     col: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     data: &EventData,
     week_events: &WeekEvents,
 ) {
     let regatta = &data.regatta;
     let leg = week_events.next_leg();
-    let title = format!(
-        "Ивент недели: {} · осталось {}",
-        regatta.name,
-        days_left(week_left())
-    );
-    event_frame(col, fonts, title, &regatta.about).with_children(|card| {
+    event_frame(col, fonts, &regatta.name, &regatta.about).with_children(|card| {
+        style::pips(card, fonts, regatta.legs.len(), leg, Some(leg));
         match regatta.legs.get(leg) {
             None => {
-                card.spawn(text(
+                style::pill(
+                    card,
                     fonts,
                     "Трасса пройдена! Ждите следующую регату",
-                    true,
-                    14.0,
-                    GOLD,
-                ));
+                    Color::srgb(0.7, 0.5, 0.12),
+                );
             }
             Some(l) => {
-                card.spawn(text(
-                    fonts,
-                    format!(
-                        "Этап {} из {} · награда: {}",
-                        leg + 1,
-                        regatta.legs.len(),
-                        l.reward.line()
-                    ),
-                    true,
-                    13.0,
-                    GOLD,
-                ));
-                let mut go = card.spawn((
-                    Node {
-                        margin: UiRect::top(px(4)),
-                        height: px(48),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(px(2)),
-                        border_radius: BorderRadius::all(px(12)),
-                        ..default()
-                    },
-                    Skin(Look::Go),
-                ));
-                go.with_child(text(fonts, "На старт", true, 18.0, Color::WHITE));
-                pressable(&mut go);
-                go.observe(
+                card.spawn(Node {
+                    column_gap: px(10),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    row.spawn(style::heading(
+                        fonts,
+                        format!("Этап {}", leg + 1),
+                        16.0,
+                        GOLD,
+                    ));
+                    crate::map::enemies_row(row, assets, fonts, &ids(&l.enemies), None, PARCHMENT);
+                });
+                style::reward_row(card, assets, fonts, "за этап", &l.reward.items());
+                event_go(card, fonts, "На старт").observe(
                     move |_: On<PointerClick>,
                           data: Res<EventData>,
                           mut voyage: ResMut<Voyage>,
@@ -919,9 +962,10 @@ fn regatta_card(
     });
 }
 
-/// Карточка ивента недели на экране «Активности».
+/// Карточка «Бури»: тварь, полоса лучшего урона до следующего порога, награда за порог.
 pub fn storm_card(
     col: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
     data: &EventData,
     storm: &StormEvent,
@@ -935,60 +979,31 @@ pub fn storm_card(
     } else {
         0
     };
-    let next = data.storm.milestones.get(reached);
-    col.spawn((
-        Node {
-            padding: UiRect::axes(px(18), px(16)),
-            flex_direction: FlexDirection::Column,
-            row_gap: px(5),
-            border: UiRect::all(px(2)),
-            border_radius: BorderRadius::all(px(14)),
-            ..default()
-        },
-        Skin(Look::Tile),
-    ))
-    .with_children(|card| {
-        card.spawn(text(
-            fonts,
-            format!(
-                "Ивент недели: {} · осталось {}",
-                data.storm.name,
-                days_left(week_left())
-            ),
-            true,
-            18.0,
-            PARCHMENT,
-        ));
-        card.spawn(text(fonts, data.storm.about.clone(), false, 12.0, MUTED));
-        card.spawn(text(
-            fonts,
-            match next {
-                Some(m) => format!(
-                    "Лучший урон: {best} · следующий порог {} — {}",
-                    m.damage,
-                    m.reward.line()
-                ),
-                None => format!("Лучший урон: {best} · все награды недели получены"),
-            },
-            true,
-            13.0,
-            GOLD,
-        ));
-        let mut go = card.spawn((
-            Node {
-                margin: UiRect::top(px(4)),
-                height: px(48),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(px(2)),
-                border_radius: BorderRadius::all(px(12)),
-                ..default()
-            },
-            Skin(Look::Go),
-        ));
-        go.with_child(text(fonts, "Атаковать бурю", true, 18.0, Color::WHITE));
-        pressable(&mut go);
-        go.observe(
+    let st = &data.storm;
+    event_frame(col, fonts, &st.name, &st.about).with_children(|card| {
+        crate::map::enemies_row(card, assets, fonts, &ids(&st.enemies), None, PARCHMENT);
+        style::pips(card, fonts, st.milestones.len(), reached, Some(reached));
+        match st.milestones.get(reached) {
+            Some(m) => {
+                style::meter(
+                    card,
+                    fonts,
+                    best as f32 / m.damage.max(1) as f32,
+                    format!("лучший урон {best} / {}", m.damage),
+                    Color::srgb(0.45, 0.3, 0.75),
+                );
+                style::reward_row(card, assets, fonts, "за порог", &m.reward.items());
+            }
+            None => {
+                style::pill(
+                    card,
+                    fonts,
+                    format!("лучший урон {best} · все награды недели получены"),
+                    Color::srgb(0.7, 0.5, 0.12),
+                );
+            }
+        }
+        event_go(card, fonts, "Атаковать бурю").observe(
             |_: On<PointerClick>,
              data: Res<EventData>,
              mut voyage: ResMut<Voyage>,

@@ -27,6 +27,7 @@ mod softbody;
 mod spells;
 mod story;
 mod style;
+mod summary;
 mod supplies;
 mod tavern;
 mod view;
@@ -106,6 +107,7 @@ fn main() {
     .add_plugins(hire_reveal::plugin)
     .add_plugins(style::plugin)
     .add_message::<Shown>()
+    .init_resource::<summary::ResultSummary>()
     .insert_resource(crew)
     .insert_resource(roster)
     .insert_resource(BattleScreen::new(
@@ -134,6 +136,7 @@ fn main() {
                 view::refresh_skill_badges,
                 view::refresh_controls,
                 view::refresh_result,
+                view::draw_summary,
                 view::refresh_title,
                 battlefield::refresh_overhead,
             ),

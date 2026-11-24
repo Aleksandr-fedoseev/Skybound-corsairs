@@ -20,7 +20,7 @@ const GALLEY: Color = Color::srgb(0.72, 0.42, 0.16);
 #[derive(Component)]
 pub struct GalleyBubble;
 
-/// Строка «Припасы 54/60 · +1 через 3:12».
+/// Строка «54/120 · победа −12 · +1 через 3:12» рядом с иконкой припасов.
 #[derive(Component)]
 pub struct SuppliesLabel;
 
@@ -195,12 +195,9 @@ fn refresh(
     let first = progress.cleared < stages;
     let cost = data.cost_for(first);
     let mut value = if cost == 0 {
-        format!(
-            "Припасы {}/{} · новый этап — бесплатно",
-            profile.supplies, data.cap
-        )
+        format!("{}/{} · новый этап — бесплатно", profile.supplies, data.cap)
     } else {
-        format!("Припасы {}/{} · победа −{cost}", profile.supplies, data.cap)
+        format!("{}/{} · победа −{cost}", profile.supplies, data.cap)
     };
     if profile.supplies < data.cap {
         let left = (1.0 - profile.supplies_regen) * data.regen_minutes * 60.0;
