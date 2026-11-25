@@ -281,26 +281,13 @@ pub fn resource_slot<'a>(
     slot
 }
 
-/// Доска-заголовок экрана по центру.
+/// Заголовок экрана: доска по центру. Поля у доски узкие — рядом с «Назад» остаётся зазор.
 pub fn title(root: &mut ChildSpawnerCommands, fonts: &Fonts, label: &str, top: f32) {
-    title_in(root, fonts, label, top, 0.0);
-}
-
-/// Заголовок на экране с кнопкой «Назад» слева: доска по центру места справа от кнопки,
-/// чтобы между ними оставался зазор.
-pub fn title_beside_back(root: &mut ChildSpawnerCommands, fonts: &Fonts, label: &str, top: f32) {
-    title_in(root, fonts, label, top, BACK_WIDTH);
-}
-
-/// Сколько места слева занимает кнопка «Назад» вместе с зазором до заголовка.
-const BACK_WIDTH: f32 = 132.0;
-
-fn title_in(root: &mut ChildSpawnerCommands, fonts: &Fonts, label: &str, top: f32, left: f32) {
     root.spawn(Node {
         position_type: PositionType::Absolute,
         top: px(top),
-        left: px(left),
-        right: px(if left > 0.0 { 12.0 } else { 0.0 }),
+        left: px(0),
+        right: px(0),
         justify_content: JustifyContent::Center,
         ..default()
     })
@@ -308,7 +295,7 @@ fn title_in(root: &mut ChildSpawnerCommands, fonts: &Fonts, label: &str, top: f3
         row.spawn((
             Node {
                 height: px(48),
-                padding: UiRect::horizontal(px(44)),
+                padding: UiRect::horizontal(px(26)),
                 align_items: AlignItems::Center,
                 ..default()
             },
