@@ -29,7 +29,6 @@ pub(crate) const MUTED: Color = Color::srgb(0.80, 0.72, 0.58);
 pub(crate) const GOLD: Color = Color::srgb(0.95, 0.76, 0.31);
 pub(crate) const GO: Color = Color::srgb(0.85, 0.51, 0.17);
 pub(crate) const GO_EDGE: Color = Color::srgb(1.0, 0.89, 0.63);
-const STORM: Color = Color::srgb(0.56, 0.82, 1.0);
 const ETHER: Color = Color::srgb(0.18, 0.61, 0.58);
 pub(crate) const RED_DOT: Color = Color::srgb(0.88, 0.29, 0.23);
 /// Сколько отсеков помещается в ряд под кораблём.
@@ -329,7 +328,6 @@ struct MenuView<'w> {
     gear: Res<'w, crate::gear::Gear>,
     page: Res<'w, TilePage>,
     cam: Res<'w, ShipCam>,
-    event_data: Res<'w, EventData>,
     settings: (
         Res<'w, crate::settings::Settings>,
         Res<'w, crate::settings::SettingsOpen>,
@@ -459,12 +457,7 @@ fn build(commands: &mut Commands, view: &MenuView) {
             clouds(root, assets, &ship_data.scene, true);
             // Кнопки главной на осмотре уезжают за края, «Назад» выезжает.
             slide(root, Vec2::new(0.0, -260.0), false, |r| {
-                side_buttons(
-                    r,
-                    fonts,
-                    view.event_data.current_short(),
-                    view.contracts.claimable(&view.contract_data),
-                );
+                contracts_button(r, fonts, view.contracts.claimable(&view.contract_data));
                 crate::ladder::button(r, assets, fonts);
             });
             slide(root, Vec2::new(0.0, 200.0), false, |r| {
@@ -1478,93 +1471,52 @@ fn top_bar(
     });
 }
 
-/// Кнопки по бокам главной: слева — ивент недели, справа — контракты.
-/// Боевой пропуск и почта появятся здесь, когда будут готовы (сейчас кнопок нет).
-fn side_buttons(
-    root: &mut ChildSpawnerCommands,
-    fonts: &Fonts,
-    event: &str,
-    contracts_ready: bool,
-) {
-    let column = |left: bool| Node {
-        position_type: PositionType::Absolute,
-        top: px(76),
-        left: if left { px(10) } else { auto() },
-        right: if left { auto() } else { px(10) },
-        flex_direction: FlexDirection::Column,
-        row_gap: px(10),
-        ..default()
-    };
-    let items: [(&str, &str, Color, bool); 2] = [
-        (event, "ивент", STORM, false),
-        ("Контракты", "задания", BRASS, contracts_ready),
-    ];
-    for (left, chunk) in [(true, &items[..1]), (false, &items[1..])] {
-        root.spawn(column(left)).with_children(|col| {
-            for &(title, sub, edge, dot) in chunk {
-                let mut button = col.spawn((
-                    Node {
-                        width: px(84),
-                        height: px(62),
-                        flex_direction: FlexDirection::Column,
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    crate::style::Skin(if edge == STORM {
-                        crate::style::Look::Dark
-                    } else {
-                        crate::style::Look::TabOff
-                    }),
-                ));
-                button.with_children(|b| {
-                    b.spawn(crate::style::heading(fonts, title, 15.0, PARCHMENT));
-                    if !sub.is_empty() {
-                        b.spawn(text(fonts, sub, false, 12.0, MUTED));
-                    }
-                    if dot {
-                        b.spawn((
-                            Node {
-                                position_type: PositionType::Absolute,
-                                top: px(-5),
-                                right: px(-5),
-                                width: px(14),
-                                height: px(14),
-                                border_radius: BorderRadius::MAX,
-                                ..default()
-                            },
-                            BackgroundColor(RED_DOT),
-                            Pickable::IGNORE,
-                        ));
-                    }
-                });
-                if edge == STORM {
-                    // Сразу на страницу ивента недели, а не в список Активностей.
-                    pressable(&mut button);
-                    button.observe(
-                        |_: On<PointerClick>,
-                         mut page: ResMut<crate::abyss::ActivitiesPage>,
-                         mut next: ResMut<NextState<Screen>>| {
-                            page.0 = Some(crate::abyss::Page::Event);
-                            next.set(Screen::Activities);
-                        },
-                    );
-                } else {
-                    pressable(&mut button);
-                    button.observe(
-                        |_: On<PointerClick>,
-                         mut open: ResMut<BoardOpen>,
-                         mut panel: ResMut<OpenCompartment>,
-                         mut rebuild: ResMut<MenuRebuild>| {
-                            open.0 = true;
-                            panel.0 = None;
-                            rebuild.0 = true;
-                        },
-                    );
-                }
-            }
-        });
-    }
+/// Кнопка контрактов справа на главной (ивент недели — в Активностях, рейтинг — слева).
+fn contracts_button(root: &mut ChildSpawnerCommands, fonts: &Fonts, ready: bool) {
+    let mut button = root.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(76),
+            right: px(10),
+            width: px(84),
+            height: px(62),
+            flex_direction: FlexDirection::Column,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        crate::style::Skin(crate::style::Look::TabOff),
+    ));
+    button.with_children(|b| {
+        b.spawn(crate::style::heading(fonts, "Контракты", 15.0, PARCHMENT));
+        b.spawn(text(fonts, "задания", false, 12.0, MUTED));
+        if ready {
+            b.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: px(-5),
+                    right: px(-5),
+                    width: px(14),
+                    height: px(14),
+                    border_radius: BorderRadius::MAX,
+                    ..default()
+                },
+                BackgroundColor(RED_DOT),
+                Pickable::IGNORE,
+            ));
+        }
+    });
+    pressable(&mut button);
+    button.observe(
+        |_: On<PointerClick>,
+         mut open: ResMut<BoardOpen>,
+         mut panel: ResMut<OpenCompartment>,
+         mut rebuild: ResMut<MenuRebuild>| {
+            open.0 = true;
+            panel.0 = None;
+            rebuild.0 = true;
+        },
+    );
 }
 
 fn compartments(

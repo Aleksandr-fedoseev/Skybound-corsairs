@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::Screen;
 use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
-use crate::contracts::{BoardOpen, ContractData, Contracts};
 use crate::expeditions::{ExpeditionData, Expeditions};
 use crate::menu::{GOLD, MUTED, PARCHMENT, Voyage, bottom_nav, pressable, spawn_toast, text};
 use crate::save::now;
@@ -194,8 +193,6 @@ struct View<'w> {
     profile: Res<'w, crate::menu::Profile>,
     roster: Res<'w, crate::crew::Roster>,
     page: Res<'w, ActivitiesPage>,
-    contract_data: Res<'w, ContractData>,
-    contracts: Res<'w, Contracts>,
     ruins: (
         Res<'w, crate::ruins::RuinsData>,
         Res<'w, crate::ruins::Ruins>,
@@ -337,52 +334,40 @@ fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
                 "осталось {}",
                 crate::events::days_left(crate::events::week_left())
             ),
-            Go::Page(Page::Event),
+            Page::Event,
         ),
         (
             "abyss",
             format!("Бездна облаков · этаж {floor}"),
             "Каждый этаж сложнее, каждый 10-й — босс".to_string(),
             format!("лучший этаж: {}", view.abyss.best),
-            Go::Page(Page::Abyss),
+            Page::Abyss,
         ),
         (
             "ruins",
             view.ruins.0.name.clone(),
             "10 залов, здоровье не восстанавливается".to_string(),
             ruins_status(view),
-            Go::Page(Page::Ruins),
+            Page::Ruins,
         ),
         (
             "arena",
             view.arena.0.name.clone(),
             "Отряды других капитанов, лига недели".to_string(),
             arena_status(view),
-            Go::Page(Page::Arena),
+            Page::Arena,
         ),
         (
             "expeditions",
-            format!("Экспедиции · {} из {boats}", view.exps.running.len()),
+            "Экспедиции".to_string(),
             "Свободные герои уходят на шлюпках за добычей".to_string(),
             if back > 0 {
                 format!("вернулись: {back} — забрать добычу!")
-            } else if view.exps.running.is_empty() {
-                "шлюпки свободны".to_string()
             } else {
-                "шлюпки в пути".to_string()
+                let free = boats.saturating_sub(view.exps.running.len() as u32);
+                format!("шлюпки: свободно {free} из {boats}")
             },
-            Go::Page(Page::Expeditions),
-        ),
-        (
-            "contracts",
-            format!(
-                "Контракты дня · {} из {}",
-                view.contracts.done_today(),
-                view.contract_data.daily.len()
-            ),
-            "Поручения команды — награда каждый день".to_string(),
-            "новые — в полночь по UTC".to_string(),
-            Go::Contracts,
+            Page::Expeditions,
         ),
     ];
     root.spawn(Node {
@@ -499,13 +484,7 @@ fn arena_status(view: &View) -> String {
     )
 }
 
-#[derive(Clone, Copy)]
-enum Go {
-    Page(Page),
-    Contracts,
-}
-
-fn go_button(row: &mut ChildSpawnerCommands, fonts: &Fonts, go: Go) {
+fn go_button(row: &mut ChildSpawnerCommands, fonts: &Fonts, go: Page) {
     let mut button = row.spawn((
         Node {
             width: px(96),
@@ -522,18 +501,9 @@ fn go_button(row: &mut ChildSpawnerCommands, fonts: &Fonts, go: Go) {
     button.observe(
         move |_: On<PointerClick>,
               mut page: ResMut<ActivitiesPage>,
-              mut dirty: ResMut<ActivitiesDirty>,
-              mut board: ResMut<BoardOpen>,
-              mut next: ResMut<NextState<Screen>>| match go {
-            Go::Page(p) => {
-                page.0 = Some(p);
-                dirty.0 = true;
-            }
-            // Доска контрактов — на главном экране.
-            Go::Contracts => {
-                board.0 = true;
-                next.set(Screen::Menu);
-            }
+              mut dirty: ResMut<ActivitiesDirty>| {
+            page.0 = Some(go);
+            dirty.0 = true;
         },
     );
 }

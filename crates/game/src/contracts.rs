@@ -101,15 +101,6 @@ impl Contracts {
         now() / SECONDS_PER_DAY
     }
 
-    /// Сколько поручений сегодня уже закрыто.
-    pub fn done_today(&self) -> usize {
-        if self.day == Self::today() {
-            self.claimed.len()
-        } else {
-            0
-        }
-    }
-
     /// Новый день — всё сначала.
     fn roll_day(&mut self) {
         let today = Self::today();

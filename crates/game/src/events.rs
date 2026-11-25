@@ -23,8 +23,6 @@ const THURSDAY_SHIFT: u64 = 3;
 
 #[derive(Resource, Deserialize)]
 pub struct EventData {
-    /// Короткие имена ивентов — для кнопки на главной.
-    pub short: std::collections::HashMap<String, String>,
     pub cycle: Vec<String>,
     pub storm: StormData,
     pub fair: FairData,
@@ -254,13 +252,6 @@ impl EventData {
     pub fn current(&self) -> &str {
         let i = self.forced.unwrap_or(week() as usize);
         &self.cycle[i % self.cycle.len()]
-    }
-
-    /// Короткое имя ивента этой недели (кнопка на главной).
-    pub fn current_short(&self) -> &str {
-        self.short
-            .get(self.current())
-            .map_or("Ивент", |s| s.as_str())
     }
 
     /// Название ивента этой недели.

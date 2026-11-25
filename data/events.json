@@ -1,10 +1,4 @@
 {
-  "short": {
-    "storm": "Буря",
-    "blockade": "Блокада",
-    "fair": "Ярмарка",
-    "regatta": "Регата"
-  },
   "cycle": [
     "storm",
     "blockade",

@@ -121,7 +121,9 @@ impl Expeditions {
             return Err("Эта экспедиция уже в пути".into());
         }
         if self.running.len() as u32 >= boats {
-            return Err("Все шлюпки в пути — больше шлюпок даёт отсек «Шлюпки»".into());
+            return Err(format!(
+                "Все шлюпки в пути: {boats} из {boats}. Ещё шлюпки даёт отсек «Шлюпки»"
+            ));
         }
         let mut free: Vec<&String> = all_heroes
             .iter()
@@ -184,24 +186,43 @@ pub fn section(
         })
         .with_children(|row| {
             row.spawn(style::heading(fonts, "Шлюпки", 20.0, PARCHMENT));
-            // Шлюпка на каждый слот: занятая — тёмная.
+            // Каждая шлюпка — картинкой: свободная яркая, ушедшая — тусклая.
+            let away = exps.running.len() as u32;
             for i in 0..boats {
-                let busy = (i as usize) < exps.running.len();
-                style::pill(
-                    row,
-                    fonts,
-                    if busy {
-                        "в пути"
-                    } else {
-                        "свободна"
+                let busy = i < away;
+                row.spawn((
+                    Node {
+                        width: px(46),
+                        height: px(44),
+                        flex_shrink: 0.0,
+                        ..default()
                     },
-                    if busy {
-                        Color::srgb(0.3, 0.28, 0.27)
-                    } else {
-                        Color::srgb(0.22, 0.5, 0.26)
+                    ImageNode {
+                        image: assets.load("ui/act_expeditions.png"),
+                        color: if busy {
+                            Color::srgba(0.4, 0.4, 0.45, 0.7)
+                        } else {
+                            Color::WHITE
+                        },
+                        ..default()
                     },
-                );
+                ));
             }
+            row.spawn(Node {
+                flex_grow: 1.0,
+                ..default()
+            });
+            let free = boats.saturating_sub(away);
+            style::pill(
+                row,
+                fonts,
+                format!("свободно {free} из {boats}"),
+                if free > 0 {
+                    Color::srgb(0.22, 0.5, 0.26)
+                } else {
+                    Color::srgb(0.45, 0.18, 0.14)
+                },
+            );
         });
         card.spawn(text(
             fonts,

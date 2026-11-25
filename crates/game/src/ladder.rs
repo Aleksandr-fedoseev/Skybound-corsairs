@@ -101,7 +101,7 @@ pub fn button(root: &mut ChildSpawnerCommands, assets: &AssetServer, fonts: &Fon
     let mut b = root.spawn((
         Node {
             position_type: PositionType::Absolute,
-            top: px(148),
+            top: px(76),
             left: px(10),
             width: px(84),
             height: px(62),
