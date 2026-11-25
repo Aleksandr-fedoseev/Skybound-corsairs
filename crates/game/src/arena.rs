@@ -221,36 +221,12 @@ pub fn section(
     level: u32,
     cleared: usize,
     power: (&game_data::GameData, u32),
-    ladder: &[crate::ladder::Row],
 ) {
     let (game, mine) = power;
     // Показываем так, будто неделя и день уже перевёрнуты: сохраняемое меняют только кнопки.
     let mut view = arena.clone();
     view.roll(data, crate::cabins::today());
     let league = data.league(view.rating);
-    let colors = [
-        Color::srgb(0.55, 0.36, 0.2),
-        Color::srgb(0.5, 0.52, 0.56),
-        Color::srgb(0.78, 0.58, 0.18),
-        Color::srgb(0.42, 0.3, 0.75),
-    ];
-    style::banner(
-        col,
-        assets,
-        fonts,
-        "arena",
-        format!("{} очков", view.rating),
-        &[
-            (
-                format!("лига {}", data.leagues[league].name),
-                colors[league.min(colors.len() - 1)],
-            ),
-            (
-                format!("итоги через {}", days_left(week_left())),
-                Color::srgb(0.45, 0.18, 0.14),
-            ),
-        ],
-    );
     tile(col).with_children(|card| {
         // Полоса до следующей лиги.
         match data.leagues.get(league + 1) {
@@ -260,11 +236,22 @@ pub fn section(
                     card,
                     fonts,
                     (view.rating - from) as f32 / (next.from - from).max(1) as f32,
-                    format!("до лиги {}: {} / {}", next.name, view.rating, next.from),
+                    format!(
+                        "до лиги {}: {} / {} · итоги через {}",
+                        next.name,
+                        view.rating,
+                        next.from,
+                        days_left(week_left())
+                    ),
                     Color::srgb(0.55, 0.42, 0.18),
                 );
             }
-            None => style::pill(card, fonts, "высшая лига!", Color::srgb(0.7, 0.5, 0.12)),
+            None => style::pill(
+                card,
+                fonts,
+                format!("высшая лига! · итоги через {}", days_left(week_left())),
+                Color::srgb(0.7, 0.5, 0.12),
+            ),
         }
         card.spawn(Node {
             column_gap: px(8),
@@ -417,24 +404,6 @@ pub fn section(
         });
     }
     refresh_button(col, fonts, data.refresh_silver);
-    // Таблица недели: тройка лидеров и место игрока.
-    tile(col).with_children(|card| {
-        card.spawn(style::heading(fonts, "Таблица недели", 18.0, PARCHMENT));
-        let me = ladder.iter().position(|r| r.me).unwrap_or(0);
-        for (i, r) in ladder.iter().enumerate().take(3) {
-            crate::ladder::line(card, assets, fonts, crate::ladder::Tab::Arena, i + 1, r);
-        }
-        if me >= 3 {
-            crate::ladder::line(
-                card,
-                assets,
-                fonts,
-                crate::ladder::Tab::Arena,
-                me + 1,
-                &ladder[me],
-            );
-        }
-    });
 }
 
 fn tile<'a>(col: &'a mut ChildSpawnerCommands) -> EntityCommands<'a> {

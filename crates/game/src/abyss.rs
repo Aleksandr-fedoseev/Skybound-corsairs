@@ -205,7 +205,6 @@ struct View<'w> {
     ),
     progress: Res<'w, crate::menu::Progress>,
     power: crate::power::Power<'w>,
-    ladder: Res<'w, crate::ladder::LadderData>,
 }
 
 fn spawn_activities(mut commands: Commands, view: View) {
@@ -453,25 +452,6 @@ fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
     });
 }
 
-/// Мощь для полного спуска в Руины: по `curve -- ruins` до конца доходят на 4–5 уровней выше
-/// рекомендуемого для следующего этапа.
-fn ruins_need(view: &View) -> u32 {
-    let stages = &view.screen.data.stages;
-    let rec = stages
-        .get(view.progress.cleared)
-        .or(stages.last())
-        .map_or(1, |s| s.recommended_level);
-    view.power.recommended(rec + 5)
-}
-
-/// Таблица Арены этой недели — для мини-таблицы на странице Арены.
-fn arena_ladder(view: &View) -> Vec<crate::ladder::Row> {
-    let mut a = (*view.arena.1).clone();
-    a.roll(&view.arena.0, crate::cabins::today());
-    let progress = 1.0 - crate::events::week_left() as f32 / (7.0 * 86_400.0);
-    view.ladder.arena(a.week, progress, a.rating)
-}
-
 fn ruins_status(view: &View) -> String {
     let (data, ruins) = (&*view.ruins.0, &*view.ruins.1);
     if view.progress.cleared < data.unlock_cleared {
@@ -615,7 +595,6 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
             screen,
             view.progress.cleared,
             &view.roster.team,
-            (ruins_need(view), view.power.team()),
         ),
         Page::Arena => {
             let heroes: Vec<String> = screen.data.heroes.iter().map(|h| h.id.clone()).collect();
@@ -629,7 +608,6 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
                 crate::arena::team_level(&view.roster),
                 view.progress.cleared,
                 (&screen.data, view.power.team()),
-                &arena_ladder(view),
             );
         }
         Page::Expeditions => crate::expeditions::section(
@@ -641,7 +619,6 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
             boats,
             screen,
             now(),
-            &view.roster,
         ),
     });
 }

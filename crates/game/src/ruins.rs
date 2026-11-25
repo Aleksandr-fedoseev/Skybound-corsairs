@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::Screen;
 use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
 use crate::events::{Bundle, days_left, week, week_left};
-use crate::menu::{MUTED, PARCHMENT, Voyage, pressable, text};
+use crate::menu::{PARCHMENT, Voyage, pressable, text};
 use crate::story::VoyageRequest;
 use crate::style::{self, Look, Skin};
 use crate::summary::{Summary, Tone};
@@ -224,8 +224,6 @@ impl Ruins {
             let reward = data.room_reward(floor, room);
             reward.put(profile);
             sum = sum.bundle(&reward);
-        } else {
-            sum = sum.chip("награда уже получена на этой неделе", Tone::Info);
         }
         if floor >= data.depth() {
             self.run = None;
@@ -237,7 +235,6 @@ impl Ruins {
                 floor: floor + 1,
                 hp,
             });
-            sum = sum.chip(format!("дальше: этаж {}", floor + 1), Tone::Info);
         }
         sum
     }
@@ -322,7 +319,6 @@ pub fn section(
     screen: &BattleScreen,
     cleared: usize,
     team: &[String],
-    power: (u32, u32),
 ) {
     let w = week();
     let best = if ruins.week == w { ruins.best } else { 0 };
@@ -338,26 +334,6 @@ pub fn section(
             Color::srgb(0.45, 0.18, 0.14),
         )],
     );
-    tile(col).with_children(|card| {
-        // Этажи кружками: взятые — золотые, текущий — светлый ободок.
-        let current = run.map_or(best, |r| r.floor - 1) as usize;
-        style::pips(
-            card,
-            fonts,
-            data.depth() as usize,
-            best as usize,
-            Some(current),
-        );
-        card.spawn(Node {
-            column_gap: px(8),
-            align_items: AlignItems::Center,
-            ..default()
-        })
-        .with_children(|row| {
-            row.spawn(style::heading(fonts, "до конца:", 13.0, MUTED));
-            crate::power::need_chip(row, assets, fonts, power.0, power.1);
-        });
-    });
     if cleared < data.unlock_cleared {
         tile(col).with_children(|card| {
             card.spawn(text(
@@ -371,50 +347,24 @@ pub fn section(
         return;
     }
     match run {
+        // Спуск начинается с «Войти в зал» на первом этаже — всем отрядом, с полным здоровьем.
         None => {
-            tile(col).with_children(|card| {
-                card.spawn(text(fonts, "Отряд у входа", true, 18.0, PARCHMENT));
-                let full: Vec<(String, f32)> = team.iter().map(|id| (id.clone(), 1.0)).collect();
-                team_hp(card, assets, fonts, &full);
-                let label = if best >= data.depth() {
-                    "Спуститься снова (без наград)"
-                } else {
-                    "Спуститься в Руины"
-                };
-                start_button(card, fonts, label);
-            });
-            // Что ждёт на первом этаже — чтобы было видно, куда идёшь.
-            floor_rooms(col, assets, fonts, data, screen, cleared, w, 1, best, None);
+            let full: Vec<(String, f32)> = team.iter().map(|id| (id.clone(), 1.0)).collect();
+            floor_rooms(col, assets, fonts, data, screen, cleared, w, 1, best, &full);
         }
         Some(r) => {
             tile(col).with_children(|card| {
-                card.spawn(text(
-                    fonts,
-                    format!("Этаж {} из {} · выбери зал", r.floor, data.depth()),
-                    true,
-                    18.0,
-                    PARCHMENT,
-                ));
                 team_hp(card, assets, fonts, &r.hp);
                 retreat_button(card, fonts);
             });
             floor_rooms(
-                col,
-                assets,
-                fonts,
-                data,
-                screen,
-                cleared,
-                w,
-                r.floor,
-                best,
-                Some(&r.hp),
+                col, assets, fonts, data, screen, cleared, w, r.floor, best, &r.hp,
             );
         }
     }
 }
 
-/// Карточки залов этажа; `hp` — идущий спуск (можно входить), `None` — только посмотреть.
+/// Карточки залов этажа: враги, награда, «Войти в зал» с этим здоровьем отряда.
 #[allow(clippy::too_many_arguments)]
 fn floor_rooms(
     col: &mut ChildSpawnerCommands,
@@ -426,7 +376,7 @@ fn floor_rooms(
     week: u64,
     floor: u32,
     best: u32,
-    hp: Option<&[(String, f32)]>,
+    hp: &[(String, f32)],
 ) {
     let boss = data.floor(floor).boss.clone();
     for (choice, room) in data.rooms(week, floor).into_iter().enumerate() {
@@ -464,22 +414,12 @@ fn floor_rooms(
                 ..default()
             })
             .with_children(|row| {
-                if floor <= best {
-                    row.spawn(text(
-                        fonts,
-                        "награда уже получена на этой неделе",
-                        false,
-                        13.0,
-                        style::INK_SOFT,
-                    ));
-                } else {
+                if floor > best {
                     row.spawn(text(fonts, "награда", false, 13.0, style::INK_SOFT));
                     style::costs(row, assets, fonts, &reward.items(), 15.0, style::INK);
                 }
             });
-            if let Some(hp) = hp {
-                enter_button(card, fonts, floor, choice, hp.to_vec());
-            }
+            enter_button(card, fonts, floor, choice, hp.to_vec());
         });
     }
     let _ = screen;
@@ -522,22 +462,6 @@ fn wide_button<'a>(
     b
 }
 
-fn start_button(card: &mut ChildSpawnerCommands, fonts: &Fonts, label: &str) {
-    wide_button(card, fonts, label, Look::Go).observe(
-        |_: On<PointerClick>,
-         roster: Res<crate::crew::Roster>,
-         mut ruins: ResMut<Ruins>,
-         mut dirty: ResMut<crate::abyss::ActivitiesDirty>| {
-            ruins.roll_week();
-            ruins.run = Some(RuinsRun {
-                floor: 1,
-                hp: roster.team.iter().map(|id| (id.clone(), 1.0)).collect(),
-            });
-            dirty.0 = true;
-        },
-    );
-}
-
 fn retreat_button(card: &mut ChildSpawnerCommands, fonts: &Fonts) {
     wide_button(card, fonts, "Отступить наверх", Look::Off).observe(
         |_: On<PointerClick>,
@@ -559,10 +483,18 @@ fn enter_button(
     wide_button(card, fonts, "Войти в зал", Look::Go).observe(
         move |_: On<PointerClick>,
               data: Res<RuinsData>,
-              ruins: Res<Ruins>,
+              mut ruins: ResMut<Ruins>,
               progress: Res<crate::menu::Progress>,
               mut voyage: ResMut<Voyage>,
               mut requests: MessageWriter<VoyageRequest>| {
+            // Первый зал — это и начало спуска.
+            ruins.roll_week();
+            if ruins.run.is_none() {
+                ruins.run = Some(RuinsRun {
+                    floor,
+                    hp: hp.clone(),
+                });
+            }
             *voyage = Voyage {
                 stage: None,
                 custom: Some(data.fight(progress.cleared, ruins.week, floor, choice, &hp)),

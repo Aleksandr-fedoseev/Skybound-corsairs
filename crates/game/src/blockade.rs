@@ -196,16 +196,13 @@ impl WeekEvents {
         } else {
             Vec::new()
         };
-        if !offer.is_empty() {
-            sum = sum.chip("выберите усиление", Tone::Gold);
-        }
         self.blockade_run = Some(BlockadeRun {
             wave: wave + 1,
             hp,
             boons: taken,
             offer,
         });
-        sum.chip(format!("дальше: волна {}", wave + 2), Tone::Info)
+        sum
     }
 
     pub fn blockade_lose(&mut self, wave: usize) -> Summary {
@@ -284,7 +281,6 @@ pub fn card(
         crate::ruins::team_hp(card, assets, fonts, &hp);
     });
     // Выбор усиления — вместо следующей волны, пока не выбрано.
-    let taken = run.as_ref().map(|r| r.boons.clone()).unwrap_or_default();
     if let Some(r) = run.as_ref().filter(|r| !r.offer.is_empty()) {
         tile(col).with_children(|card| {
             card.spawn(style::heading(fonts, "Выберите усиление", 20.0, GOLD));
@@ -307,7 +303,6 @@ pub fn card(
             cleared,
         );
     }
-    collection(col, fonts, data, &taken);
 }
 
 /// Следующая волна: враги, ветер, флагман, награда и «В бой».
@@ -353,60 +348,6 @@ fn wave_card(
             "Начать оборону".to_string()
         };
         go_button(card, fonts, &label, cleared);
-    });
-}
-
-/// Все усиления обороны: взятые — золотые, остальные — тусклые.
-fn collection(
-    col: &mut ChildSpawnerCommands,
-    fonts: &Fonts,
-    data: &BlockadeData,
-    taken: &[String],
-) {
-    tile(col).with_children(|card| {
-        card.spawn(style::heading(fonts, "Усиления обороны", 18.0, PARCHMENT));
-        card.spawn(Node {
-            flex_wrap: FlexWrap::Wrap,
-            column_gap: px(8),
-            row_gap: px(8),
-            ..default()
-        })
-        .with_children(|grid| {
-            for b in &data.boons {
-                let on = taken.contains(&b.id);
-                grid.spawn((
-                    Node {
-                        width: px(222),
-                        padding: UiRect::axes(px(10), px(6)),
-                        flex_direction: FlexDirection::Column,
-                        border: UiRect::all(px(2)),
-                        border_radius: BorderRadius::all(px(10)),
-                        ..default()
-                    },
-                    BackgroundColor(if on {
-                        Color::srgba(0.85, 0.6, 0.2, 0.25)
-                    } else {
-                        Color::srgba(1.0, 1.0, 1.0, 0.04)
-                    }),
-                    BorderColor::all(if on {
-                        GOLD
-                    } else {
-                        Color::srgba(1.0, 1.0, 1.0, 0.08)
-                    }),
-                ))
-                .with_children(|c| {
-                    let color = if on { GOLD } else { PARCHMENT };
-                    c.spawn(style::heading(fonts, b.name.clone(), 15.0, color));
-                    c.spawn(text(
-                        fonts,
-                        b.about.clone(),
-                        false,
-                        12.0,
-                        Color::srgb(0.75, 0.68, 0.58),
-                    ));
-                });
-            }
-        });
     });
 }
 

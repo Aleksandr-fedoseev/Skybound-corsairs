@@ -165,8 +165,8 @@ pub fn section(
     boats: u32,
     screen: &BattleScreen,
     now: u64,
-    roster: &Roster,
 ) {
+    let _ = screen;
     let away = exps.running.len() as u32;
     let free = boats.saturating_sub(away);
     style::banner(
@@ -290,52 +290,6 @@ pub fn section(
                 }
             });
         }
-    });
-    // Кто может уйти в экспедицию: свободные — ярко, в отряде и в пути — тускло.
-    col.spawn((
-        Node {
-            padding: UiRect::axes(px(16), px(14)),
-            flex_direction: FlexDirection::Column,
-            row_gap: px(10),
-            border: UiRect::all(px(2)),
-            border_radius: BorderRadius::all(px(14)),
-            ..default()
-        },
-        Skin(Look::Tile),
-    ))
-    .with_children(|card| {
-        card.spawn(style::heading(fonts, "Герои на борту", 18.0, PARCHMENT));
-        card.spawn(Node {
-            flex_wrap: FlexWrap::Wrap,
-            column_gap: px(10),
-            row_gap: px(10),
-            ..default()
-        })
-        .with_children(|grid| {
-            for hero in screen.data.heroes.iter().filter(|h| roster.owns(&h.id)) {
-                let away = exps.running.iter().any(|r| r.heroes.contains(&hero.id));
-                let in_team = roster.team.contains(&hero.id);
-                let (label, color) = if away {
-                    ("в пути", Color::srgb(0.45, 0.18, 0.14))
-                } else if in_team {
-                    ("в отряде", Color::srgb(0.24, 0.2, 0.3))
-                } else {
-                    ("свободен", Color::srgb(0.22, 0.5, 0.26))
-                };
-                grid.spawn(Node {
-                    width: px(108),
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    row_gap: px(4),
-                    ..default()
-                })
-                .with_children(|c| {
-                    c.spawn(style::medallion(assets, &hero.id, 60.0, away || in_team));
-                    c.spawn(style::heading(fonts, hero.name.clone(), 14.0, PARCHMENT));
-                    style::pill(c, fonts, label, color);
-                });
-            }
-        });
     });
 }
 
