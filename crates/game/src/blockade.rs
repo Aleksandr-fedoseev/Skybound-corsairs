@@ -277,7 +277,6 @@ pub fn card(
         ],
     );
     tile(col).with_children(|card| {
-        track(card, fonts, data, best, run.as_ref().map(|r| r.wave));
         let hp: Vec<(String, f32)> = match &run {
             Some(r) => r.hp.clone(),
             None => team.iter().map(|id| (id.clone(), 1.0)).collect(),
@@ -408,77 +407,6 @@ fn collection(
                 });
             }
         });
-    });
-}
-
-/// Дорожка волн: пройденные — золото, текущая — светлый ободок, флагманы — красные и крупнее,
-/// под волнами с усилением — золотая метка.
-fn track(
-    card: &mut ChildSpawnerCommands,
-    fonts: &Fonts,
-    data: &BlockadeData,
-    best: usize,
-    current: Option<usize>,
-) {
-    card.spawn(Node {
-        column_gap: px(4),
-        align_items: AlignItems::FlexStart,
-        ..default()
-    })
-    .with_children(|row| {
-        for (i, w) in data.waves.iter().enumerate() {
-            let boss = w.flagship.is_some();
-            let size = if boss { 30.0 } else { 26.0 };
-            let (bg, border) = if i < best {
-                (Color::srgb(0.78, 0.58, 0.18), Color::srgb(1.0, 0.86, 0.5))
-            } else if boss {
-                (Color::srgb(0.5, 0.16, 0.12), Color::srgb(0.9, 0.45, 0.35))
-            } else {
-                (Color::srgb(0.14, 0.11, 0.1), Color::srgb(0.35, 0.3, 0.26))
-            };
-            row.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                row_gap: px(3),
-                ..default()
-            })
-            .with_children(|c| {
-                c.spawn((
-                    Node {
-                        width: px(size),
-                        height: px(size),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(px(if Some(i) == current { 3 } else { 2 })),
-                        border_radius: BorderRadius::MAX,
-                        ..default()
-                    },
-                    BackgroundColor(bg),
-                    BorderColor::all(if Some(i) == current {
-                        Color::srgb(1.0, 0.95, 0.8)
-                    } else {
-                        border
-                    }),
-                ))
-                .with_child(style::heading(
-                    fonts,
-                    (i + 1).to_string(),
-                    12.0,
-                    Color::WHITE,
-                ));
-                // Метка усиления: после этой волны — выбор.
-                let boon = (i + 1).is_multiple_of(data.boon_every) && i + 1 < data.waves.len();
-                c.spawn((
-                    Node {
-                        width: px(8),
-                        height: px(8),
-                        border_radius: BorderRadius::MAX,
-                        ..default()
-                    },
-                    BackgroundColor(if boon { GOLD } else { Color::NONE }),
-                ));
-            });
-        }
     });
 }
 
