@@ -228,46 +228,63 @@ pub fn section(
     view.roll(data, crate::cabins::today());
     let league = data.league(view.rating);
     tile(col).with_children(|card| {
-        // Полоса до следующей лиги.
-        match data.leagues.get(league + 1) {
-            Some(next) => {
-                let from = data.leagues[league].from;
-                style::meter(
-                    card,
-                    fonts,
-                    (view.rating - from) as f32 / (next.from - from).max(1) as f32,
-                    format!(
-                        "до лиги {}: {} / {} · итоги через {}",
-                        next.name,
-                        view.rating,
-                        next.from,
-                        days_left(week_left())
-                    ),
-                    Color::srgb(0.55, 0.42, 0.18),
-                );
-            }
-            None => style::pill(
-                card,
+        // Лига и шкала до следующей (какие лиги бывают — в справке «?»).
+        card.spawn(Node {
+            column_gap: px(10),
+            align_items: AlignItems::Center,
+            ..default()
+        })
+        .with_children(|row| {
+            let colors = [
+                Color::srgb(0.55, 0.36, 0.2),
+                Color::srgb(0.5, 0.52, 0.56),
+                Color::srgb(0.78, 0.58, 0.18),
+                Color::srgb(0.42, 0.3, 0.75),
+            ];
+            style::pill(
+                row,
                 fonts,
-                format!("высшая лига! · итоги через {}", days_left(week_left())),
-                Color::srgb(0.7, 0.5, 0.12),
-            ),
-        }
+                data.leagues[league].name.clone(),
+                colors[league.min(colors.len() - 1)],
+            );
+            let frac = match data.leagues.get(league + 1) {
+                Some(next) => {
+                    let from = data.leagues[league].from;
+                    (view.rating - from) as f32 / (next.from - from).max(1) as f32
+                }
+                None => 1.0,
+            };
+            row.spawn(Node {
+                flex_grow: 1.0,
+                flex_direction: FlexDirection::Column,
+                ..default()
+            })
+            .with_children(|bar| {
+                style::meter(bar, fonts, frac, "", Color::srgb(0.55, 0.42, 0.18));
+            });
+        });
         card.spawn(Node {
             column_gap: px(8),
             row_gap: px(6),
             flex_wrap: FlexWrap::Wrap,
+            align_items: AlignItems::Center,
             ..default()
         })
         .with_children(|row| {
             let league_prize = [("doubloons", data.leagues[league].doubloons)];
-            style::reward_row(row, assets, fonts, "лига недели", &league_prize);
+            style::reward_row(row, assets, fonts, "лига", &league_prize);
             style::reward_row(
                 row,
                 assets,
                 fonts,
                 &format!("победа {}/{}", view.wins_today, data.daily_rewarded_wins),
                 &data.win_reward.items(),
+            );
+            style::pill(
+                row,
+                fonts,
+                format!("осталось {}", days_left(week_left())),
+                Color::srgb(0.45, 0.18, 0.14),
             );
         });
         if view.pending > 0 {

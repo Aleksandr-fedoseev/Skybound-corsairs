@@ -303,6 +303,29 @@ pub fn card(
             cleared,
         );
     }
+    // Взятые в этой обороне усиления.
+    if let Some(r) = run.as_ref().filter(|r| !r.boons.is_empty()) {
+        tile(col).with_children(|card| {
+            card.spawn(style::heading(fonts, "Усиления", 18.0, PARCHMENT));
+            for b in r.boons.iter().filter_map(|id| data.boon(id)) {
+                card.spawn(Node {
+                    column_gap: px(10),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    style::pill(row, fonts, b.name.clone(), Color::srgb(0.55, 0.4, 0.12));
+                    row.spawn(text(
+                        fonts,
+                        b.about.clone(),
+                        false,
+                        13.0,
+                        Color::srgb(0.8, 0.72, 0.6),
+                    ));
+                });
+            }
+        });
+    }
 }
 
 /// Следующая волна: враги, ветер, флагман, награда и «В бой».

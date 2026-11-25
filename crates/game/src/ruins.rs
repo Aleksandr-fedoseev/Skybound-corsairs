@@ -355,7 +355,6 @@ pub fn section(
         Some(r) => {
             tile(col).with_children(|card| {
                 team_hp(card, assets, fonts, &r.hp);
-                retreat_button(card, fonts);
             });
             floor_rooms(
                 col, assets, fonts, data, screen, cleared, w, r.floor, best, &r.hp,
@@ -460,17 +459,6 @@ fn wide_button<'a>(
     b.with_child(text(fonts, label, true, 18.0, Color::WHITE));
     pressable(&mut b);
     b
-}
-
-fn retreat_button(card: &mut ChildSpawnerCommands, fonts: &Fonts) {
-    wide_button(card, fonts, "Отступить наверх", Look::Off).observe(
-        |_: On<PointerClick>,
-         mut ruins: ResMut<Ruins>,
-         mut dirty: ResMut<crate::abyss::ActivitiesDirty>| {
-            ruins.run = None;
-            dirty.0 = true;
-        },
-    );
 }
 
 fn enter_button(
