@@ -11,7 +11,7 @@ use crate::abyss::ActivitiesDirty;
 use crate::audio::Sfx;
 use crate::battle_screen::BattleScreen;
 use crate::crew::Roster;
-use crate::menu::{MUTED, PARCHMENT, Spoils, Toast, pressable, text};
+use crate::menu::{PARCHMENT, Spoils, Toast, pressable, text};
 use crate::save::now;
 use crate::ship::{Ship, ShipData, clock};
 use crate::style::{self, Look, Skin};
@@ -224,13 +224,6 @@ pub fn section(
                 },
             );
         });
-        card.spawn(text(
-            fonts,
-            "Идут герои не из боевого отряда. Пока они в пути, в отряд их не взять.",
-            false,
-            12.0,
-            MUTED,
-        ));
         for m in &data.missions {
             let running = exps.running.iter().find(|r| r.mission == m.id);
             let back = running.is_some_and(|r| now >= r.ends_at);

@@ -291,6 +291,8 @@ fn spawn_map(
                 56.0,
             );
             chapter_arrows(root, fonts, map, chapter, stages, progress.cleared);
+            // Справка — под стрелкой следующей главы.
+            crate::help::corner(root, fonts, "map", 116.0, 13.0);
             home(root, assets, fonts, &page.home);
             for spot in &page.locked {
                 let open = spot

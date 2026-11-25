@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::Screen;
 use crate::battle_screen::{CustomFight, FightKind};
 use crate::events::{Bundle, days_left, week, week_left};
-use crate::menu::{GOLD, MUTED, PARCHMENT, Profile, Toast, Voyage, pressable, text};
+use crate::menu::{GOLD, PARCHMENT, Profile, Toast, Voyage, pressable, text};
 use crate::story::VoyageRequest;
 use crate::style::{self, Look, Skin};
 use crate::summary::{Summary, Tone};
@@ -21,7 +21,6 @@ use crate::view::Fonts;
 #[derive(Resource, Deserialize)]
 pub struct ArenaData {
     pub name: String,
-    pub about: String,
     pub unlock_cleared: usize,
     pub captains: Vec<String>,
     pub ships: Vec<String>,
@@ -303,7 +302,6 @@ pub fn section(
                 &data.win_reward.items(),
             );
         });
-        card.spawn(text(fonts, data.about.clone(), false, 12.0, MUTED));
         if view.pending > 0 {
             claim_button(
                 card,

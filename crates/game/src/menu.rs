@@ -458,6 +458,7 @@ fn build(commands: &mut Commands, view: &MenuView) {
             // Кнопки главной на осмотре уезжают за края, «Назад» выезжает.
             slide(root, Vec2::new(0.0, -260.0), false, |r| {
                 contracts_button(r, fonts, view.contracts.claimable(&view.contract_data));
+                crate::help::corner(r, fonts, "ship", 148.0, 33.0);
                 crate::ladder::button(r, assets, fonts);
             });
             slide(root, Vec2::new(0.0, 200.0), false, |r| {

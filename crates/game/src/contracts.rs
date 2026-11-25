@@ -200,13 +200,21 @@ pub fn board(
             ..default()
         })
         .with_children(|row| {
-            row.spawn(text(
-                fonts,
-                "Доска контрактов · сегодня",
-                true,
-                20.0,
-                PARCHMENT,
-            ));
+            row.spawn(Node {
+                column_gap: px(10),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|t| {
+                t.spawn(text(
+                    fonts,
+                    "Доска контрактов · сегодня",
+                    true,
+                    20.0,
+                    PARCHMENT,
+                ));
+                crate::help::button(t, fonts, "contracts");
+            });
             let mut close = row.spawn((
                 Node {
                     width: px(44),
@@ -229,13 +237,6 @@ pub fn board(
                 },
             );
         });
-        p.spawn(text(
-            fonts,
-            "Новые поручения — каждый день в полночь по UTC",
-            false,
-            12.0,
-            MUTED,
-        ));
 
         for c in &data.daily {
             let have = count(&c.deed).min(c.need);

@@ -160,6 +160,7 @@ pub fn panel(
         .with_children(|row| {
             tab_button(row, assets, fonts, Tab::Arena, tab);
             tab_button(row, assets, fonts, Tab::Power, tab);
+            crate::help::button(row, fonts, "ladder");
             row.spawn(Node {
                 flex_grow: 1.0,
                 ..default()

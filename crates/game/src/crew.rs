@@ -729,11 +729,13 @@ fn build(
                     56.0,
                 );
                 hero_grid(root, assets, fonts, data, roster, crew, power);
+                crate::help::corner(root, fonts, "crew", 60.0, 12.0);
                 bottom_nav(root, assets, fonts, Screen::Crew);
                 spawn_toast(root, fonts);
                 return;
             };
             style::title(root, fonts, "Экипаж", 56.0);
+            crate::help::corner(root, fonts, "hero", 60.0, 12.0);
             back_button(root, fonts);
             {
                 let plan = roster.merge_plan(data, crew, &hero.id);
@@ -928,6 +930,7 @@ fn formation_view(
     away: &dyn Fn(&str) -> bool,
 ) {
     style::title(root, fonts, "Расстановка отряда", 56.0);
+    crate::help::corner(root, fonts, "formation", 60.0, 12.0);
     root.spawn(Node {
         position_type: PositionType::Absolute,
         top: px(124),
@@ -968,13 +971,6 @@ fn formation_view(
                     }
                 });
         });
-        col.spawn(text(
-            fonts,
-            "Перетащите героя на место в отряде или обратно на скамейку",
-            false,
-            13.0,
-            PARCHMENT,
-        ));
         // Скамейка: все герои команды. Героя из отряда можно бросить сюда — он уйдёт из отряда.
         let mut bench_panel = col.spawn((
             Node {

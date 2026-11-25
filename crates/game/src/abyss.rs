@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::Screen;
 use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
 use crate::expeditions::{ExpeditionData, Expeditions};
-use crate::menu::{GOLD, MUTED, PARCHMENT, Voyage, bottom_nav, pressable, spawn_toast, text};
+use crate::menu::{GOLD, PARCHMENT, Voyage, bottom_nav, pressable, spawn_toast, text};
 use crate::save::now;
 use crate::ship::{Ship, ShipData};
 use crate::story::VoyageRequest;
@@ -302,6 +302,16 @@ fn build(commands: &mut Commands, view: &View) {
                 Some(Page::Expeditions) => "Экспедиции".to_string(),
             };
             style::title(root, fonts, &title, 56.0);
+            if let Some(page) = view.page.0 {
+                let id = match page {
+                    Page::Event => view.event_data.current(),
+                    Page::Abyss => "abyss",
+                    Page::Ruins => "ruins",
+                    Page::Arena => "arena",
+                    Page::Expeditions => "expeditions",
+                };
+                crate::help::corner(root, fonts, id, 60.0, 12.0);
+            }
             match view.page.0 {
                 None => hub(root, view, floor, boats),
                 Some(page) => {
@@ -338,9 +348,9 @@ fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
         ),
         (
             "abyss",
-            format!("Бездна облаков · этаж {floor}"),
-            "Каждый этаж сложнее, каждый 10-й — босс".to_string(),
-            format!("лучший этаж: {}", view.abyss.best),
+            "Бездна облаков".to_string(),
+            "Башня вверх без конца, каждый 10-й этаж — босс".to_string(),
+            format!("этаж {floor}"),
             Page::Abyss,
         ),
         (
@@ -583,7 +593,7 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
                 &owned,
             );
         }
-        Page::Abyss => abyss_card(col, &view.assets, fonts, data, floor, view.abyss.best),
+        Page::Abyss => abyss_card(col, &view.assets, fonts, data, floor),
         Page::Ruins => crate::ruins::section(
             col,
             &view.assets,
@@ -628,7 +638,6 @@ fn abyss_card(
     fonts: &Fonts,
     data: &AbyssData,
     floor: u32,
-    best: u32,
 ) {
     let ids: Vec<String> = data.enemies(floor).into_iter().map(|(id, _)| id).collect();
     col.spawn((
@@ -643,13 +652,6 @@ fn abyss_card(
         Skin(Look::Tile),
     ))
     .with_children(|card| {
-        card.spawn(text(
-            fonts,
-            "Каждый этаж сложнее, каждый 10-й — босс. Награда за этаж — один раз.",
-            false,
-            12.0,
-            MUTED,
-        ));
         card.spawn(Node {
             column_gap: px(8),
             align_items: AlignItems::Center,
@@ -659,25 +661,6 @@ fn abyss_card(
             row.spawn(style::heading(fonts, format!("Этаж {floor}"), 30.0, GOLD));
             if data.is_boss(floor) {
                 style::pill(row, fonts, "БОСС", Color::srgb(0.62, 0.2, 0.16));
-            }
-            row.spawn(Node {
-                flex_grow: 1.0,
-                ..default()
-            });
-            style::pill(
-                row,
-                fonts,
-                format!("лучший: {best}"),
-                Color::srgb(0.24, 0.2, 0.3),
-            );
-            let to_boss = data.boss_every - (floor - 1) % data.boss_every - 1;
-            if to_boss > 0 {
-                style::pill(
-                    row,
-                    fonts,
-                    format!("до босса {to_boss}"),
-                    Color::srgb(0.45, 0.18, 0.14),
-                );
             }
         });
         crate::map::enemies_row(card, assets, fonts, &ids, None, PARCHMENT);
@@ -705,7 +688,7 @@ fn abyss_card(
             },
             Skin(Look::Go),
         ));
-        go.with_child(text(fonts, "Спуститься", true, 20.0, Color::WHITE));
+        go.with_child(text(fonts, "Подняться", true, 20.0, Color::WHITE));
         pressable(&mut go);
         go.observe(
             move |_: On<PointerClick>,

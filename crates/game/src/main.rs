@@ -17,6 +17,7 @@ mod events;
 mod expeditions;
 mod fx;
 mod gear;
+mod help;
 mod hire_reveal;
 mod ladder;
 mod map;
@@ -112,6 +113,7 @@ fn main() {
         arena::plugin,
         settings::plugin,
         ladder::plugin,
+        help::plugin,
     ))
     .add_plugins(hire_reveal::plugin)
     .add_plugins(style::plugin)

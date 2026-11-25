@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Screen;
 use crate::battle_screen::{CustomFight, FightKind};
-use crate::menu::{GOLD, MUTED, PARCHMENT, Profile, Voyage, pressable, text};
+use crate::menu::{GOLD, PARCHMENT, Profile, Voyage, pressable, text};
 use crate::save::now;
 use crate::ship::clock;
 use crate::story::VoyageRequest;
@@ -37,7 +37,6 @@ pub struct EventData {
 #[derive(Deserialize)]
 pub struct FairData {
     pub name: String,
-    pub about: String,
     pub offers: Vec<Offer>,
 }
 
@@ -180,14 +179,12 @@ impl Bundle {
 #[derive(Deserialize)]
 pub struct BlockadeData {
     pub name: String,
-    pub about: String,
     pub waves: Vec<Leg>,
 }
 
 #[derive(Deserialize)]
 pub struct RegattaData {
     pub name: String,
-    pub about: String,
     pub energy_rate: u32,
     pub legs: Vec<Leg>,
 }
@@ -201,7 +198,6 @@ pub struct Leg {
 #[derive(Deserialize)]
 pub struct StormData {
     pub name: String,
-    pub about: String,
     pub enemies: Vec<(String, u32)>,
     pub milestones: Vec<Milestone>,
 }
@@ -549,12 +545,11 @@ pub fn event_card(
     }
 }
 
-/// Рамка ивента: имя, плашка «осталось 5д 0ч», короткое описание.
+/// Рамка ивента: имя и плашка «осталось 5д 0ч» (описание — в справке «?»).
 fn event_frame<'a>(
     col: &'a mut ChildSpawnerCommands,
     fonts: &Fonts,
     name: &str,
-    about: &str,
 ) -> EntityCommands<'a> {
     let mut card = col.spawn((
         Node {
@@ -583,7 +578,6 @@ fn event_frame<'a>(
                 Color::srgb(0.45, 0.18, 0.14),
             );
         });
-        c.spawn(text(fonts, about.to_string(), false, 12.0, MUTED));
     });
     card
 }
@@ -625,7 +619,7 @@ fn fair_card(
     owned: &[(String, String)],
 ) {
     let fair = &data.fair;
-    event_frame(col, fonts, &fair.name, &fair.about).with_children(|card| {
+    event_frame(col, fonts, &fair.name).with_children(|card| {
         for offer in &fair.offers {
             let left = offer.limit.saturating_sub(week_events.bought(&offer.id));
             let can = left > 0 && offer.give.affordable(profile);
@@ -767,7 +761,7 @@ fn blockade_card(
     };
     let run = week_events.run().cloned();
     let _ = owned;
-    event_frame(col, fonts, &b.name, &b.about).with_children(|card| {
+    event_frame(col, fonts, &b.name).with_children(|card| {
         let wave = run.as_ref().map_or(best, |r| r.wave);
         style::pips(card, fonts, b.waves.len(), best, Some(wave));
         if let Some(r) = &run {
@@ -908,7 +902,7 @@ fn regatta_card(
 ) {
     let regatta = &data.regatta;
     let leg = week_events.next_leg();
-    event_frame(col, fonts, &regatta.name, &regatta.about).with_children(|card| {
+    event_frame(col, fonts, &regatta.name).with_children(|card| {
         style::pips(card, fonts, regatta.legs.len(), leg, Some(leg));
         match regatta.legs.get(leg) {
             None => {
@@ -971,7 +965,7 @@ pub fn storm_card(
         0
     };
     let st = &data.storm;
-    event_frame(col, fonts, &st.name, &st.about).with_children(|card| {
+    event_frame(col, fonts, &st.name).with_children(|card| {
         crate::map::enemies_row(card, assets, fonts, &ids(&st.enemies), None, PARCHMENT);
         style::pips(card, fonts, st.milestones.len(), reached, Some(reached));
         match st.milestones.get(reached) {

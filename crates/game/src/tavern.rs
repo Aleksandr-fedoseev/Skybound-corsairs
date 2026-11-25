@@ -219,7 +219,7 @@ fn build(
                 &[("doubloons", profile.doubloons), ("silver", profile.silver)],
             );
             style::title(root, fonts, "Таверна · найм героев", 56.0);
-            how_it_works(root, assets, fonts, cfg);
+            crate::help::corner(root, fonts, "tavern", 60.0, 12.0);
             chest_odds(root, assets, fonts, cfg);
             hire_buttons(
                 root,
@@ -235,69 +235,6 @@ fn build(
         });
 }
 
-/// Как работает найм — три строки с иконками.
-fn how_it_works(
-    root: &mut ChildSpawnerCommands,
-    assets: &AssetServer,
-    fonts: &Fonts,
-    cfg: &TavernData,
-) {
-    let copy_line = format!(
-        "Копия героя команды — шанс {}%, в найме ×10 — хотя бы одна",
-        (cfg.copy_chance * 100.0).round()
-    );
-    root.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(108),
-            left: px(10),
-            right: px(10),
-            padding: UiRect::axes(px(16), px(10)),
-            flex_direction: FlexDirection::Column,
-            row_gap: px(6),
-            ..default()
-        },
-        Skin(Look::Tile),
-    ))
-    .with_children(|panel| {
-        for (icon, line) in [
-            (
-                "doubloons",
-                "Найм — сундук вольного бойца: ресурсы или копия героя",
-            ),
-            ("star", copy_line.as_str()),
-            (
-                "charts",
-                "Новые герои не нанимаются — они приходят за главы",
-            ),
-        ] {
-            panel
-                .spawn(Node {
-                    column_gap: px(10),
-                    align_items: AlignItems::Center,
-                    ..default()
-                })
-                .with_children(|row| {
-                    let path = if icon == "star" {
-                        "ui/star.png".to_string()
-                    } else {
-                        format!("ui/icon_{icon}.png")
-                    };
-                    row.spawn((
-                        Node {
-                            width: px(26),
-                            height: px(26),
-                            flex_shrink: 0.0,
-                            ..default()
-                        },
-                        ImageNode::new(assets.load(path)),
-                    ));
-                    row.spawn(text(fonts, line, false, 14.0, PARCHMENT));
-                });
-        }
-    });
-}
-
 /// Что лежит в сундуке и с каким шансом.
 fn chest_odds(
     root: &mut ChildSpawnerCommands,
@@ -310,7 +247,7 @@ fn chest_odds(
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
-            top: px(236),
+            top: px(116),
             left: px(10),
             right: px(10),
             padding: UiRect::axes(px(16), px(10)),

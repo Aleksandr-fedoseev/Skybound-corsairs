@@ -20,7 +20,6 @@ use crate::view::Fonts;
 #[derive(Resource, Deserialize)]
 pub struct RuinsData {
     pub name: String,
-    pub about: String,
     /// Руины открываются, когда пройдено столько этапов.
     pub unlock_cleared: usize,
     pub base_level: u32,
@@ -359,7 +358,6 @@ pub fn section(
             row.spawn(style::heading(fonts, "до конца:", 13.0, MUTED));
             crate::power::need_chip(row, assets, fonts, power.0, power.1);
         });
-        card.spawn(text(fonts, data.about.clone(), false, 12.0, MUTED));
     });
     if cleared < data.unlock_cleared {
         tile(col).with_children(|card| {
