@@ -25,7 +25,7 @@ for stage, levels in zip(stages, res["stages"]):
 dump(DATA / "stages.json", stages)
 
 events = json.loads((DATA / "events.json").read_text())
-for key, part in (("blockade", "waves"), ("regatta", "legs")):
+for key, part in (("regatta", "legs"),):
     for fight, levels in zip(events[key][part], res[key]):
         for pair, level in zip(fight["enemies"], levels):
             pair[1] = level

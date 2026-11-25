@@ -462,3 +462,57 @@ pub fn meter(
             bar.spawn(heading(fonts, label, 14.0, Color::WHITE));
         });
 }
+
+/// Баннер раздела Активностей: иллюстрация слева, крупная главная цифра и плашки справа.
+pub fn banner(
+    col: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
+    fonts: &Fonts,
+    art: &str,
+    big: impl Into<String>,
+    chips: &[(String, Color)],
+) {
+    col.spawn((
+        Node {
+            height: px(150),
+            padding: UiRect::axes(px(12), px(6)),
+            column_gap: px(14),
+            align_items: AlignItems::Center,
+            border: UiRect::all(px(2)),
+            border_radius: BorderRadius::all(px(14)),
+            ..default()
+        },
+        Skin(Look::Tile),
+    ))
+    .with_children(|b| {
+        b.spawn((
+            Node {
+                width: px(146),
+                height: px(138),
+                flex_shrink: 0.0,
+                ..default()
+            },
+            ImageNode::new(assets.load(format!("ui/act_{art}.png"))),
+        ));
+        b.spawn(Node {
+            flex_grow: 1.0,
+            flex_direction: FlexDirection::Column,
+            row_gap: px(10),
+            ..default()
+        })
+        .with_children(|c| {
+            c.spawn(heading(fonts, big, 34.0, Color::srgb(1.0, 0.82, 0.4)));
+            c.spawn(Node {
+                column_gap: px(6),
+                row_gap: px(6),
+                flex_wrap: FlexWrap::Wrap,
+                ..default()
+            })
+            .with_children(|row| {
+                for (label, color) in chips {
+                    pill(row, fonts, label.clone(), *color);
+                }
+            });
+        });
+    });
+}

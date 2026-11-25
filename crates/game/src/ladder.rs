@@ -237,7 +237,7 @@ fn tab_button(
 }
 
 /// Строка: место (первые три — медалью), имя, число с иконкой.
-fn line(
+pub fn line(
     parent: &mut ChildSpawnerCommands,
     assets: &AssetServer,
     fonts: &Fonts,

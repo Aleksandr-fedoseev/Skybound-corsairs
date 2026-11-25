@@ -7,6 +7,8 @@
 //! на 1–2 уровня больше, и здесь он это покажет.
 //! `-- [число боёв] abyss` — только Бездна, этажи 1–60 (таблица для tools/economy.py).
 //! `-- [число боёв] ruins` — спуск в Руины подряд с переносом здоровья при 10, 15 и 20 этапах.
+//! `-- [число боёв] blockade` — оборона Блокады подряд: перенос здоровья, флагманы, ветер,
+//!   усиления каждые две волны (берётся лучшее из трёх по порядку `BOON_ORDER`).
 //! `-- [число боёв] arena` — доля побед отряда над соперниками Арены своего уровня ±.
 
 use std::path::Path;
@@ -74,6 +76,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mode = std::env::args().nth(2);
     if mode.as_deref() == Some("arena") {
         return arena(&data, &read("arena.json")?, runs);
+    }
+    if mode.as_deref() == Some("blockade") {
+        return blockade(&data, &read("events.json")?["blockade"], runs);
     }
     if mode.as_deref() == Some("ruins") {
         return ruins(&data, &read("ruins.json")?, runs);
@@ -238,6 +243,159 @@ fn ruins(data: &GameData, ruins: &Value, runs: u64) -> Result<(), Box<dyn std::e
                 depth_sum as f64 / runs as f64,
                 cleared_all * 100 / runs,
                 floors_line.join("")
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Каким усилениям отдаёт предпочтение «игрок» симуляции Блокады.
+const BOON_ORDER: [&str; 10] = [
+    "hull", "blades", "mend", "revive", "medic", "tactics", "fury", "sails", "powder", "plunder",
+];
+
+/// Блокада — как в crates/game/src/blockade.rs: уровень от прогресса, флагманы, ветер, усиления.
+fn blockade(data: &GameData, b: &Value, runs: u64) -> Result<(), Box<dyn std::error::Error>> {
+    let f = |v: &Value, k: &str| v[k].as_f64().unwrap_or(0.0) as f32;
+    let waves: Vec<&Value> = b["waves"].as_array().into_iter().flatten().collect();
+    let boons: Vec<&Value> = b["boons"].as_array().into_iter().flatten().collect();
+    let every = b["boon_every"].as_u64().unwrap_or(2) as usize;
+    let choices = b["choices"].as_u64().unwrap_or(3) as usize;
+    for cleared in [10usize, 15, 20] {
+        let rec = data
+            .stages
+            .get(cleared)
+            .or(data.stages.last())
+            .map_or(1, |s| s.recommended_level);
+        let base = (f(b, "level_base") + f(b, "level_per_stage") * cleared as f32).round() as i64;
+        println!("Блокада при {cleared} пройденных этапах (рек. ур. {rec}):");
+        for level in rec.saturating_sub(3).max(1)..=rec + 6 {
+            let (mut depth_sum, mut all) = (0usize, 0u64);
+            let mut reached = vec![0u32; waves.len()];
+            for seed in 0..runs {
+                let mut rng = battle_core::Rng::new(seed * 977 + level as u64);
+                let mut taken: Vec<&Value> = Vec::new();
+                let mut hp: Vec<f32> = vec![1.0; TEAM.len()];
+                let mut depth = 0;
+                for (i, w) in waves.iter().enumerate() {
+                    let sum = |k: &str| taken.iter().map(|t| f(t, k)).sum::<f32>();
+                    let energy = taken
+                        .iter()
+                        .map(|t| t["energy"].as_u64().unwrap_or(1))
+                        .max()
+                        .unwrap_or(1);
+                    let alive: Vec<usize> = (0..TEAM.len()).filter(|&k| hp[k] > 0.0).collect();
+                    let team: Vec<UnitDef> = alive
+                        .iter()
+                        .map(|&k| {
+                            let mut u = data.hero(TEAM[k]).expect("герой").to_unit(level);
+                            let up = |v: u32, x: f32| (v as f32 * (1.0 + x)).round() as u32;
+                            u.stats.max_hp = up(u.stats.max_hp, sum("hp"));
+                            u.stats.atk = up(u.stats.atk, sum("atk"));
+                            u.stats.spd = up(u.stats.spd, sum("spd"));
+                            for a in [Some(&mut u.basic), u.skill.as_mut(), u.ultimate.as_mut()]
+                                .into_iter()
+                                .flatten()
+                            {
+                                for e in &mut a.effects {
+                                    if let battle_core::Effect::Heal { percent } = &mut e.effect {
+                                        *percent *= 1.0 + sum("heal");
+                                    }
+                                }
+                            }
+                            if let Some(sk) = u.skill.as_mut() {
+                                for e in &mut sk.effects {
+                                    if let battle_core::Effect::Damage { multiplier } =
+                                        &mut e.effect
+                                    {
+                                        *multiplier *= 1.0 + sum("skill");
+                                    }
+                                }
+                            }
+                            u
+                        })
+                        .collect();
+                    let level_w = (base + w["add"].as_i64().unwrap_or(0)).max(1) as u32;
+                    let foes: Vec<UnitDef> = w["enemies"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|e| Some(data.enemy(e.as_str()?)?.to_unit(level_w)))
+                        .collect();
+                    let wind = w["wind"].as_str().and_then(|x| {
+                        serde_json::from_value::<Element>(Value::String(x.into())).ok()
+                    });
+                    let broadside = (120.0 * (1.0 + sum("broadside"))).round() as u32;
+                    let mut battle = Battle::new(
+                        team.clone(),
+                        foes,
+                        Ship {
+                            broadside_power: broadside,
+                        },
+                        seed * 31 + i as u64,
+                    );
+                    battle.set_wind(wind);
+                    battle.set_energy_rate(energy as u32);
+                    battle.charge_broadside();
+                    for (n, &k) in alive.iter().enumerate() {
+                        let max = team[n].stats.max_hp as f32;
+                        battle.set_hp(battle_core::UnitId(n), (max * hp[k]).round() as u32);
+                    }
+                    let mut steps = 0;
+                    while battle.outcome().is_none() && steps < 3000 {
+                        battle.auto_step();
+                        steps += 1;
+                    }
+                    if battle.outcome() != Some(Outcome::Victory) {
+                        break;
+                    }
+                    for (n, &k) in alive.iter().enumerate() {
+                        hp[k] = battle.unit(battle_core::UnitId(n)).hp as f32
+                            / team[n].stats.max_hp as f32;
+                    }
+                    reached[i] += 1;
+                    depth = i + 1;
+                    // Усиление: из случайных `choices` невзятых — первое по BOON_ORDER.
+                    if (i + 1) % every == 0 && i + 1 < waves.len() {
+                        let mut pool: Vec<&Value> = boons
+                            .iter()
+                            .copied()
+                            .filter(|x| !taken.iter().any(|t| t["id"] == x["id"]))
+                            .collect();
+                        let mut offer = Vec::new();
+                        while offer.len() < choices && !pool.is_empty() {
+                            let j = (rng.next_u64() % pool.len() as u64) as usize;
+                            offer.push(pool.remove(j));
+                        }
+                        if let Some(pick) = BOON_ORDER
+                            .iter()
+                            .find_map(|id| offer.iter().find(|o| o["id"].as_str() == Some(id)))
+                        {
+                            for h in &mut hp {
+                                if *h > 0.0 {
+                                    *h = (*h + f(pick, "mend")).min(1.0);
+                                } else {
+                                    *h = f(pick, "revive");
+                                }
+                            }
+                            taken.push(pick);
+                        }
+                    }
+                }
+                depth_sum += depth;
+                if depth == waves.len() {
+                    all += 1;
+                }
+            }
+            let line: Vec<String> = reached
+                .iter()
+                .map(|r| format!("{:>3}", r * 100 / runs as u32))
+                .collect();
+            println!(
+                "  ур. {level:>2}: глубина {:>4.1}, до конца {:>3}% · по волнам % {}",
+                depth_sum as f64 / runs as f64,
+                all * 100 / runs,
+                line.join("")
             );
         }
     }

@@ -335,8 +335,12 @@ impl Roster {
     }
 
     pub fn team_members(&self) -> Vec<Member> {
-        self.team
-            .iter()
+        self.members(&self.team)
+    }
+
+    /// Герои по списку — как они выйдут в бой (без бонусов Кают и снаряжения).
+    pub fn members(&self, ids: &[String]) -> Vec<Member> {
+        ids.iter()
             .map(|id| Member {
                 id: id.clone(),
                 level: self.level(id),

@@ -248,143 +248,265 @@
   },
   "blockade": {
     "name": "Имперская блокада",
+    "level_base": 2,
+    "level_per_stage": 0.65,
+    "boon_every": 2,
+    "choices": 3,
     "waves": [
       {
         "enemies": [
-          [
-            "imperial_marine",
-            5
-          ],
-          [
-            "imperial_gunner",
-            5
-          ],
-          [
-            "imperial_marine",
-            5
-          ]
+          "imperial_marine",
+          "imperial_gunner",
+          "imperial_marine"
         ],
+        "add": 3,
         "reward": {
-          "details": 20,
+          "silver": 100
+        }
+      },
+      {
+        "enemies": [
+          "imperial_marine",
+          "imperial_gunner",
+          "imperial_gunner"
+        ],
+        "add": 3,
+        "reward": {
+          "details": 15
+        }
+      },
+      {
+        "enemies": [
+          "storm_ray",
+          "storm_ray",
+          "imperial_marine",
+          "storm_ray"
+        ],
+        "add": 2,
+        "reward": {
+          "supplies": 12
+        },
+        "wind": "lightning"
+      },
+      {
+        "enemies": [
+          "imperial_marine",
+          "imperial_gunner",
+          "imperial_marine",
+          "imperial_gunner"
+        ],
+        "add": 3,
+        "reward": {
+          "silver": 150
+        }
+      },
+      {
+        "enemies": [
+          "imperial_marine",
+          "storm_leviathan",
+          "imperial_marine"
+        ],
+        "add": -5,
+        "reward": {
+          "doubloons": 30,
+          "storm_cores": 1
+        },
+        "flagship": "Флагман «Гром»"
+      },
+      {
+        "enemies": [
+          "aeromancer",
+          "imperial_marine",
+          "aeromancer",
+          "imperial_gunner"
+        ],
+        "add": 4,
+        "reward": {
+          "details": 25
+        },
+        "wind": "wind"
+      },
+      {
+        "enemies": [
+          "mist_hound",
+          "mist_hound",
+          "imperial_gunner",
+          "imperial_gunner"
+        ],
+        "add": 4,
+        "reward": {
           "supplies": 12
         }
       },
       {
         "enemies": [
-          [
-            "imperial_marine",
-            7
-          ],
-          [
-            "imperial_gunner",
-            7
-          ],
-          [
-            "imperial_gunner",
-            7
-          ]
+          "imperial_marine",
+          "imperial_gunner",
+          "imperial_gunner",
+          "imperial_marine",
+          "imperial_gunner"
         ],
+        "add": 3,
         "reward": {
           "silver": 200
         }
       },
       {
         "enemies": [
-          [
-            "imperial_marine",
-            9
-          ],
-          [
-            "imperial_gunner",
-            9
-          ],
-          [
-            "imperial_marine",
-            9
-          ],
-          [
-            "imperial_gunner",
-            9
-          ]
+          "aeromancer",
+          "mist_hound",
+          "aeromancer",
+          "mist_hound"
         ],
+        "add": 4,
         "reward": {
-          "storm_cores": 1,
-          "supplies": 12
+          "charts": 1
         }
       },
       {
         "enemies": [
-          [
-            "imperial_marine",
-            11
-          ],
-          [
-            "imperial_gunner",
-            11
-          ],
-          [
-            "imperial_marine",
-            11
-          ],
-          [
-            "imperial_gunner",
-            11
-          ]
+          "mist_hound",
+          "archive_guardian",
+          "mist_hound"
         ],
+        "add": -3,
         "reward": {
-          "details": 40
+          "doubloons": 40,
+          "storm_cores": 1
+        },
+        "flagship": "Флагман «Архивариус»"
+      },
+      {
+        "enemies": [
+          "imperial_marine",
+          "imperial_marine",
+          "imperial_gunner",
+          "imperial_gunner",
+          "aeromancer"
+        ],
+        "add": 5,
+        "reward": {
+          "details": 35
+        },
+        "wind": "steel"
+      },
+      {
+        "enemies": [
+          "mist_hound",
+          "storm_ray",
+          "mist_hound",
+          "storm_ray",
+          "imperial_gunner"
+        ],
+        "add": 4,
+        "reward": {
+          "supplies": 24
         }
       },
       {
         "enemies": [
-          [
-            "imperial_gunner",
-            12
-          ],
-          [
-            "imperial_marine",
-            12
-          ],
-          [
-            "imperial_gunner",
-            12
-          ],
-          [
-            "imperial_marine",
-            12
-          ]
+          "aeromancer",
+          "aeromancer",
+          "imperial_gunner",
+          "imperial_gunner",
+          "imperial_marine"
         ],
+        "add": 5,
         "reward": {
-          "doubloons": 40
+          "silver": 300,
+          "charts": 1
         }
       },
       {
         "enemies": [
-          [
-            "imperial_marine",
-            12
-          ],
-          [
-            "imperial_gunner",
-            12
-          ],
-          [
-            "imperial_marine",
-            12
-          ],
-          [
-            "imperial_gunner",
-            12
-          ],
-          [
-            "imperial_gunner",
-            12
-          ]
+          "mist_hound",
+          "mist_hound",
+          "mist_hound",
+          "imperial_marine",
+          "imperial_gunner"
         ],
+        "add": 6,
         "reward": {
+          "details": 45
+        },
+        "wind": "mist"
+      },
+      {
+        "enemies": [
+          "storm_ray",
+          "storm_leviathan",
+          "archive_guardian",
+          "storm_ray"
+        ],
+        "add": -2,
+        "reward": {
+          "doubloons": 80,
           "storm_cores": 2,
-          "doubloons": 40
-        }
+          "figureheads": 1
+        },
+        "flagship": "Адмиральский флагман"
+      }
+    ],
+    "boons": [
+      {
+        "id": "hull",
+        "name": "Крепкие борта",
+        "about": "здоровье героев +20%",
+        "hp": 0.2
+      },
+      {
+        "id": "blades",
+        "name": "Острые клинки",
+        "about": "атака героев +15%",
+        "atk": 0.15
+      },
+      {
+        "id": "sails",
+        "name": "Свежий ветер",
+        "about": "скорость героев +10%",
+        "spd": 0.1
+      },
+      {
+        "id": "medic",
+        "name": "Лекарский сундук",
+        "about": "лечение сильнее на 40%",
+        "heal": 0.4
+      },
+      {
+        "id": "tactics",
+        "name": "Морская тактика",
+        "about": "умения бьют на 25% сильнее",
+        "skill": 0.25
+      },
+      {
+        "id": "fury",
+        "name": "Боевой задор",
+        "about": "ульты копятся вдвое быстрее",
+        "energy": 2
+      },
+      {
+        "id": "powder",
+        "name": "Двойной порох",
+        "about": "залп корабля сильнее на 50%",
+        "broadside": 0.5
+      },
+      {
+        "id": "mend",
+        "name": "Корабельный врач",
+        "about": "сразу: выжившие лечатся на 40%",
+        "mend": 0.4
+      },
+      {
+        "id": "revive",
+        "name": "Второе дыхание",
+        "about": "сразу: павшие встают с 50% здоровья",
+        "revive": 0.5
+      },
+      {
+        "id": "plunder",
+        "name": "Трофейный трюм",
+        "about": "награда за волны ×1.5 до конца обороны",
+        "plunder": 0.5
       }
     ]
   }

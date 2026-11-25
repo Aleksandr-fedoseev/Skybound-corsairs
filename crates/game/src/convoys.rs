@@ -69,6 +69,8 @@ impl ConvoyData {
             energy_rate: 1,
             ally_hp: Vec::new(),
             charged: false,
+            boost: Default::default(),
+            wind: None,
         }
     }
 }

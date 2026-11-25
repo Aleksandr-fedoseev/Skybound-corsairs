@@ -8,6 +8,7 @@ mod arena;
 mod audio;
 mod battle_screen;
 mod battlefield;
+mod blockade;
 mod cabins;
 mod contracts;
 mod convoys;

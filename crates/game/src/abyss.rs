@@ -130,6 +130,8 @@ impl AbyssData {
             energy_rate: 1,
             ally_hp: Vec::new(),
             charged: false,
+            boost: Default::default(),
+            wind: None,
         }
     }
 }
@@ -203,6 +205,7 @@ struct View<'w> {
     ),
     progress: Res<'w, crate::menu::Progress>,
     power: crate::power::Power<'w>,
+    ladder: Res<'w, crate::ladder::LadderData>,
 }
 
 fn spawn_activities(mut commands: Commands, view: View) {
@@ -461,6 +464,14 @@ fn ruins_need(view: &View) -> u32 {
     view.power.recommended(rec + 5)
 }
 
+/// Таблица Арены этой недели — для мини-таблицы на странице Арены.
+fn arena_ladder(view: &View) -> Vec<crate::ladder::Row> {
+    let mut a = (*view.arena.1).clone();
+    a.roll(&view.arena.0, crate::cabins::today());
+    let progress = 1.0 - crate::events::week_left() as f32 / (7.0 * 86_400.0);
+    view.ladder.arena(a.week, progress, a.rating)
+}
+
 fn ruins_status(view: &View) -> String {
     let (data, ruins) = (&*view.ruins.0, &*view.ruins.1);
     if view.progress.cleared < data.unlock_cleared {
@@ -591,6 +602,7 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
                 &view.week_events,
                 &view.profile,
                 &owned,
+                (view.progress.cleared, &view.roster.team),
             );
         }
         Page::Abyss => abyss_card(col, &view.assets, fonts, data, floor),
@@ -617,6 +629,7 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
                 crate::arena::team_level(&view.roster),
                 view.progress.cleared,
                 (&screen.data, view.power.team()),
+                &arena_ladder(view),
             );
         }
         Page::Expeditions => crate::expeditions::section(
@@ -628,6 +641,7 @@ fn section_page(root: &mut ChildSpawnerCommands, view: &View, page: Page, floor:
             boats,
             screen,
             now(),
+            &view.roster,
         ),
     });
 }
@@ -640,43 +654,14 @@ fn abyss_card(
     floor: u32,
 ) {
     let ids: Vec<String> = data.enemies(floor).into_iter().map(|(id, _)| id).collect();
-    col.spawn((
-        Node {
-            padding: UiRect::axes(px(16), px(14)),
-            flex_direction: FlexDirection::Column,
-            row_gap: px(10),
-            border: UiRect::all(px(2)),
-            border_radius: BorderRadius::all(px(14)),
-            ..default()
-        },
-        Skin(Look::Tile),
-    ))
-    .with_children(|card| {
-        card.spawn(Node {
-            column_gap: px(8),
-            align_items: AlignItems::Center,
-            ..default()
-        })
-        .with_children(|row| {
-            row.spawn(style::heading(fonts, format!("Этаж {floor}"), 30.0, GOLD));
-            if data.is_boss(floor) {
-                style::pill(row, fonts, "БОСС", Color::srgb(0.62, 0.2, 0.16));
-            }
-        });
+    let mut chips = Vec::new();
+    if data.is_boss(floor) {
+        chips.push(("БОСС".to_string(), Color::srgb(0.62, 0.2, 0.16)));
+    }
+    style::banner(col, assets, fonts, "abyss", format!("Этаж {floor}"), &chips);
+    tile(col).with_children(|card| {
         crate::map::enemies_row(card, assets, fonts, &ids, None, PARCHMENT);
-        let r = data.reward(floor);
-        let items: Vec<(&str, u32)> = [
-            ("silver", r.silver),
-            ("journals", r.journals),
-            ("details", r.details),
-            ("charts", r.charts),
-            ("doubloons", r.doubloons),
-            ("figureheads", r.figureheads),
-        ]
-        .into_iter()
-        .filter(|(_, n)| *n > 0)
-        .collect();
-        style::reward_row(card, assets, fonts, "за этаж", &items);
+        style::reward_row(card, assets, fonts, "за этаж", &floor_items(data, floor));
         let mut go = card.spawn((
             Node {
                 height: px(54),
@@ -704,6 +689,74 @@ fn abyss_card(
             },
         );
     });
+    // Впереди: следующие этажи снизу вверх — номер, босс, награда.
+    tile(col).with_children(|card| {
+        card.spawn(style::heading(fonts, "Впереди", 18.0, PARCHMENT));
+        for f in floor + 1..=floor + 7 {
+            card.spawn((
+                Node {
+                    height: px(42),
+                    padding: UiRect::horizontal(px(10)),
+                    column_gap: px(10),
+                    align_items: AlignItems::Center,
+                    border_radius: BorderRadius::all(px(10)),
+                    ..default()
+                },
+                BackgroundColor(if data.is_boss(f) {
+                    Color::srgba(0.62, 0.2, 0.16, 0.35)
+                } else {
+                    Color::srgba(1.0, 1.0, 1.0, 0.05)
+                }),
+            ))
+            .with_children(|row| {
+                row.spawn((
+                    Node {
+                        width: px(96),
+                        ..default()
+                    },
+                    style::heading(fonts, format!("Этаж {f}"), 17.0, GOLD),
+                ));
+                if data.is_boss(f) {
+                    style::pill(row, fonts, "БОСС", Color::srgb(0.62, 0.2, 0.16));
+                }
+                row.spawn(Node {
+                    flex_grow: 1.0,
+                    ..default()
+                });
+                style::costs(row, assets, fonts, &floor_items(data, f), 14.0, PARCHMENT);
+            });
+        }
+    });
+}
+
+/// Награда этажа иконками.
+fn floor_items(data: &AbyssData, floor: u32) -> Vec<(&'static str, u32)> {
+    let r = data.reward(floor);
+    [
+        ("silver", r.silver),
+        ("journals", r.journals),
+        ("details", r.details),
+        ("charts", r.charts),
+        ("doubloons", r.doubloons),
+        ("figureheads", r.figureheads),
+    ]
+    .into_iter()
+    .filter(|(_, n)| *n > 0)
+    .collect()
+}
+
+fn tile<'a>(col: &'a mut ChildSpawnerCommands) -> EntityCommands<'a> {
+    col.spawn((
+        Node {
+            padding: UiRect::axes(px(16), px(14)),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(10),
+            border: UiRect::all(px(2)),
+            border_radius: BorderRadius::all(px(14)),
+            ..default()
+        },
+        Skin(Look::Tile),
+    ))
 }
 
 #[cfg(test)]

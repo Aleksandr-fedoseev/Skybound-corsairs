@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::Screen;
 use crate::battle_screen::{BattleScreen, CustomFight, FightKind};
 use crate::events::{Bundle, days_left, week, week_left};
-use crate::menu::{GOLD, MUTED, PARCHMENT, Voyage, pressable, text};
+use crate::menu::{MUTED, PARCHMENT, Voyage, pressable, text};
 use crate::story::VoyageRequest;
 use crate::style::{self, Look, Skin};
 use crate::summary::{Summary, Tone};
@@ -174,6 +174,8 @@ impl RuinsData {
             energy_rate: 1,
             ally_hp: healed,
             charged: room.charged,
+            boost: Default::default(),
+            wind: None,
         }
     }
 }
@@ -325,21 +327,18 @@ pub fn section(
     let w = week();
     let best = if ruins.week == w { ruins.best } else { 0 };
     let run = ruins.run.as_ref().filter(|_| ruins.week == w);
+    style::banner(
+        col,
+        assets,
+        fonts,
+        "ruins",
+        format!("Глубина {best} из {}", data.depth()),
+        &[(
+            format!("новые залы через {}", days_left(week_left())),
+            Color::srgb(0.45, 0.18, 0.14),
+        )],
+    );
     tile(col).with_children(|card| {
-        card.spawn(Node {
-            justify_content: JustifyContent::SpaceBetween,
-            align_items: AlignItems::Center,
-            ..default()
-        })
-        .with_children(|row| {
-            row.spawn(style::heading(fonts, "Глубина недели", 17.0, GOLD));
-            style::pill(
-                row,
-                fonts,
-                format!("новые залы через {}", days_left(week_left())),
-                Color::srgb(0.45, 0.18, 0.14),
-            );
-        });
         // Этажи кружками: взятые — золотые, текущий — светлый ободок.
         let current = run.map_or(best, |r| r.floor - 1) as usize;
         style::pips(

@@ -27,7 +27,7 @@ pub struct EventData {
     pub storm: StormData,
     pub fair: FairData,
     pub regatta: RegattaData,
-    pub blockade: BlockadeData,
+    pub blockade: crate::blockade::BlockadeData,
     pub tailwind: Tailwind,
     /// Тестовая клавиша E: показать другой ивент цикла.
     #[serde(skip)]
@@ -110,6 +110,24 @@ impl Bundle {
         .collect()
     }
 
+    /// Награда, умноженная на дробное `k` (с округлением): «×1.5 до конца обороны».
+    pub fn scaled(&self, k: f32) -> Self {
+        let m = |n: u32| (n as f32 * k).round() as u32;
+        Self {
+            silver: m(self.silver),
+            planks: m(self.planks),
+            ether: m(self.ether),
+            journals: m(self.journals),
+            details: m(self.details),
+            doubloons: m(self.doubloons),
+            charts: m(self.charts),
+            storm_cores: m(self.storm_cores),
+            supplies: m(self.supplies),
+            figureheads: m(self.figureheads),
+            copies: self.copies,
+        }
+    }
+
     /// Та же награда, умноженная на `k` (двойная добыча).
     pub fn times(&self, k: u32) -> Self {
         Self {
@@ -177,12 +195,6 @@ impl Bundle {
 }
 
 #[derive(Deserialize)]
-pub struct BlockadeData {
-    pub name: String,
-    pub waves: Vec<Leg>,
-}
-
-#[derive(Deserialize)]
 pub struct RegattaData {
     pub name: String,
     pub energy_rate: u32,
@@ -239,7 +251,7 @@ pub struct Tailwind {
 }
 
 impl EventData {
-    fn bundled() -> Self {
+    pub(crate) fn bundled() -> Self {
         serde_json::from_str(include_str!("../../../data/events.json"))
             .expect("data/events.json корректен")
     }
@@ -261,25 +273,6 @@ impl EventData {
         }
     }
 
-    pub fn blockade_fight(&self, wave: usize, hp: Vec<(String, f32)>) -> CustomFight {
-        CustomFight {
-            title: format!(
-                "{} · волна {} из {}",
-                self.blockade.name,
-                wave + 1,
-                self.blockade.waves.len()
-            ),
-            kind: FightKind::Blockade(wave),
-            enemies: self.blockade.waves[wave].enemies.clone(),
-            silver: 0,
-            planks: 0,
-            journals: 0,
-            energy_rate: 1,
-            ally_hp: hp,
-            charged: true,
-        }
-    }
-
     pub fn regatta_fight(&self, leg: usize) -> CustomFight {
         CustomFight {
             title: format!(
@@ -296,6 +289,8 @@ impl EventData {
             energy_rate: self.regatta.energy_rate,
             ally_hp: Vec::new(),
             charged: false,
+            boost: Default::default(),
+            wind: None,
         }
     }
 
@@ -319,6 +314,8 @@ impl EventData {
             energy_rate: 1,
             ally_hp: Vec::new(),
             charged: false,
+            boost: Default::default(),
+            wind: None,
         }
     }
 }
@@ -409,17 +406,11 @@ pub struct WeekEvents {
     pub blockade_best: usize,
     /// Блокада: идущая оборона — волна и здоровье героев.
     #[serde(default)]
-    pub blockade_run: Option<BlockadeRun>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct BlockadeRun {
-    pub wave: usize,
-    pub hp: Vec<(String, f32)>,
+    pub blockade_run: Option<crate::blockade::BlockadeRun>,
 }
 
 impl WeekEvents {
-    fn roll_week(&mut self) {
+    pub(crate) fn roll_week(&mut self) {
         let w = week();
         if self.week != w {
             *self = Self {
@@ -439,50 +430,6 @@ impl WeekEvents {
 
     fn next_leg(&self) -> usize {
         if self.week == week() { self.leg } else { 0 }
-    }
-
-    fn run(&self) -> Option<&BlockadeRun> {
-        if self.week == week() {
-            self.blockade_run.as_ref()
-        } else {
-            None
-        }
-    }
-
-    /// Блокада: волна отбита — дальше с тем здоровьем, что осталось; награда за новую волну.
-    pub fn blockade_win(
-        &mut self,
-        wave: usize,
-        hp: Vec<(String, f32)>,
-        data: &BlockadeData,
-        profile: &mut Profile,
-    ) -> Summary {
-        self.roll_week();
-        let mut sum = Summary::new(format!("Волна {} отбита!", wave + 1)).team(&hp);
-        if wave + 1 > self.blockade_best {
-            self.blockade_best = wave + 1;
-            let reward = data.waves[wave].reward;
-            reward.put(profile);
-            sum = sum.bundle(&reward);
-        }
-        if wave + 1 >= data.waves.len() {
-            self.blockade_run = None;
-            sum = sum.chip("Блокада снята!", Tone::Gold);
-        } else {
-            self.blockade_run = Some(BlockadeRun { wave: wave + 1, hp });
-            sum = sum.chip(format!("дальше: волна {}", wave + 2), Tone::Info);
-        }
-        sum
-    }
-
-    /// Блокада: отряд пал — оборона окончена.
-    pub fn blockade_lose(&mut self, wave: usize) -> Summary {
-        self.roll_week();
-        self.blockade_run = None;
-        Summary::new(format!("Блокада прорвана на волне {}", wave + 1)).chip(
-            format!("лучший за неделю: {} волн", self.blockade_best),
-            Tone::Info,
-        )
     }
 
     /// Регата: победа на текущем этапе — дальше по трассе и награда.
@@ -535,23 +482,43 @@ pub fn event_card(
     week_events: &WeekEvents,
     profile: &Profile,
     owned: &[(String, String)],
+    progress: (usize, &[String]),
 ) {
     match data.current() {
         "storm" => storm_card(col, assets, fonts, data, storm),
         "fair" => fair_card(col, assets, fonts, data, week_events, profile, owned),
         "regatta" => regatta_card(col, assets, fonts, data, week_events),
-        "blockade" => blockade_card(col, assets, fonts, data, week_events, owned),
+        "blockade" => crate::blockade::card(
+            col,
+            assets,
+            fonts,
+            &data.blockade,
+            week_events,
+            progress.0,
+            progress.1,
+        ),
         _ => {}
     }
 }
-
-/// Рамка ивента: имя и плашка «осталось 5д 0ч» (описание — в справке «?»).
+/// Ивент: баннер с главной цифрой и «осталось …», под ним — карточка с содержимым.
 fn event_frame<'a>(
     col: &'a mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &Fonts,
-    name: &str,
+    big: String,
 ) -> EntityCommands<'a> {
-    let mut card = col.spawn((
+    style::banner(
+        col,
+        assets,
+        fonts,
+        "event",
+        big,
+        &[(
+            format!("осталось {}", days_left(week_left())),
+            Color::srgb(0.45, 0.18, 0.14),
+        )],
+    );
+    col.spawn((
         Node {
             padding: UiRect::axes(px(16), px(14)),
             flex_direction: FlexDirection::Column,
@@ -561,25 +528,7 @@ fn event_frame<'a>(
             ..default()
         },
         Skin(Look::Tile),
-    ));
-    card.with_children(|c| {
-        c.spawn(Node {
-            justify_content: JustifyContent::SpaceBetween,
-            align_items: AlignItems::Center,
-            column_gap: px(8),
-            ..default()
-        })
-        .with_children(|row| {
-            row.spawn(style::heading(fonts, name, 21.0, PARCHMENT));
-            style::pill(
-                row,
-                fonts,
-                format!("осталось {}", days_left(week_left())),
-                Color::srgb(0.45, 0.18, 0.14),
-            );
-        });
-    });
-    card
+    ))
 }
 
 /// Широкая кнопка ивента.
@@ -619,7 +568,7 @@ fn fair_card(
     owned: &[(String, String)],
 ) {
     let fair = &data.fair;
-    event_frame(col, fonts, &fair.name).with_children(|card| {
+    event_frame(col, assets, fonts, "Обмены недели".to_string()).with_children(|card| {
         for offer in &fair.offers {
             let left = offer.limit.saturating_sub(week_events.bought(&offer.id));
             let can = left > 0 && offer.give.affordable(profile);
@@ -745,154 +694,6 @@ fn trade_act(
     dirty.0 = true;
 }
 
-fn blockade_card(
-    col: &mut ChildSpawnerCommands,
-    assets: &AssetServer,
-    fonts: &Fonts,
-    data: &EventData,
-    week_events: &WeekEvents,
-    owned: &[(String, String)],
-) {
-    let b = &data.blockade;
-    let best = if week_events.week == week() {
-        week_events.blockade_best
-    } else {
-        0
-    };
-    let run = week_events.run().cloned();
-    let _ = owned;
-    event_frame(col, fonts, &b.name).with_children(|card| {
-        let wave = run.as_ref().map_or(best, |r| r.wave);
-        style::pips(card, fonts, b.waves.len(), best, Some(wave));
-        if let Some(r) = &run {
-            crate::ruins::team_hp(card, assets, fonts, &r.hp);
-        }
-        if let Some(w) = b.waves.get(wave) {
-            card.spawn(Node {
-                column_gap: px(10),
-                align_items: AlignItems::Center,
-                ..default()
-            })
-            .with_children(|row| {
-                row.spawn(style::heading(
-                    fonts,
-                    format!("Волна {}", wave + 1),
-                    16.0,
-                    GOLD,
-                ));
-                crate::map::enemies_row(row, assets, fonts, &ids(&w.enemies), None, PARCHMENT);
-            });
-            if wave >= best {
-                style::reward_row(card, assets, fonts, "за волну", &w.reward.items());
-            } else {
-                style::pill(
-                    card,
-                    fonts,
-                    "награда за эту волну уже получена",
-                    Color::srgb(0.24, 0.2, 0.3),
-                );
-            }
-        } else {
-            style::pill(
-                card,
-                fonts,
-                "Блокада снята — все волны отбиты!",
-                Color::srgb(0.7, 0.5, 0.12),
-            );
-        }
-        match &run {
-            Some(r) => {
-                card.spawn(Node {
-                    column_gap: px(8),
-                    ..default()
-                })
-                .with_children(|row| {
-                    blockade_button(
-                        row,
-                        fonts,
-                        &format!("В бой: волна {}", r.wave + 1),
-                        Some(r.clone()),
-                    );
-                    blockade_button(row, fonts, "Сдаться", None);
-                });
-            }
-            None => {
-                card.spawn(Node::default()).with_children(|row| {
-                    blockade_button(
-                        row,
-                        fonts,
-                        "Начать оборону",
-                        Some(BlockadeRun {
-                            wave: 0,
-                            hp: Vec::new(),
-                        }),
-                    );
-                });
-            }
-        }
-    });
-}
-
-/// Кнопка блокады: `Some` — в бой (пустое здоровье — новый заход всем отрядом), `None` — сдаться.
-fn blockade_button(
-    row: &mut ChildSpawnerCommands,
-    fonts: &Fonts,
-    label: &str,
-    run: Option<BlockadeRun>,
-) {
-    let fight = run.is_some();
-    let mut go = row.spawn((
-        Node {
-            flex_grow: 1.0,
-            height: px(46),
-            padding: UiRect::horizontal(px(12)),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: UiRect::all(px(2)),
-            border_radius: BorderRadius::all(px(12)),
-            ..default()
-        },
-        Skin(if fight { Look::Go } else { Look::Off }),
-    ));
-    go.with_child(text(fonts, label, true, 16.0, Color::WHITE));
-    pressable(&mut go);
-    go.observe(
-        move |_: On<PointerClick>,
-              data: Res<EventData>,
-              roster: Res<crate::crew::Roster>,
-              mut week_events: ResMut<WeekEvents>,
-              mut voyage: ResMut<Voyage>,
-              mut requests: MessageWriter<VoyageRequest>,
-              mut dirty: ResMut<crate::abyss::ActivitiesDirty>| {
-            week_events.roll_week();
-            match &run {
-                None => {
-                    week_events.blockade_run = None;
-                    dirty.0 = true;
-                }
-                Some(r) => {
-                    // Новый заход: весь отряд с полным здоровьем.
-                    let hp = if r.hp.is_empty() {
-                        roster.team.iter().map(|id| (id.clone(), 1.0)).collect()
-                    } else {
-                        r.hp.clone()
-                    };
-                    week_events.blockade_run = Some(BlockadeRun {
-                        wave: r.wave,
-                        hp: hp.clone(),
-                    });
-                    *voyage = Voyage {
-                        stage: None,
-                        custom: Some(data.blockade_fight(r.wave, hp)),
-                        from: Screen::Activities,
-                    };
-                    requests.write(VoyageRequest);
-                }
-            }
-        },
-    );
-}
-
 fn regatta_card(
     col: &mut ChildSpawnerCommands,
     assets: &AssetServer,
@@ -902,7 +703,17 @@ fn regatta_card(
 ) {
     let regatta = &data.regatta;
     let leg = week_events.next_leg();
-    event_frame(col, fonts, &regatta.name).with_children(|card| {
+    event_frame(
+        col,
+        assets,
+        fonts,
+        if leg < regatta.legs.len() {
+            format!("Этап {} из {}", leg + 1, regatta.legs.len())
+        } else {
+            "Финиш!".to_string()
+        },
+    )
+    .with_children(|card| {
         style::pips(card, fonts, regatta.legs.len(), leg, Some(leg));
         match regatta.legs.get(leg) {
             None => {
@@ -965,7 +776,7 @@ pub fn storm_card(
         0
     };
     let st = &data.storm;
-    event_frame(col, fonts, &st.name).with_children(|card| {
+    event_frame(col, assets, fonts, format!("Урон {best}")).with_children(|card| {
         crate::map::enemies_row(card, assets, fonts, &ids(&st.enemies), None, PARCHMENT);
         style::pips(card, fonts, st.milestones.len(), reached, Some(reached));
         match st.milestones.get(reached) {
@@ -1008,25 +819,6 @@ pub fn storm_card(
 mod tests {
     use super::*;
     use crate::menu::MenuData;
-
-    #[test]
-    fn blockade_carries_hp_and_rewards_new_waves_once() {
-        let data = EventData::bundled();
-        let mut w = WeekEvents::default();
-        let mut profile = Profile::new(&MenuData::bundled().start);
-        let hp = vec![("ren".to_string(), 0.5)];
-        w.blockade_win(0, hp.clone(), &data.blockade, &mut profile);
-        let run = w.blockade_run.clone().unwrap();
-        assert_eq!(run.wave, 1);
-        assert_eq!(run.hp, hp);
-        let details = profile.details;
-        // Повтор той же волны награды не даёт.
-        w.blockade_win(0, hp, &data.blockade, &mut profile);
-        assert_eq!(profile.details, details);
-        w.blockade_lose(1);
-        assert!(w.blockade_run.is_none());
-        assert_eq!(w.blockade_best, 1);
-    }
 
     #[test]
     fn milestones_granted_once_by_best_damage() {

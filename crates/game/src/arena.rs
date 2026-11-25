@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::Screen;
 use crate::battle_screen::{CustomFight, FightKind};
 use crate::events::{Bundle, days_left, week, week_left};
-use crate::menu::{GOLD, PARCHMENT, Profile, Toast, Voyage, pressable, text};
+use crate::menu::{PARCHMENT, Profile, Toast, Voyage, pressable, text};
 use crate::story::VoyageRequest;
 use crate::style::{self, Look, Skin};
 use crate::summary::{Summary, Tone};
@@ -107,6 +107,8 @@ impl ArenaData {
             energy_rate: 1,
             ally_hp: Vec::new(),
             charged: false,
+            boost: Default::default(),
+            wind: None,
         }
     }
 }
@@ -219,58 +221,37 @@ pub fn section(
     level: u32,
     cleared: usize,
     power: (&game_data::GameData, u32),
+    ladder: &[crate::ladder::Row],
 ) {
     let (game, mine) = power;
     // Показываем так, будто неделя и день уже перевёрнуты: сохраняемое меняют только кнопки.
     let mut view = arena.clone();
     view.roll(data, crate::cabins::today());
     let league = data.league(view.rating);
-    tile(col).with_children(|card| {
-        card.spawn(Node {
-            column_gap: px(10),
-            align_items: AlignItems::Center,
-            ..default()
-        })
-        .with_children(|row| {
-            let colors = [
-                Color::srgb(0.55, 0.36, 0.2),
-                Color::srgb(0.5, 0.52, 0.56),
-                Color::srgb(0.78, 0.58, 0.18),
-                Color::srgb(0.42, 0.3, 0.75),
-            ];
-            row.spawn((
-                Node {
-                    padding: UiRect::axes(px(14), px(6)),
-                    border: UiRect::all(px(2)),
-                    border_radius: BorderRadius::all(px(16)),
-                    ..default()
-                },
-                BackgroundColor(colors[league.min(colors.len() - 1)]),
-                BorderColor::all(Color::srgb(1.0, 0.9, 0.6)),
-            ))
-            .with_child(style::heading(
-                fonts,
-                data.leagues[league].name.clone(),
-                20.0,
-                Color::WHITE,
-            ));
-            row.spawn(style::heading(
-                fonts,
-                format!("{} очков", view.rating),
-                20.0,
-                GOLD,
-            ));
-            row.spawn(Node {
-                flex_grow: 1.0,
-                ..default()
-            });
-            style::pill(
-                row,
-                fonts,
+    let colors = [
+        Color::srgb(0.55, 0.36, 0.2),
+        Color::srgb(0.5, 0.52, 0.56),
+        Color::srgb(0.78, 0.58, 0.18),
+        Color::srgb(0.42, 0.3, 0.75),
+    ];
+    style::banner(
+        col,
+        assets,
+        fonts,
+        "arena",
+        format!("{} очков", view.rating),
+        &[
+            (
+                format!("лига {}", data.leagues[league].name),
+                colors[league.min(colors.len() - 1)],
+            ),
+            (
                 format!("итоги через {}", days_left(week_left())),
                 Color::srgb(0.45, 0.18, 0.14),
-            );
-        });
+            ),
+        ],
+    );
+    tile(col).with_children(|card| {
         // Полоса до следующей лиги.
         match data.leagues.get(league + 1) {
             Some(next) => {
@@ -436,6 +417,24 @@ pub fn section(
         });
     }
     refresh_button(col, fonts, data.refresh_silver);
+    // Таблица недели: тройка лидеров и место игрока.
+    tile(col).with_children(|card| {
+        card.spawn(style::heading(fonts, "Таблица недели", 18.0, PARCHMENT));
+        let me = ladder.iter().position(|r| r.me).unwrap_or(0);
+        for (i, r) in ladder.iter().enumerate().take(3) {
+            crate::ladder::line(card, assets, fonts, crate::ladder::Tab::Arena, i + 1, r);
+        }
+        if me >= 3 {
+            crate::ladder::line(
+                card,
+                assets,
+                fonts,
+                crate::ladder::Tab::Arena,
+                me + 1,
+                &ladder[me],
+            );
+        }
+    });
 }
 
 fn tile<'a>(col: &'a mut ChildSpawnerCommands) -> EntityCommands<'a> {

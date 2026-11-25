@@ -1,7 +1,7 @@
 //! Переподбор уровней врагов под новый темп боя (`battle_core::DAMAGE_SCALE`).
 //!
 //! Запуск: `cargo run -p game-data --example retune --release -- <старый темп> [число боёв]`
-//! Для каждого боя (этапы, конвои, волны Блокады, этапы Регаты) сначала ищем уровень
+//! Для каждого боя (этапы, конвои, этапы Регаты; Блокада и Руины — формулой, по `curve`) сначала ищем уровень
 //! стартового отряда, с которого он берёт бой в 80% автобоёв при старом темпе, затем сдвигаем
 //! уровни всех врагов боя так, чтобы при новом темпе порог остался тем же. Последней строкой
 //! печатает `RESULT {json}` — новые уровни по боям; `tools/apply_retune.py` вписывает их в `data/`,
@@ -116,20 +116,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         levels(&convoys["tiers"], |t| &t["enemies"], |e| &e[1]),
     );
 
-    // Ивенты: волны Блокады и этапы Регаты.
+    // Ивенты: этапы Регаты.
     let mut events: Value = read(&dir, "events.json")?;
-    for (i, wave) in events["blockade"]["waves"]
-        .as_array_mut()
-        .into_iter()
-        .flatten()
-        .enumerate()
-    {
-        retune_pairs(
-            &tuner,
-            &format!("блокада, волна {}", i + 1),
-            &mut wave["enemies"],
-        );
-    }
     for (i, leg) in events["regatta"]["legs"]
         .as_array_mut()
         .into_iter()
@@ -142,10 +130,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &mut leg["enemies"],
         );
     }
-    result.insert(
-        "blockade".into(),
-        levels(&events["blockade"]["waves"], |w| &w["enemies"], |e| &e[1]),
-    );
     result.insert(
         "regatta".into(),
         levels(&events["regatta"]["legs"], |l| &l["enemies"], |e| &e[1]),

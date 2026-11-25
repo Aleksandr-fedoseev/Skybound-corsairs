@@ -29,6 +29,52 @@ pub struct CustomFight {
     pub ally_hp: Vec<(String, f32)>,
     /// Залп заряжен с первого хода.
     pub charged: bool,
+    /// Усиления героев на этот бой (Блокада).
+    pub boost: Boost,
+    /// Ветер боя.
+    pub wind: Option<battle_core::Element>,
+}
+
+/// Усиления героев: доли прибавки к здоровью, атаке, скорости, лечению, урону умений и залпу.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Boost {
+    pub hp: f32,
+    pub atk: f32,
+    pub spd: f32,
+    pub heal: f32,
+    pub skill: f32,
+    pub broadside: f32,
+}
+
+impl Boost {
+    /// Герой с усилениями.
+    pub fn apply(&self, mut unit: battle_core::UnitDef) -> battle_core::UnitDef {
+        let up = |v: u32, k: f32| (v as f32 * (1.0 + k)).round() as u32;
+        unit.stats.max_hp = up(unit.stats.max_hp, self.hp);
+        unit.stats.atk = up(unit.stats.atk, self.atk);
+        unit.stats.spd = up(unit.stats.spd, self.spd);
+        let heal = 1.0 + self.heal;
+        let abilities = [
+            Some(&mut unit.basic),
+            unit.skill.as_mut(),
+            unit.ultimate.as_mut(),
+        ];
+        for ability in abilities.into_iter().flatten() {
+            for e in &mut ability.effects {
+                if let battle_core::Effect::Heal { percent } = &mut e.effect {
+                    *percent *= heal;
+                }
+            }
+        }
+        if let Some(skill) = unit.skill.as_mut() {
+            for e in &mut skill.effects {
+                if let battle_core::Effect::Damage { multiplier } = &mut e.effect {
+                    *multiplier *= 1.0 + self.skill;
+                }
+            }
+        }
+        unit
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -372,10 +418,12 @@ fn new_battle(
     seed: u64,
 ) -> Battle {
     let team_ids: Vec<String> = team.iter().map(|m| m.id.clone()).collect();
+    let boost = custom.map(|f| f.boost.clone()).unwrap_or_default();
     let team = team
         .iter()
-        .map(|m| member_unit(data, crew, m, bonus))
+        .map(|m| boost.apply(member_unit(data, crew, m, bonus)))
         .collect();
+    let broadside_power = (broadside_power as f32 * (1.0 + boost.broadside)).round() as u32;
     let enemies = match custom {
         Some(fight) => fight
             .enemies
@@ -394,8 +442,9 @@ fn new_battle(
             .expect("этап есть в data/stages.json"),
     };
     let mut battle = Battle::new(team, enemies, Ship { broadside_power }, seed);
-    if custom.is_none() {
-        battle.set_wind(data.stages[stage].wind);
+    match custom {
+        None => battle.set_wind(data.stages[stage].wind),
+        Some(fight) => battle.set_wind(fight.wind),
     }
     if let Some(fight) = custom {
         battle.set_energy_rate(fight.energy_rate);
@@ -424,8 +473,19 @@ pub fn enter(
     cabins: (Res<crate::cabins::Cabins>, Res<crate::cabins::CabinData>),
     gear: (Res<crate::gear::Gear>, Res<crate::gear::GearData>),
 ) {
-    screen.team = roster.team_members();
-    let ids = roster.team.clone();
+    screen.custom = voyage.custom.clone();
+    // Блокада и Руины: идёт тот отряд, с которым начали, — только выжившие, даже если в Экипаже
+    // с тех пор поменяли состав.
+    let ids: Vec<String> = match &screen.custom {
+        Some(fight) if !fight.ally_hp.is_empty() => fight
+            .ally_hp
+            .iter()
+            .filter(|(id, f)| *f > 0.0 && roster.owns(id))
+            .map(|(id, _)| id.clone())
+            .collect(),
+        _ => roster.team.clone(),
+    };
+    screen.team = roster.members(&ids);
     for m in &mut screen.team {
         m.atk_bonus = cabins.0.atk_bonus(&m.id, &ids, &cabins.1);
         m.gear = gear.0.bonus(&m.id, &gear.1);
@@ -433,19 +493,6 @@ pub fn enter(
     screen.broadside_power = ship.broadside(&ship_data);
     let next = progress.next_stage(screen.data.stages.len());
     screen.stage = voyage.stage.unwrap_or(next);
-    screen.custom = voyage.custom.clone();
-    // Блокада: в бой идут только выжившие в прошлых волнах.
-    if let Some(fight) = &screen.custom
-        && !fight.ally_hp.is_empty()
-    {
-        let alive: Vec<String> = fight
-            .ally_hp
-            .iter()
-            .filter(|(_, f)| *f > 0.0)
-            .map(|(id, _)| id.clone())
-            .collect();
-        screen.team.retain(|m| alive.contains(&m.id));
-    }
     screen.paused = false;
     screen.restart_with_new_seed();
 }
