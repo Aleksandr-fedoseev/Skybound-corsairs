@@ -58,6 +58,8 @@ pub struct SaveData {
     pub ruins: Ruins,
     #[serde(default)]
     pub arena: Arena,
+    #[serde(default)]
+    pub settings: crate::settings::Settings,
 }
 
 pub fn now() -> u64 {
@@ -187,7 +189,8 @@ pub fn apply(app: &mut App, mut save: SaveData) {
         .insert_resource(save.storm)
         .insert_resource(save.week_events)
         .insert_resource(save.ruins)
-        .insert_resource(save.arena);
+        .insert_resource(save.arena)
+        .insert_resource(save.settings);
     if !report.is_empty() {
         app.world_mut().resource_mut::<Toast>().show_long(&report);
     }
@@ -215,6 +218,7 @@ struct State<'w> {
     week_events: Res<'w, WeekEvents>,
     ruins: Res<'w, Ruins>,
     arena: Res<'w, Arena>,
+    settings: Res<'w, crate::settings::Settings>,
 }
 
 impl State<'_> {
@@ -237,6 +241,7 @@ impl State<'_> {
             week_events: self.week_events.clone(),
             ruins: self.ruins.clone(),
             arena: self.arena.clone(),
+            settings: self.settings.clone(),
         }
     }
 }
@@ -286,6 +291,7 @@ mod tests {
             week_events: WeekEvents::default(),
             ruins: Ruins::default(),
             arena: Arena::default(),
+            settings: Default::default(),
         }
     }
 

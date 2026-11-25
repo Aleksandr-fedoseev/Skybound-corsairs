@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use crate::audio::Sfx;
 use crate::menu::{Profile, Progress, Toast, pressable, text};
-use crate::ship::{Ship, ShipData, clock};
+use crate::ship::{Ship, ShipData};
 use crate::view::Fonts;
 
 const GALLEY: Color = Color::srgb(0.72, 0.42, 0.16);
@@ -19,10 +19,6 @@ const GALLEY: Color = Color::srgb(0.72, 0.42, 0.16);
 /// Пузырь сваренного Камбузом: тап собирает (сверх потолка можно).
 #[derive(Component)]
 pub struct GalleyBubble;
-
-/// Строка «54/120 · победа −12 · +1 через 3:12» рядом с иконкой припасов.
-#[derive(Component)]
-pub struct SuppliesLabel;
 
 #[derive(Resource, Deserialize)]
 pub struct SupplyData {
@@ -161,18 +157,10 @@ pub fn galley_bubble(parent: &mut ChildSpawnerCommands, fonts: &Fonts, left: Val
     );
 }
 
-pub fn label(fonts: &Fonts, size: f32, color: Color) -> impl Bundle {
-    (SuppliesLabel, text(fonts, "", false, size, color))
-}
-
 fn refresh(
     profile: Res<Profile>,
-    data: Res<SupplyData>,
-    progress: Res<Progress>,
-    screen: Res<crate::battle_screen::BattleScreen>,
     mut bubbles: Query<(&mut Visibility, &Children), With<GalleyBubble>>,
-    mut labels: Query<&mut Text, (With<SuppliesLabel>, Without<GalleyBubble>)>,
-    mut texts: Query<&mut Text, Without<SuppliesLabel>>,
+    mut texts: Query<&mut Text>,
 ) {
     let ready = profile.supplies_pending.floor() as u32;
     for (mut vis, children) in &mut bubbles {
@@ -188,24 +176,6 @@ fn refresh(
                     text.0 = value;
                 }
             }
-        }
-    }
-    // Следующий этап в «В поход» — новый? Тогда победа на нём бесплатна.
-    let stages = screen.data.stages.len();
-    let first = progress.cleared < stages;
-    let cost = data.cost_for(first);
-    let mut value = if cost == 0 {
-        format!("{}/{} · новый этап — бесплатно", profile.supplies, data.cap)
-    } else {
-        format!("{}/{} · победа −{cost}", profile.supplies, data.cap)
-    };
-    if profile.supplies < data.cap {
-        let left = (1.0 - profile.supplies_regen) * data.regen_minutes * 60.0;
-        value.push_str(&format!(" · +1 через {}", clock(left)));
-    }
-    for mut text in &mut labels {
-        if text.0 != value {
-            text.0 = value.clone();
         }
     }
 }

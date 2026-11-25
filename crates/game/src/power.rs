@@ -25,14 +25,14 @@ pub const CLOSE: Color = Color::srgb(0.72, 0.52, 0.1);
 /// С таким запасом сверх рекомендуемой мощи плашка зелёная.
 const MARGIN: f32 = 1.07;
 
-/// Цвет и приписка сравнения: хватает с запасом, впритык или мало.
-pub fn verdict(need: u32, have: u32) -> (Color, &'static str) {
+/// Цвет сравнения: хватает с запасом, впритык или мало.
+pub fn verdict(need: u32, have: u32) -> Color {
     if have as f32 >= need as f32 * MARGIN {
-        (ENOUGH, "")
+        ENOUGH
     } else if have >= need {
-        (CLOSE, " · впритык")
+        CLOSE
     } else {
-        (SHORT, "")
+        SHORT
     }
 }
 
@@ -86,6 +86,24 @@ impl Power<'_> {
     }
 }
 
+/// Лучшая сила отряда за всё время — для таблицы капитанов (раз в пару секунд).
+pub fn track_best(
+    time: Res<Time>,
+    mut acc: Local<f32>,
+    power: Power,
+    mut profile: ResMut<crate::menu::Profile>,
+) {
+    *acc += time.delta_secs();
+    if *acc < 2.0 {
+        return;
+    }
+    *acc = 0.0;
+    let now = power.team();
+    if now > profile.best_power {
+        profile.best_power = now;
+    }
+}
+
 /// Мощь стартового отряда (1 звезда, умения 1-го уровня) на уровне `level` плюс начальный залп.
 pub fn recommended(data: &game_data::GameData, crew: &CrewData, level: u32) -> u32 {
     let heroes: u32 = crew
@@ -134,20 +152,37 @@ pub fn badge(
         });
 }
 
-/// Плашка «мощь 7 000 · у вас 7 400»: зелёная — с запасом, жёлтая — впритык, красная — мало.
+/// Рекомендуемая сила боя: иконка и число на цветной плашке. Цвет — хватает ли отряду:
+/// зелёный — с запасом, жёлтый — впритык, красный — мало. Своё число игрок видит в Экипаже.
 pub fn need_chip(
     parent: &mut ChildSpawnerCommands,
+    assets: &AssetServer,
     fonts: &crate::view::Fonts,
     need: u32,
     have: u32,
 ) {
-    let (color, note) = verdict(need, have);
-    crate::style::pill(
-        parent,
-        fonts,
-        format!("мощь {} · у вас {}{note}", format(need), format(have)),
-        color,
-    );
+    let color = verdict(need, have);
+    parent
+        .spawn((
+            Node {
+                padding: UiRect::axes(px(10), px(3)),
+                column_gap: px(4),
+                flex_shrink: 0.0,
+                align_items: AlignItems::Center,
+                border_radius: BorderRadius::all(px(12)),
+                ..default()
+            },
+            BackgroundColor(color),
+        ))
+        .with_children(|row| {
+            row.spawn(crate::style::icon(assets, "power", 22.0));
+            row.spawn(crate::style::heading(
+                fonts,
+                format(need),
+                15.0,
+                Color::WHITE,
+            ));
+        });
 }
 
 #[cfg(test)]
@@ -163,9 +198,9 @@ mod tests {
 
     #[test]
     fn close_power_is_yellow() {
-        assert_eq!(verdict(1000, 1100).0, ENOUGH);
-        assert_eq!(verdict(1000, 1030).0, CLOSE);
-        assert_eq!(verdict(1000, 990).0, SHORT);
+        assert_eq!(verdict(1000, 1100), ENOUGH);
+        assert_eq!(verdict(1000, 1030), CLOSE);
+        assert_eq!(verdict(1000, 990), SHORT);
     }
 
     #[test]

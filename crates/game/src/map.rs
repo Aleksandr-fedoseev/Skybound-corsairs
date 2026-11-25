@@ -281,6 +281,7 @@ fn spawn_map(
                     ("doubloons", profile.doubloons),
                     ("silver", profile.silver),
                     ("planks", profile.planks),
+                    ("supplies", profile.supplies),
                 ],
             );
             crate::style::title(
@@ -789,6 +790,7 @@ fn refresh_card(
             chips(b, |row| {
                 crate::power::need_chip(
                     row,
+                    &assets,
                     &fonts,
                     power.recommended(tier.recommended_level),
                     team,
@@ -830,35 +832,25 @@ fn refresh_card(
             chips(b, |row| {
                 crate::power::need_chip(
                     row,
+                    &assets,
                     &fonts,
                     power.recommended(def.recommended_level),
                     team,
                 );
-                let first = stage == progress.cleared;
-                let enough = supply.check(&profile, wins, first).is_ok();
-                let cost = supply.cost_for(first);
-                chip(
-                    row,
-                    &fonts,
-                    &if cost == 0 {
-                        format!("новый этап — бесплатно · есть {}", profile.supplies)
-                    } else {
-                        format!("−{cost} · есть {}", profile.supplies)
-                    },
-                    if enough { READY_BG } else { WEAK_BG },
-                    Some(("supplies", &assets)),
-                );
-                chip(
-                    row,
-                    &fonts,
-                    &format!("сегодня {wins}/{}", supply.daily_limit()),
-                    if wins < supply.daily_limit() {
-                        PLAIN_BG
-                    } else {
-                        WEAK_BG
-                    },
-                    None,
-                );
+                // Счётчик побед за день — только на пройденном этапе: лимит касается повторов.
+                if stage < progress.cleared {
+                    chip(
+                        row,
+                        &fonts,
+                        &format!("сегодня {wins}/{}", supply.daily_limit()),
+                        if wins < supply.daily_limit() {
+                            PLAIN_BG
+                        } else {
+                            WEAK_BG
+                        },
+                        None,
+                    );
+                }
             });
             // Только что был рейд — его добыча иконками.
             if let Some((_, spent, items)) = last_raid.0.as_ref().filter(|(s, ..)| *s == stage) {
@@ -884,7 +876,7 @@ fn refresh_card(
                 None => {
                     b.spawn(text(
                         &fonts,
-                        "лимит побед на сегодня — новый день в полночь по UTC",
+                        "на сегодня всё — завтра снова",
                         false,
                         13.0,
                         MUTED,

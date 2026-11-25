@@ -357,7 +357,7 @@ pub fn section(
         })
         .with_children(|row| {
             row.spawn(style::heading(fonts, "до конца:", 13.0, MUTED));
-            crate::power::need_chip(row, fonts, power.0, power.1);
+            crate::power::need_chip(row, assets, fonts, power.0, power.1);
         });
         card.spawn(text(fonts, data.about.clone(), false, 12.0, MUTED));
     });

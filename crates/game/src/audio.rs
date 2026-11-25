@@ -102,7 +102,12 @@ fn play_sfx(
     mut requests: MessageReader<Sfx>,
     sounds: Res<Sounds>,
     data: Res<AudioData>,
+    settings: Res<crate::settings::Settings>,
 ) {
+    if !settings.sfx {
+        requests.clear();
+        return;
+    }
     // Один и тот же звук в одном кадре — один раз.
     let mut played: Vec<&str> = Vec::new();
     for Sfx(name) in requests.read() {
@@ -192,12 +197,15 @@ fn music(
     screen: Res<BattleScreen>,
     sounds: Res<Sounds>,
     data: Res<AudioData>,
+    settings: Res<crate::settings::Settings>,
     mut playing: Query<(Entity, &Music, Option<&mut AudioSink>)>,
 ) {
     let battle = *state.get() == Screen::Battle;
     let track = if battle { BATTLE } else { HARBOR };
     let quiet = battle && screen.shown_outcome.is_some();
-    let volume = data.music_volume * if quiet { data.music_after_battle } else { 1.0 };
+    let volume = data.music_volume
+        * if quiet { data.music_after_battle } else { 1.0 }
+        * if settings.music { 1.0 } else { 0.0 };
     let mut found = false;
     for (entity, Music(current), sink) in &mut playing {
         if *current != track {

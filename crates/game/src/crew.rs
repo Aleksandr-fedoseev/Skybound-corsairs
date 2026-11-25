@@ -445,6 +445,7 @@ pub fn plugin(app: &mut App) {
     app.init_resource::<Selected>()
         .init_resource::<CrewDirty>()
         .init_resource::<Formation>()
+        .init_resource::<Dragging>()
         .init_resource::<CrewTab>()
         .add_systems(OnEnter(Screen::Crew), spawn_crew)
         .add_systems(OnExit(Screen::Crew), |mut f: ResMut<Formation>| {
@@ -955,19 +956,27 @@ fn formation_view(
                 })
                 .with_children(|row| {
                     for slot in 0..4 {
-                        formation_slot(row, assets, fonts, data, roster, slot, picked == Some(slot));
+                        formation_slot(
+                            row,
+                            assets,
+                            fonts,
+                            data,
+                            roster,
+                            slot,
+                            picked == Some(slot),
+                        );
                     }
                 });
         });
         col.spawn(text(
             fonts,
-            "Тап по герою на скамейке — в отряд. Тап по месту, потом по другому — поменять местами. Повторный тап по месту — убрать.",
+            "Перетащите героя на место в отряде или обратно на скамейку",
             false,
             13.0,
             PARCHMENT,
         ));
-        // Скамейка: все герои команды.
-        col.spawn((
+        // Скамейка: все герои команды. Героя из отряда можно бросить сюда — он уйдёт из отряда.
+        let mut bench_panel = col.spawn((
             Node {
                 padding: UiRect::axes(px(12), px(10)),
                 flex_wrap: FlexWrap::Wrap,
@@ -976,8 +985,25 @@ fn formation_view(
                 ..default()
             },
             Skin(Look::Tile),
-        ))
-        .with_children(|bench| {
+        ));
+        bench_panel.observe(
+            |_: On<PointerDragDrop>,
+             mut dragging: ResMut<Dragging>,
+             mut roster: ResMut<Roster>,
+             mut toast: ResMut<Toast>,
+             mut dirty: ResMut<CrewDirty>| {
+                let Some((id, Some(_))) = dragging.0.take() else {
+                    return;
+                };
+                if roster.team.len() <= 1 {
+                    toast.show("В отряде нужен хотя бы один герой");
+                    return;
+                }
+                roster.team.retain(|h| *h != id);
+                dirty.0 = true;
+            },
+        );
+        bench_panel.with_children(|bench| {
             for hero in data.heroes.iter().filter(|h| roster.owns(&h.id)) {
                 let id = hero.id.clone();
                 let busy = away(&id);
@@ -1007,6 +1033,9 @@ fn formation_view(
                     ));
                 });
                 pressable(&mut cell);
+                if !busy {
+                    draggable(&mut cell, assets, &id, None);
+                }
                 cell.observe(
                     move |_: On<PointerClick>,
                           exps: Res<crate::expeditions::Expeditions>,
@@ -1055,7 +1084,9 @@ fn formation_view(
         done.with_child(style::heading(fonts, "Готово", 22.0, Color::WHITE));
         pressable(&mut done);
         done.observe(
-            |_: On<PointerClick>, mut formation: ResMut<Formation>, mut dirty: ResMut<CrewDirty>| {
+            |_: On<PointerClick>,
+             mut formation: ResMut<Formation>,
+             mut dirty: ResMut<CrewDirty>| {
                 *formation = Formation::default();
                 dirty.0 = true;
             },
@@ -1116,6 +1147,30 @@ fn formation_slot(
         }
     });
     pressable(&mut cell);
+    if let Some(h) = hero {
+        draggable(&mut cell, assets, &h.id, Some(slot));
+    }
+    cell.observe(
+        move |_: On<PointerDragDrop>,
+              mut dragging: ResMut<Dragging>,
+              exps: Res<crate::expeditions::Expeditions>,
+              crew: Res<CrewData>,
+              mut roster: ResMut<Roster>,
+              mut formation: ResMut<Formation>,
+              mut toast: ResMut<Toast>,
+              mut dirty: ResMut<CrewDirty>| {
+            let Some((id, _)) = dragging.0.take() else {
+                return;
+            };
+            if exps.is_away(&id) {
+                toast.show("Герой в экспедиции — вернётся, тогда поставим");
+                return;
+            }
+            put_in_slot(&mut roster.team, crew.team_size, &id, slot);
+            formation.slot = None;
+            dirty.0 = true;
+        },
+    );
     cell.observe(
         move |_: On<PointerClick>,
               mut roster: ResMut<Roster>,
@@ -1142,6 +1197,79 @@ fn formation_slot(
             dirty.0 = true;
         },
     );
+}
+
+/// Кого сейчас тащат: герой и место в отряде, откуда (`None` — со скамейки).
+#[derive(Resource, Default)]
+pub(crate) struct Dragging(Option<(String, Option<usize>)>);
+
+/// Медальон, который едет за пальцем, пока героя тащат.
+#[derive(Component)]
+struct DragGhost;
+
+const GHOST: f32 = 84.0;
+
+/// Героя можно тащить: за пальцем едет его медальон, бросить — на место в отряде или на скамейку.
+fn draggable(cell: &mut EntityCommands, assets: &AssetServer, id: &str, from: Option<usize>) {
+    let image = assets.load(format!("ui/hero_{id}.png"));
+    let id = id.to_string();
+    cell.observe(
+        move |ev: On<PointerDragStart>, mut commands: Commands, mut dragging: ResMut<Dragging>| {
+            dragging.0 = Some((id.clone(), from));
+            let at = ev.pointer.position - Vec2::splat(GHOST / 2.0);
+            commands.spawn((
+                DragGhost,
+                DespawnOnExit(Screen::Crew),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(at.x),
+                    top: px(at.y),
+                    width: px(GHOST),
+                    height: px(GHOST),
+                    ..default()
+                },
+                ImageNode::new(image.clone()),
+                GlobalZIndex(50),
+                Pickable::IGNORE,
+            ));
+        },
+    );
+    cell.observe(
+        |ev: On<PointerDrag>, mut ghosts: Query<&mut Node, With<DragGhost>>| {
+            let at = ev.pointer.position - Vec2::splat(GHOST / 2.0);
+            for mut node in &mut ghosts {
+                node.left = px(at.x);
+                node.top = px(at.y);
+            }
+        },
+    );
+    // Бросок обрабатывает цель (место или скамейка) раньше; здесь только убираем медальон.
+    cell.observe(
+        |_: On<PointerDragEnd>,
+         mut commands: Commands,
+         ghosts: Query<Entity, With<DragGhost>>,
+         mut dragging: ResMut<Dragging>| {
+            for ghost in &ghosts {
+                commands.entity(ghost).despawn();
+            }
+            dragging.0 = None;
+        },
+    );
+}
+
+/// Поставить героя на место `slot`: из отряда — поменять местами, со скамейки — заменить
+/// стоящего там (или встать в конец, если место пустое).
+fn put_in_slot(team: &mut Vec<String>, size: usize, id: &str, slot: usize) {
+    match team.iter().position(|h| h == id) {
+        Some(j) if slot < team.len() => team.swap(j, slot),
+        Some(j) => {
+            let h = team.remove(j);
+            team.push(h);
+        }
+        None if slot < team.len() => team[slot] = id.to_string(),
+        None if team.len() < size => team.push(id.to_string()),
+        None => {}
+    }
 }
 
 fn hero_tile(
@@ -2436,5 +2564,26 @@ mod tests {
                 "уровень {level}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod drag_tests {
+    use super::put_in_slot;
+
+    fn team(ids: &[&str]) -> Vec<String> {
+        ids.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn drop_swaps_or_replaces() {
+        let mut t = team(&["a", "b", "c", "d"]);
+        put_in_slot(&mut t, 4, "d", 0);
+        assert_eq!(t, team(&["d", "b", "c", "a"]));
+        put_in_slot(&mut t, 4, "e", 1);
+        assert_eq!(t, team(&["d", "e", "c", "a"]));
+        let mut t = team(&["a", "b"]);
+        put_in_slot(&mut t, 4, "c", 3);
+        assert_eq!(t, team(&["a", "b", "c"]));
     }
 }

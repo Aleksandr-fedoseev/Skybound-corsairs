@@ -18,11 +18,13 @@ mod expeditions;
 mod fx;
 mod gear;
 mod hire_reveal;
+mod ladder;
 mod map;
 mod menu;
 mod power;
 mod ruins;
 mod save;
+mod settings;
 mod ship;
 mod softbody;
 mod spells;
@@ -104,7 +106,13 @@ fn main() {
         gear::plugin,
         events::plugin,
     ))
-    .add_plugins((supplies::plugin, ruins::plugin, arena::plugin))
+    .add_plugins((
+        supplies::plugin,
+        ruins::plugin,
+        arena::plugin,
+        settings::plugin,
+        ladder::plugin,
+    ))
     .add_plugins(hire_reveal::plugin)
     .add_plugins(style::plugin)
     .add_message::<Shown>()

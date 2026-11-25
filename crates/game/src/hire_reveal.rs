@@ -468,21 +468,6 @@ fn card_face(
     };
     card.spawn(style::medallion(assets, &hero.id, 62.0 * k, false));
     card.spawn(text(fonts, hero.name.clone(), true, 14.0 * k, INK));
-    card.spawn(text(
-        fonts,
-        if p.star {
-            "на звезду!"
-        } else {
-            "копия"
-        },
-        p.star,
-        12.0 * k,
-        if p.star {
-            Color::srgb(0.70, 0.36, 0.05)
-        } else {
-            INK_SOFT
-        },
-    ));
 }
 
 /// Витрина: лучи, свечение, герой в позе победы, имя и титул.
@@ -596,30 +581,6 @@ fn showcase(
             false,
             16.0,
             PARCHMENT,
-        ));
-        info.spawn((
-            Node {
-                margin: UiRect::top(px(10)),
-                padding: UiRect::axes(px(18), px(6)),
-                border_radius: BorderRadius::all(px(16)),
-                ..default()
-            },
-            BackgroundColor(if p.star {
-                Color::srgb(0.62, 0.36, 0.08)
-            } else {
-                Color::srgba(1.0, 1.0, 1.0, 0.12)
-            }),
-        ))
-        .with_child(text(
-            fonts,
-            if p.star {
-                "Копий хватает на звезду — слияние в Экипаже!"
-            } else {
-                "Копия — пойдёт на звезду героя"
-            },
-            true,
-            16.0,
-            Color::WHITE,
         ));
         info.spawn((
             Node {

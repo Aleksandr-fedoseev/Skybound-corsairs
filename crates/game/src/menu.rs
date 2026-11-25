@@ -118,6 +118,9 @@ pub struct Profile {
     /// Сваренное Камбузом, ещё не собранное.
     #[serde(default)]
     pub supplies_pending: f32,
+    /// Лучшая сила отряда за всё время — для таблицы капитанов.
+    #[serde(default)]
+    pub best_power: u32,
 }
 
 /// Старые сохранения без припасов получают стартовый запас.
@@ -142,6 +145,7 @@ impl Profile {
             supplies: start.supplies,
             supplies_regen: 0.0,
             supplies_pending: 0.0,
+            best_power: 0,
         }
     }
 }
@@ -203,6 +207,7 @@ enum Value {
     Silver,
     Planks,
     Ether,
+    Supplies,
     Doubloons,
 }
 
@@ -307,7 +312,16 @@ struct MenuView<'w> {
     page: Res<'w, TilePage>,
     cam: Res<'w, ShipCam>,
     event_data: Res<'w, EventData>,
-    power: crate::power::Power<'w>,
+    settings: (
+        Res<'w, crate::settings::Settings>,
+        Res<'w, crate::settings::SettingsOpen>,
+    ),
+    ladder: (
+        Res<'w, crate::ladder::LadderData>,
+        Res<'w, crate::ladder::LadderOpen>,
+        Res<'w, crate::arena::ArenaData>,
+        Res<'w, crate::arena::Arena>,
+    ),
 }
 
 fn spawn_menu(mut commands: Commands, view: MenuView) {
@@ -433,9 +447,10 @@ fn build(commands: &mut Commands, view: &MenuView) {
                     view.event_data.current_short(),
                     view.contracts.claimable(&view.contract_data),
                 );
+                crate::ladder::button(r, assets, fonts);
             });
             slide(root, Vec2::new(0.0, 200.0), false, |r| {
-                voyage(r, assets, fonts, next, done, &view.power)
+                voyage(r, fonts, next, done)
             });
             // Улучшения отсеков — только на осмотре: выезжают снизу на место «В поход».
             slide(root, Vec2::new(0.0, 200.0), true, |r| {
@@ -480,7 +495,22 @@ fn build(commands: &mut Commands, view: &MenuView) {
                 ));
             });
             bottom_nav(root, assets, fonts, Screen::Menu);
-            if view.board_open.0 {
+            if view.settings.1.0 {
+                crate::settings::panel(root, fonts, &view.settings.0);
+            } else if let Some(tab) = view.ladder.1.0 {
+                let (data, _, arena_data, arena) = &view.ladder;
+                let rows = match tab {
+                    crate::ladder::Tab::Arena => {
+                        let mut a = (**arena).clone();
+                        a.roll(arena_data, crate::cabins::today());
+                        let week = 7.0 * 86_400.0;
+                        let progress = 1.0 - crate::events::week_left() as f32 / week;
+                        data.arena(a.week, progress, a.rating)
+                    }
+                    crate::ladder::Tab::Power => data.power(view.profile.best_power),
+                };
+                crate::ladder::panel(root, assets, fonts, tab, &rows, data.shown);
+            } else if view.board_open.0 {
                 crate::contracts::board(root, assets, fonts, &view.contract_data, &view.contracts);
             } else if view.open.0.as_deref() == Some(SHIPYARD) {
                 crate::ship::shipyard(
@@ -1306,7 +1336,13 @@ fn top_bar(
     fonts: &Fonts,
     profile: &Profile,
 ) {
-    crate::style::bar(root).with_children(|bar| {
+    // Пять ресурсов, уровень и шестерёнка — плашки плотнее, чем на других экранах.
+    let mut top = crate::style::bar(root);
+    top.entry::<Node>().and_modify(|mut node| {
+        node.column_gap = px(5);
+        node.padding = UiRect::new(px(8), px(14), px(7), px(7));
+    });
+    top.with_children(|bar| {
         let mut avatar = bar.spawn((
             Node {
                 width: px(44),
@@ -1334,10 +1370,11 @@ fn top_bar(
         later(&mut avatar, "Профиль капитана появится позже");
 
         for (value, kind, size) in [
-            (Value::Silver, "silver", 16.0),
-            (Value::Planks, "planks", 16.0),
-            (Value::Ether, "ether", 16.0),
-            (Value::Doubloons, "doubloons", 16.0),
+            (Value::Silver, "silver", 15.0),
+            (Value::Planks, "planks", 15.0),
+            (Value::Ether, "ether", 15.0),
+            (Value::Supplies, "supplies", 15.0),
+            (Value::Doubloons, "doubloons", 15.0),
         ] {
             let mut slot =
                 crate::style::resource_slot(bar, assets, fonts, kind, String::new(), size, value);
@@ -1348,11 +1385,19 @@ fn top_bar(
                           profile: Res<Profile>,
                           ship: Res<Ship>,
                           ship_data: Res<ShipData>,
+                          supply: Res<crate::supplies::SupplyData>,
                           mut toast: ResMut<Toast>| {
                         let cap = ship.capacity(&ship_data);
                         let (name, n, max) = match value {
                             Value::Silver => ("Серебро", profile.silver, cap.silver),
                             Value::Planks => ("Доски", profile.planks, cap.planks),
+                            Value::Supplies => {
+                                toast.show(&format!(
+                                    "Припасы: {} · сами копятся до {}, Камбуз варит сверх",
+                                    profile.supplies, supply.cap
+                                ));
+                                return;
+                            }
                             _ => ("Эфир", profile.ether, cap.ether),
                         };
                         toast.show(&format!(
@@ -1362,6 +1407,9 @@ fn top_bar(
                 );
             }
             if matches!(value, Value::Doubloons) {
+                // Чуть шире остальных: справа «+», число не должно уходить под него.
+                slot.entry::<Node>()
+                    .and_modify(|mut node| node.flex_grow = 1.4);
                 slot.with_children(|s| {
                     let mut plus = s.spawn((
                         Node {
@@ -1383,6 +1431,7 @@ fn top_bar(
                 });
             }
         }
+        crate::settings::button(bar, assets);
     });
 }
 
@@ -1687,21 +1736,14 @@ fn shipyard_tile(
 #[derive(Resource, Default)]
 pub(crate) struct TilePage(pub usize);
 
-fn voyage(
-    root: &mut ChildSpawnerCommands,
-    assets: &AssetServer,
-    fonts: &Fonts,
-    next: &game_data::StageDef,
-    done: bool,
-    power: &crate::power::Power,
-) {
+fn voyage(root: &mut ChildSpawnerCommands, fonts: &Fonts, next: &game_data::StageDef, done: bool) {
     root.spawn((
         Node {
             position_type: PositionType::Absolute,
-            top: px(788),
+            top: px(796),
             left: px(10),
             width: px(520),
-            height: px(86),
+            height: px(76),
             padding: UiRect::new(px(16), px(10), px(7), px(7)),
             align_items: AlignItems::Center,
             column_gap: px(12),
@@ -1714,44 +1756,24 @@ fn voyage(
             .spawn(Node {
                 flex_grow: 1.0,
                 flex_direction: FlexDirection::Column,
-                row_gap: px(3),
+                row_gap: px(4),
                 ..default()
             })
             .with_children(|info| {
-                info.spawn(Node {
-                    column_gap: px(6),
-                    align_items: AlignItems::Center,
-                    ..default()
-                })
-                .with_children(|row| {
+                info.spawn(Node::default()).with_children(|row| {
                     let stage = if done {
                         "всё пройдено · босс".to_string()
                     } else {
                         stage_title(&next.id)
                     };
                     crate::style::pill(row, fonts, stage, Color::srgb(0.24, 0.2, 0.3));
-                    crate::power::need_chip(
-                        row,
-                        fonts,
-                        power.recommended(next.recommended_level),
-                        power.team(),
-                    );
                 });
                 info.spawn(crate::style::heading(
                     fonts,
                     next.name.clone(),
-                    21.0,
+                    23.0,
                     Color::srgb(1.0, 0.93, 0.78),
                 ));
-                info.spawn(Node {
-                    column_gap: px(5),
-                    align_items: AlignItems::Center,
-                    ..default()
-                })
-                .with_children(|row| {
-                    row.spawn(crate::style::icon(assets, "supplies", 18.0));
-                    row.spawn(crate::supplies::label(fonts, 12.0, PARCHMENT));
-                });
             });
         let mut go = panel.spawn((
             Node {
@@ -1881,6 +1903,8 @@ fn refresh_values(
             Value::Silver => (profile.silver, cap.silver),
             Value::Planks => (profile.planks, cap.planks),
             Value::Ether => (profile.ether, cap.ether),
+            // Припасы на потолке не красим: сверх него их варит Камбуз — это хорошо.
+            Value::Supplies => (profile.supplies, u32::MAX),
             Value::Doubloons => (profile.doubloons, u32::MAX),
         };
         let shown = crate::style::compact(n);
