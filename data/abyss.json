@@ -6,8 +6,8 @@
   ],
   "boss": "storm_leviathan",
   "boss_every": 10,
-  "base_level": 10,
-  "level_per_floor": 0.8,
+  "base_level": 9,
+  "level_per_floor": 0.66,
   "base_count": 4,
   "more_every": 10,
   "max_count": 5,
@@ -20,5 +20,5 @@
   "boss_doubloons": 50,
   "boss_figureheads": 1,
   "details_per_floor": 6,
-  "level_drop_per_extra": 4
+  "level_drop_per_extra": 3
 }

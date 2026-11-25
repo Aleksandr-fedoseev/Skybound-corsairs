@@ -13,8 +13,8 @@ use crate::rng::Rng;
 use crate::unit::{Ability, Effect, Element, Side, Target, Unit, UnitDef, UnitId};
 use crate::{
     BROADSIDE_MAX, BROADSIDE_PER_ACTION, CHARGE_BREAK, CHARGE_STUN, CHARGE_TIME, CRIT_CHANCE,
-    CRIT_MULTIPLIER, ENERGY_BASIC, ENERGY_MAX, ENERGY_ON_HIT, ENERGY_SKILL, WEAKNESS_MULTIPLIER,
-    WIND_BONUS, WIND_SHIFT_TURNS,
+    CRIT_MULTIPLIER, DAMAGE_SCALE, ENERGY_BASIC, ENERGY_MAX, ENERGY_ON_HIT, ENERGY_SKILL,
+    WEAKNESS_MULTIPLIER, WIND_BONUS, WIND_SHIFT_TURNS,
 };
 
 /// Корабль игрока в бою. Сила залпа зависит от уровня пушечной палубы.
@@ -161,6 +161,7 @@ pub struct Battle {
     turn: u32,
     /// Во сколько раз быстрее копится энергия ульт (особые правила ивентов).
     energy_rate: u32,
+    damage_scale: f32,
     /// Ветер боя: стихия, чьи бойцы бьют сильнее.
     wind: Option<Element>,
     /// Ход, с которого дует текущий ветер.
@@ -171,6 +172,11 @@ impl Battle {
     /// Особое правило боя: ульты копятся в `rate` раз быстрее.
     pub fn set_energy_rate(&mut self, rate: u32) {
         self.energy_rate = rate.max(1);
+    }
+
+    /// Другой темп боя, чем `DAMAGE_SCALE`, — для инструментов подбора баланса (`--example retune`).
+    pub fn set_damage_scale(&mut self, k: f32) {
+        self.damage_scale = k;
     }
 
     /// Ветер боя: бойцы этой стихии (с обеих сторон) наносят на `WIND_BONUS` больше урона.
@@ -230,6 +236,7 @@ impl Battle {
             outcome: None,
             turn: 0,
             energy_rate: 1,
+            damage_scale: DAMAGE_SCALE,
             wind: None,
             wind_since: 0,
         };
@@ -637,7 +644,8 @@ impl Battle {
                     Effect::Heal { percent } => {
                         let unit = &mut self.units[target.0];
                         let max = unit.def.stats.max_hp;
-                        let amount = ((max as f32 * percent).round() as u32).min(max - unit.hp);
+                        let amount = ((max as f32 * percent * self.damage_scale).round() as u32)
+                            .min(max - unit.hp);
                         unit.hp += amount;
                         events.push(Event::Healed {
                             source: actor,
@@ -703,7 +711,7 @@ impl Battle {
         let crit = self.rng.chance(CRIT_CHANCE);
         let variance = self.rng.range_f32(0.95, 1.05);
         let def = self.units[target.0].def.stats.def as f32;
-        let mut amount = raw * 100.0 / (100.0 + def) * variance;
+        let mut amount = raw * self.damage_scale * 100.0 / (100.0 + def) * variance;
         if weakness {
             amount *= WEAKNESS_MULTIPLIER;
         }
@@ -724,7 +732,8 @@ impl Battle {
                 .skill
                 .as_ref()
                 .and_then(|s| s.break_at)
-                .unwrap_or(CHARGE_BREAK);
+                .unwrap_or(CHARGE_BREAK)
+                * self.damage_scale;
             if *taken as f32 >= unit.def.stats.max_hp as f32 * break_at {
                 unit.charging = None;
                 unit.skill_cooldown = unit.skill_cooldown_start().max(1);

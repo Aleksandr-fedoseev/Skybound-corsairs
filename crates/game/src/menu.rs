@@ -2233,6 +2233,49 @@ fn survivors(screen: &BattleScreen) -> Vec<(String, f32)> {
     hp
 }
 
+/// Итог одной победы на этапе главы.
+pub(crate) struct StageWin {
+    pub reward: Reward,
+    /// Процент добычи (повторы за день приносят меньше).
+    pub percent: u32,
+    /// Сколько припасов ушло.
+    pub cost: u32,
+    /// Побед на этапе сегодня до этой.
+    pub wins: u32,
+}
+
+/// Победа на этапе главы — в бою или рейдом: припасы, убывающая добыча, счётчик побед за день.
+pub(crate) fn stage_win(
+    stage: usize,
+    first: bool,
+    data: &MenuData,
+    progress: &mut Progress,
+    spoils: &mut Spoils,
+    supply: &crate::supplies::SupplyData,
+) -> StageWin {
+    // Повторные победы за день приносят меньше (supplies.rs); первая — всегда целиком.
+    let today = crate::cabins::today();
+    let wins = progress.wins_today(stage, today);
+    let percent = supply.percent(wins).unwrap_or(0);
+    let cost = supply.cost_for(first);
+    progress.add_win(stage, today);
+    spoils.profile.supplies = spoils.profile.supplies.saturating_sub(cost);
+    let cut = |n: u32| n * percent / 100;
+    let r = &data.victory_reward;
+    let reward = Reward {
+        silver: cut(r.silver),
+        planks: cut(r.planks),
+        journals: cut(r.journals),
+    };
+    spoils.give(reward.silver, reward.planks, reward.journals);
+    StageWin {
+        reward,
+        percent,
+        cost,
+        wins,
+    }
+}
+
 /// Победа приносит добычу; на этапе главы — открывает следующий этап и сюжет.
 #[allow(clippy::too_many_arguments)]
 fn count_victory(
@@ -2392,23 +2435,17 @@ fn count_victory(
             sum
         }
         (Outcome::Victory, None) => {
-            // Повторные победы за день приносят меньше (supplies.rs); первая — всегда целиком.
-            let today = crate::cabins::today();
-            let wins = progress.wins_today(screen.stage, today);
-            let percent = supply.percent(wins).unwrap_or(0);
-            let cost = supply.cost_for(screen.stage == progress.cleared);
-            progress.add_win(screen.stage, today);
-            spoils.profile.supplies = spoils.profile.supplies.saturating_sub(cost);
-            let cut = |n: u32| n * percent / 100;
-            let reward = &data.victory_reward;
-            let reward = crate::menu::Reward {
-                silver: cut(reward.silver),
-                planks: cut(reward.planks),
-                journals: cut(reward.journals),
-            };
-            spoils.give(reward.silver, reward.planks, reward.journals);
-            deeds.write(Deed("win"));
             let first = screen.stage == progress.cleared;
+            let win = stage_win(
+                screen.stage,
+                first,
+                &data,
+                &mut progress,
+                &mut spoils,
+                &supply,
+            );
+            let (reward, percent, cost, wins) = (win.reward, win.percent, win.cost, win.wins);
+            deeds.write(Deed("win"));
             if first {
                 story.0.push(screen.data.stages[screen.stage].id.clone());
                 progress.cleared += 1;
@@ -2436,10 +2473,14 @@ fn count_victory(
             if percent < 100 {
                 sum = sum.chip(format!("повтор: {percent}% добычи"), Tone::Info);
             }
-            sum.chip(
-                format!("побед сегодня {}/{}", wins + 1, supply.daily_limit()),
-                Tone::Info,
-            )
+            // Лимит касается повторов: после первой победы на этапе он только сбивает с толку.
+            if !first {
+                sum = sum.chip(
+                    format!("побед сегодня {}/{}", wins + 1, supply.daily_limit()),
+                    Tone::Info,
+                );
+            }
+            sum
         }
     };
     result.set(summary);

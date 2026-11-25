@@ -133,6 +133,17 @@ struct Pulse;
 #[derive(Component)]
 struct Card;
 
+/// Кнопка «Рейд ×N» под «В бой»: видна только на пройденном этапе.
+#[derive(Component)]
+struct RaidButton;
+
+/// Добыча последнего рейда — показывается в карточке этого этапа иконками.
+#[derive(Resource, Default)]
+struct LastRaid(Option<Raid>);
+
+/// Рейд: этап, потраченные припасы и добыча иконками.
+type Raid = (usize, u32, Vec<(&'static str, u32)>);
+
 /// Точка на карте; число — нижний край кружка (точки под открытой карточкой прячутся).
 #[derive(Component)]
 struct MapSpot(f32);
@@ -156,12 +167,14 @@ pub fn plugin(app: &mut App) {
         .init_resource::<ConvoyPick>()
         .init_resource::<MapChapter>()
         .init_resource::<MapDirty>()
+        .init_resource::<LastRaid>()
         .add_systems(OnEnter(Screen::Map), enter_map)
         .add_systems(
             Update,
             (
                 rebuild_map,
                 refresh_card,
+                refresh_raid,
                 refresh_card_timer,
                 refresh_convoy_label,
                 pulse,
@@ -603,52 +616,81 @@ fn card(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 ..default()
             },
         ));
-        let mut go = card.spawn((
-            Node {
-                width: px(130),
-                height: px(58),
-                flex_shrink: 0.0,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            Skin(Look::Go),
-        ));
-        go.with_child(crate::style::heading(fonts, "В бой", 24.0, Color::WHITE));
-        pressable(&mut go);
-        go.observe(
-            |_: On<PointerClick>,
-             selected: Res<Selected>,
-             pick: Res<ConvoyPick>,
-             convoy: (Res<ConvoyData>, Res<Convoys>, Res<Progress>),
-             mut toast: ResMut<Toast>,
-             mut voyage: ResMut<Voyage>,
-             mut requests: MessageWriter<VoyageRequest>| {
-                let (data, convoys, progress) = convoy;
-                if pick.0 {
-                    if convoys.ready == 0 {
-                        toast.show(&format!(
-                            "Конвоев нет — следующий через {}",
-                            clock(convoys.next_in(&data))
-                        ));
-                        return;
+        // Справа: «В бой» и под ним «Рейд ×N» — мгновенные победы на пройденном этапе.
+        card.spawn(Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: px(10),
+            flex_shrink: 0.0,
+            ..default()
+        })
+        .with_children(|col| {
+            let mut go = col.spawn((
+                Node {
+                    width: px(130),
+                    height: px(58),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                Skin(Look::Go),
+            ));
+            go.with_child(crate::style::heading(fonts, "В бой", 24.0, Color::WHITE));
+            pressable(&mut go);
+            go.observe(
+                |_: On<PointerClick>,
+                 selected: Res<Selected>,
+                 pick: Res<ConvoyPick>,
+                 convoy: (Res<ConvoyData>, Res<Convoys>, Res<Progress>),
+                 mut toast: ResMut<Toast>,
+                 mut voyage: ResMut<Voyage>,
+                 mut requests: MessageWriter<VoyageRequest>| {
+                    let (data, convoys, progress) = convoy;
+                    if pick.0 {
+                        if convoys.ready == 0 {
+                            toast.show(&format!(
+                                "Конвоев нет — следующий через {}",
+                                clock(convoys.next_in(&data))
+                            ));
+                            return;
+                        }
+                        *voyage = Voyage {
+                            stage: None,
+                            custom: Some(data.fight(&progress)),
+                            from: Screen::Map,
+                        };
+                        requests.write(VoyageRequest);
+                    } else if let Some(stage) = selected.0 {
+                        *voyage = Voyage {
+                            stage: Some(stage),
+                            custom: None,
+                            from: Screen::Map,
+                        };
+                        requests.write(VoyageRequest);
                     }
-                    *voyage = Voyage {
-                        stage: None,
-                        custom: Some(data.fight(&progress)),
-                        from: Screen::Map,
-                    };
-                    requests.write(VoyageRequest);
-                } else if let Some(stage) = selected.0 {
-                    *voyage = Voyage {
-                        stage: Some(stage),
-                        custom: None,
-                        from: Screen::Map,
-                    };
-                    requests.write(VoyageRequest);
-                }
-            },
-        );
+                },
+            );
+            let mut raid = col.spawn((
+                RaidButton,
+                Node {
+                    width: px(130),
+                    height: px(46),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                Skin(Look::Dark),
+                Visibility::Hidden,
+            ));
+            raid.with_child(crate::style::heading(fonts, "Рейд", 18.0, Color::WHITE));
+            pressable(&mut raid);
+            raid.observe(
+                |_: On<PointerClick>, selected: Res<Selected>, mut commands: Commands| {
+                    if let Some(stage) = selected.0 {
+                        commands.run_system_cached_with(raid_stage, stage);
+                    }
+                },
+            );
+        });
     });
 }
 
@@ -679,6 +721,7 @@ fn refresh_card(
     progress: Res<Progress>,
     menu: Res<MenuData>,
     power: crate::power::Power,
+    last_raid: Res<LastRaid>,
     supply: (Res<crate::supplies::SupplyData>, Res<crate::menu::Profile>),
     mut cards: Query<&mut Visibility, With<Card>>,
     bodies: Query<(Entity, Option<&Children>), With<CardBody>>,
@@ -817,6 +860,25 @@ fn refresh_card(
                     None,
                 );
             });
+            // Только что был рейд — его добыча иконками.
+            if let Some((_, spent, items)) = last_raid.0.as_ref().filter(|(s, ..)| *s == stage) {
+                b.spawn(Node {
+                    column_gap: px(8),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    row.spawn(text(&fonts, "рейд:", false, 13.0, MUTED));
+                    crate::style::costs(row, &assets, &fonts, items, 15.0, GOLD);
+                    row.spawn(crate::style::icon(&assets, "supplies", 19.0));
+                    row.spawn(crate::style::heading(
+                        &fonts,
+                        format!("−{spent}"),
+                        16.0,
+                        Color::srgb(1.0, 0.55, 0.45),
+                    ));
+                });
+            }
             let reward = &menu.victory_reward;
             match supply.percent(wins) {
                 None => {
@@ -1087,6 +1149,105 @@ fn pulse(time: Res<Time>, mut nodes: Query<&mut UiTransform, With<Pulse>>) {
         // Пока палец на кнопке, она сжата — пульс её не разжимает.
         if transform.scale.x > 0.95 {
             transform.scale = Vec2::splat(1.0 + PULSE * (0.5 + 0.5 * t.sin()));
+        }
+    }
+}
+
+/// Сколько рейдов можно сделать на этапе прямо сейчас: дневной лимит и припасы.
+fn raids_left(
+    stage: usize,
+    progress: &Progress,
+    supplies: u32,
+    supply: &crate::supplies::SupplyData,
+) -> u32 {
+    let today = crate::cabins::today();
+    let wins = progress.wins_today(stage, today);
+    let by_limit = supply.daily_limit().saturating_sub(wins);
+    let by_supplies = supplies / supply.cost.max(1);
+    by_limit.min(by_supplies)
+}
+
+/// «Рейд ×N»: столько побед на пройденном этапе разом, без боя — те же припасы и добыча.
+#[allow(clippy::too_many_arguments)]
+fn raid_stage(
+    In(stage): In<usize>,
+    data: Res<MenuData>,
+    mut progress: ResMut<Progress>,
+    mut spoils: crate::menu::Spoils,
+    supply: Res<crate::supplies::SupplyData>,
+    mut deeds: MessageWriter<crate::contracts::Deed>,
+    mut toast: ResMut<Toast>,
+    mut last: ResMut<LastRaid>,
+    mut sfx: MessageWriter<crate::audio::Sfx>,
+    mut dirty: ResMut<MapDirty>,
+) {
+    if stage >= progress.cleared {
+        return;
+    }
+    let n = raids_left(stage, &progress, spoils.profile.supplies, &supply);
+    if n == 0 {
+        let wins = progress.wins_today(stage, crate::cabins::today());
+        if let Err(why) = supply.check(&spoils.profile, wins, false) {
+            toast.show(&why);
+        }
+        return;
+    }
+    let (mut silver, mut planks, mut journals, mut spent) = (0, 0, 0, 0);
+    for _ in 0..n {
+        let win = crate::menu::stage_win(stage, false, &data, &mut progress, &mut spoils, &supply);
+        silver += win.reward.silver;
+        planks += win.reward.planks;
+        journals += win.reward.journals;
+        spent += win.cost;
+        deeds.write(crate::contracts::Deed("win"));
+    }
+    last.0 = Some((
+        stage,
+        spent,
+        vec![
+            ("silver", silver),
+            ("planks", planks),
+            ("journals", journals),
+        ],
+    ));
+    sfx.write(crate::audio::Sfx("coin"));
+    // Карта целиком — чтобы полоса ресурсов вверху показала добычу.
+    dirty.0 = true;
+}
+
+/// Кнопка рейда видна на пройденном этапе; подпись — сколько рейдов доступно.
+fn refresh_raid(
+    selected: Res<Selected>,
+    pick: Res<ConvoyPick>,
+    progress: Res<Progress>,
+    profile: Res<crate::menu::Profile>,
+    supply: Res<crate::supplies::SupplyData>,
+    mut buttons: Query<(&mut Visibility, &mut Skin, &Children), With<RaidButton>>,
+    mut texts: Query<&mut Text>,
+) {
+    let stage = selected.0.filter(|s| !pick.0 && *s < progress.cleared);
+    for (mut vis, mut skin, children) in &mut buttons {
+        let Some(stage) = stage else {
+            vis.set_if_neq(Visibility::Hidden);
+            continue;
+        };
+        vis.set_if_neq(Visibility::Inherited);
+        let n = raids_left(stage, &progress, profile.supplies, &supply);
+        let look = if n > 0 { Look::Go } else { Look::Off };
+        if skin.0 != look {
+            skin.0 = look;
+        }
+        let label = if n > 1 {
+            format!("Рейд ×{n}")
+        } else {
+            "Рейд".to_string()
+        };
+        for child in children {
+            if let Ok(mut text) = texts.get_mut(*child)
+                && text.0 != label
+            {
+                text.0 = label.clone();
+            }
         }
     }
 }

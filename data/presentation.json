@@ -1,5 +1,5 @@
 {
-  "step_pause": 0.3,
+  "step_pause": 0.2,
   "basic_windup": 0.12,
   "skill_windup": 0.3,
   "ult_windup": 0.75,

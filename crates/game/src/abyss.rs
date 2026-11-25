@@ -455,7 +455,7 @@ fn hub(root: &mut ChildSpawnerCommands, view: &View, floor: u32, boats: u32) {
     });
 }
 
-/// Мощь для полного спуска в Руины: по `curve -- ruins` до конца доходят на 3 уровня выше
+/// Мощь для полного спуска в Руины: по `curve -- ruins` до конца доходят на 4–5 уровней выше
 /// рекомендуемого для следующего этапа.
 fn ruins_need(view: &View) -> u32 {
     let stages = &view.screen.data.stages;
@@ -463,7 +463,7 @@ fn ruins_need(view: &View) -> u32 {
         .get(view.progress.cleared)
         .or(stages.last())
         .map_or(1, |s| s.recommended_level);
-    view.power.recommended(rec + 3)
+    view.power.recommended(rec + 5)
 }
 
 fn ruins_status(view: &View) -> String {

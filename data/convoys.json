@@ -11,22 +11,22 @@
     },
     {
       "from_cleared": 4, "name": "Имперский галеон", "recommended_level": 3,
-      "enemies": [["imperial_marine", 15], ["imperial_gunner", 15], ["imperial_gunner", 15], ["imperial_marine", 15]],
+      "enemies": [["imperial_marine", 12], ["imperial_gunner", 12], ["imperial_gunner", 12], ["imperial_marine", 12]],
       "silver": 160, "planks": 100
     },
     {
       "from_cleared": 8, "name": "Караван под охраной", "recommended_level": 6,
-      "enemies": [["imperial_marine", 19], ["imperial_gunner", 19], ["imperial_marine", 19], ["imperial_gunner", 19]],
+      "enemies": [["imperial_marine", 16], ["imperial_gunner", 16], ["imperial_marine", 16], ["imperial_gunner", 16]],
       "silver": 240, "planks": 150
     },
     {
       "from_cleared": 12, "name": "Городской транспорт", "recommended_level": 11,
-      "enemies": [["imperial_marine", 27], ["imperial_gunner", 27], ["imperial_marine", 27], ["imperial_gunner", 27]],
+      "enemies": [["imperial_marine", 24], ["imperial_gunner", 24], ["imperial_marine", 24], ["imperial_gunner", 24]],
       "silver": 340, "planks": 210
     },
     {
       "from_cleared": 16, "name": "Казначейский галеон", "recommended_level": 15,
-      "enemies": [["imperial_marine", 32], ["aeromancer", 32], ["imperial_gunner", 32], ["imperial_marine", 32]],
+      "enemies": [["imperial_marine", 27], ["aeromancer", 27], ["imperial_gunner", 27], ["imperial_marine", 27]],
       "silver": 460, "planks": 280
     }
   ]

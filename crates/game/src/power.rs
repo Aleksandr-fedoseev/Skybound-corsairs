@@ -20,6 +20,21 @@ const BASE_BROADSIDE: u32 = 120;
 /// Зелёная плашка — мощи хватает, красная — рано.
 pub const ENOUGH: Color = Color::srgb(0.22, 0.5, 0.26);
 pub const SHORT: Color = Color::srgb(0.62, 0.2, 0.16);
+/// Жёлтая — мощи хватает впритык: рекомендуемая мощь — это 80% побед, неровный отряд слабее.
+pub const CLOSE: Color = Color::srgb(0.72, 0.52, 0.1);
+/// С таким запасом сверх рекомендуемой мощи плашка зелёная.
+const MARGIN: f32 = 1.07;
+
+/// Цвет и приписка сравнения: хватает с запасом, впритык или мало.
+pub fn verdict(need: u32, have: u32) -> (Color, &'static str) {
+    if have as f32 >= need as f32 * MARGIN {
+        (ENOUGH, "")
+    } else if have >= need {
+        (CLOSE, " · впритык")
+    } else {
+        (SHORT, "")
+    }
+}
 
 #[derive(SystemParam)]
 pub struct Power<'w> {
@@ -119,18 +134,19 @@ pub fn badge(
         });
 }
 
-/// Плашка «мощь 7 000 · у вас 7 400»: зелёная, если хватает.
+/// Плашка «мощь 7 000 · у вас 7 400»: зелёная — с запасом, жёлтая — впритык, красная — мало.
 pub fn need_chip(
     parent: &mut ChildSpawnerCommands,
     fonts: &crate::view::Fonts,
     need: u32,
     have: u32,
 ) {
+    let (color, note) = verdict(need, have);
     crate::style::pill(
         parent,
         fonts,
-        format!("мощь {} · у вас {}", format(need), format(have)),
-        if have >= need { ENOUGH } else { SHORT },
+        format!("мощь {} · у вас {}{note}", format(need), format(have)),
+        color,
     );
 }
 
@@ -143,6 +159,13 @@ mod tests {
         assert_eq!(format(7), "7");
         assert_eq!(format(1234), "1 234");
         assert_eq!(format(1234567), "1 234 567");
+    }
+
+    #[test]
+    fn close_power_is_yellow() {
+        assert_eq!(verdict(1000, 1100).0, ENOUGH);
+        assert_eq!(verdict(1000, 1030).0, CLOSE);
+        assert_eq!(verdict(1000, 990).0, SHORT);
     }
 
     #[test]

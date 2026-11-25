@@ -13,8 +13,8 @@
   ],
   "rivals": [
     { "name": "Лёгкий", "level": -2, "points": 12 },
-    { "name": "Равный", "level": 1, "points": 20 },
-    { "name": "Сильный", "level": 4, "points": 32 }
+    { "name": "Равный", "level": 2, "points": 20 },
+    { "name": "Сильный", "level": 6, "points": 32 }
   ],
   "team_size": 4,
   "loss_points": 8,

@@ -189,19 +189,19 @@
         "enemies": [
           [
             "storm_ray",
-            11
+            10
           ],
           [
             "storm_ray",
-            11
+            10
           ],
           [
             "storm_ray",
-            11
+            10
           ],
           [
             "storm_ray",
-            11
+            10
           ]
         ],
         "reward": {
@@ -213,19 +213,19 @@
         "enemies": [
           [
             "imperial_marine",
-            14
+            12
           ],
           [
             "imperial_gunner",
-            14
+            12
           ],
           [
             "imperial_gunner",
-            14
+            12
           ],
           [
             "imperial_marine",
-            14
+            12
           ]
         ],
         "reward": {
@@ -237,15 +237,15 @@
         "enemies": [
           [
             "storm_ray",
-            12
+            8
           ],
           [
             "storm_leviathan",
-            12
+            8
           ],
           [
             "storm_ray",
-            12
+            8
           ]
         ],
         "reward": {
@@ -349,19 +349,19 @@
         "enemies": [
           [
             "imperial_gunner",
-            13
+            12
           ],
           [
             "imperial_marine",
-            13
+            12
           ],
           [
             "imperial_gunner",
-            13
+            12
           ],
           [
             "imperial_marine",
-            13
+            12
           ]
         ],
         "reward": {
@@ -372,23 +372,23 @@
         "enemies": [
           [
             "imperial_marine",
-            15
+            12
           ],
           [
             "imperial_gunner",
-            15
+            12
           ],
           [
             "imperial_marine",
-            15
+            12
           ],
           [
             "imperial_gunner",
-            15
+            12
           ],
           [
             "imperial_gunner",
-            15
+            12
           ]
         ],
         "reward": {

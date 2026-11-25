@@ -27,6 +27,7 @@ VERIFIED: yes
 
 ## Commands
 RUN: cargo run -p game
+RETUNE: cargo run -p game-data --example retune --release -- <старый темп> 150 > out.txt; строку RESULT в файл; python3 tools/apply_retune.py <файл>  (после смены DAMAGE_SCALE: уровни врагов под прежние пороги; `-- <темп> 120 abyss` — таблица для формулы Бездны)
 BALANCE: cargo run -p game-data --example curve --release  (порог уровня и рекомендуемая мощь для этапов, конвоев, Бездны; `-- 60 ruins` — спуск в Руины с переносом здоровья, `-- 480 arena` — шансы против соперников Арены)
 ECONOMY: python3 tools/economy.py [дней]  (модель игрока по дням; кэш Бездны target/abyss_levels.json — удалить после правок Бездны/героев)
 TEST: cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings
