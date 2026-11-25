@@ -176,22 +176,37 @@ impl Progress {
     }
 }
 
+/// Всплывающая подсказка. Живёт на том экране, где появилась: при переходе на другой пропадает.
 #[derive(Resource, Default)]
 pub(crate) struct Toast {
     text: String,
     left: f32,
+    /// Иконка ресурса слева (`ui/icon_<имя>.png`), если подсказка про ресурс.
+    icon: Option<&'static str>,
+    /// Экран, где подсказка появилась; `None` — ещё не показана.
+    on: Option<Screen>,
 }
 
 impl Toast {
     pub(crate) fn show(&mut self, text: &str) {
-        self.text = text.to_string();
-        self.left = TOAST_SECONDS;
+        self.set(text, None, TOAST_SECONDS);
+    }
+
+    /// Подсказка про ресурс: его иконка слева и короткий текст.
+    pub(crate) fn show_icon(&mut self, icon: &'static str, text: &str) {
+        self.set(text, Some(icon), TOAST_SECONDS);
     }
 
     /// Длинная подсказка — например, отчёт «пока вас не было».
     pub(crate) fn show_long(&mut self, text: &str) {
+        self.set(text, None, TOAST_LONG_SECONDS);
+    }
+
+    fn set(&mut self, text: &str, icon: Option<&'static str>, seconds: f32) {
         self.text = text.to_string();
-        self.left = TOAST_LONG_SECONDS;
+        self.icon = icon;
+        self.left = seconds;
+        self.on = None;
     }
 }
 
@@ -216,6 +231,9 @@ struct EtherBubble;
 
 #[derive(Component)]
 struct ToastNode;
+
+#[derive(Component)]
+struct ToastIcon;
 
 /// Куда идём в бой и куда вернуться после него.
 #[derive(Resource)]
@@ -1310,22 +1328,46 @@ pub(crate) fn spawn_toast(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
         Node {
             position_type: PositionType::Absolute,
             top: px(250),
-            left: px(40),
-            width: px(460),
-            padding: UiRect::all(px(12)),
+            left: px(50),
+            right: px(50),
+            padding: UiRect::axes(px(18), px(12)),
+            column_gap: px(12),
             justify_content: JustifyContent::Center,
-            border_radius: BorderRadius::all(px(10)),
+            align_items: AlignItems::Center,
+            border: UiRect::all(px(2)),
+            border_radius: BorderRadius::all(px(14)),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.78)),
+        BackgroundColor(Color::srgba(0.13, 0.09, 0.06, 0.96)),
+        BorderColor::all(BRASS),
+        BoxShadow::new(
+            Color::srgba(0.0, 0.0, 0.0, 0.55),
+            px(0),
+            px(4),
+            px(0),
+            px(10),
+        ),
         Visibility::Hidden,
         GlobalZIndex(20),
         Pickable::IGNORE,
     ))
-    .with_child((
-        text(fonts, "", false, 15.0, Color::WHITE),
-        TextLayout::justify(Justify::Center),
-    ));
+    .with_children(|t| {
+        t.spawn((
+            ToastIcon,
+            Node {
+                width: px(40),
+                height: px(40),
+                flex_shrink: 0.0,
+                display: Display::None,
+                ..default()
+            },
+            ImageNode::default(),
+        ));
+        t.spawn((
+            crate::style::heading(fonts, "", 17.0, PARCHMENT),
+            TextLayout::justify(Justify::Center),
+        ));
+    });
 }
 
 /// Полоса ресурсов главной — как на остальных экранах, плюс уровень капитана, вместимость
@@ -1388,21 +1430,22 @@ fn top_bar(
                           supply: Res<crate::supplies::SupplyData>,
                           mut toast: ResMut<Toast>| {
                         let cap = ship.capacity(&ship_data);
-                        let (name, n, max) = match value {
-                            Value::Silver => ("Серебро", profile.silver, cap.silver),
-                            Value::Planks => ("Доски", profile.planks, cap.planks),
+                        let (icon, n, max) = match value {
+                            Value::Silver => ("silver", profile.silver, cap.silver),
+                            Value::Planks => ("planks", profile.planks, cap.planks),
                             Value::Supplies => {
-                                toast.show(&format!(
-                                    "Припасы: {} · сами копятся до {}, Камбуз варит сверх",
-                                    profile.supplies, supply.cap
-                                ));
+                                toast.show_icon(
+                                    "supplies",
+                                    &format!(
+                                        "{} · сами до {}, Камбуз — сверх",
+                                        profile.supplies, supply.cap
+                                    ),
+                                );
                                 return;
                             }
-                            _ => ("Эфир", profile.ether, cap.ether),
+                            _ => ("ether", profile.ether, cap.ether),
                         };
-                        toast.show(&format!(
-                            "{name}: {n} из {max} — больше Трюм не вмещает, улучшайте его"
-                        ));
+                        toast.show_icon(icon, &format!("{n} / {max} · вместимость Трюма"));
                     },
                 );
             }
@@ -1943,10 +1986,23 @@ fn refresh_ether_bubble(
 
 fn refresh_toast(
     time: Res<Time>,
+    state: Res<State<Screen>>,
+    assets: Res<AssetServer>,
     mut toast: ResMut<Toast>,
     mut nodes: Query<(&mut Visibility, &Children), With<ToastNode>>,
+    mut icons: Query<(&mut Node, &mut ImageNode), With<ToastIcon>>,
     mut texts: Query<&mut Text>,
 ) {
+    // Подсказка принадлежит экрану, где появилась: ушли с него — она не догоняет.
+    let here = *state.get();
+    match toast.on {
+        None if toast.left > 0.0 => toast.on = Some(here),
+        Some(on) if on != here => {
+            toast.left = 0.0;
+            toast.on = None;
+        }
+        _ => {}
+    }
     toast.left = (toast.left - time.delta_secs()).max(0.0);
     for (mut vis, children) in &mut nodes {
         vis.set_if_neq(if toast.left > 0.0 {
@@ -1959,6 +2015,22 @@ fn refresh_toast(
                 && text.0 != toast.text
             {
                 text.0 = toast.text.clone();
+            }
+            if let Ok((mut node, mut image)) = icons.get_mut(*child) {
+                let display = if toast.icon.is_some() {
+                    Display::Flex
+                } else {
+                    Display::None
+                };
+                if node.display != display {
+                    node.display = display;
+                }
+                if let Some(icon) = toast.icon {
+                    let handle = assets.load(format!("ui/icon_{icon}.png"));
+                    if image.image != handle {
+                        image.image = handle;
+                    }
+                }
             }
         }
     }

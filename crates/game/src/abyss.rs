@@ -304,7 +304,11 @@ fn build(commands: &mut Commands, view: &View) {
                 Some(Page::Arena) => view.arena.0.name.clone(),
                 Some(Page::Expeditions) => "Экспедиции".to_string(),
             };
-            style::title(root, fonts, &title, 56.0);
+            if view.page.0.is_some() {
+                style::title_beside_back(root, fonts, &title, 56.0);
+            } else {
+                style::title(root, fonts, &title, 56.0);
+            }
             match view.page.0 {
                 None => hub(root, view, floor, boats),
                 Some(page) => {

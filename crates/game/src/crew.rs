@@ -733,7 +733,7 @@ fn build(
                 spawn_toast(root, fonts);
                 return;
             };
-            style::title(root, fonts, "Экипаж", 56.0);
+            style::title_beside_back(root, fonts, "Экипаж", 56.0);
             back_button(root, fonts);
             {
                 let plan = roster.merge_plan(data, crew, &hero.id);
